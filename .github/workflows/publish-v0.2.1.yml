@@ -1,0 +1,127 @@
+name: Release SCBK v0.2.1 (reuse existing Windows artifact)
+
+# One-shot release branch: keeps the verified v0.2.1 source commit and binary
+# immutable and avoids triggering the main-branch Windows rebuild workflow.
+on:
+  push:
+    branches:
+      - release/v0.2.1
+    paths:
+      - .github/workflows/publish-v0.2.1.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-scbk-v0.2.1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify existing Windows binary and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: "3006608facc39c23bd9b7f6b7de6de902b227ba5"
+      SOURCE_RUN: "40108632210"
+      RELEASE_TAG: "v0.2.1"
+    steps:
+      - name: Verify original Windows CI success and source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq '.head_sha')"
+          actual_conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq '.conclusion')"
+          test "$actual_sha" = "$EXPECTED_SHA"
+          test "$actual_conclusion" = "success"
+          echo "Reusing verified CI run #$SOURCE_RUN for source $EXPECTED_SHA"
+
+      - name: Download the original Windows artifact (do not rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          repository: sopo9880/SCBK
+          run-id: 40108632210
+          name: scbk-windows-3006608facc39c23bd9b7f6b7de6de902b227ba5
+          path: release-assets
+          github-token: ${{ github.token }}
+
+      - name: Verify binary, provenance and SHA-256 checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/SCBK.exe
+          test -s release-assets/COMMIT_SHA.txt
+          test -s release-assets/SHA256SUMS.txt
+          recorded_sha="$(tr -d '\r\n ' < release-assets/COMMIT_SHA.txt)"
+          if [ "$recorded_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Artifact commit does not match validated Windows build"
+            exit 1
+          fi
+          # PowerShell on Windows may emit CRLF. Preserve the published original,
+          # but normalize a temporary copy for GNU sha256sum on Ubuntu.
+          tr -d '\r' < release-assets/SHA256SUMS.txt > release-assets/.SHA256SUMS.unix
+          (cd release-assets && sha256sum --check .SHA256SUMS.unix)
+          echo "SCBK.exe verified against the CI checksum"
+
+      - name: Create immutable version tag pointing to original build commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists; do not replace an existing release binary"
+            exit 1
+          fi
+          if tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null)"; then
+            if [ "$tag_sha" != "$EXPECTED_SHA" ]; then
+              echo "::error::Existing tag points to a different source commit"
+              exit 1
+            fi
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" -f sha="$EXPECTED_SHA" >/dev/null
+          fi
+          actual_tag="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$actual_tag" = "$EXPECTED_SHA"
+          echo "Tag $RELEASE_TAG points to validated source commit $EXPECTED_SHA"
+
+      - name: Publish verified CI files on GitHub Releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # SCBK v0.2.1 — Windows Gameplay and Map Reliability Preview
+
+          Windows-only Godot 4.5.1 release focused on the first real device feedback after v0.2.0.
+
+          ## Changes
+          - Compact, collapsible upper-left world card; bottom-centred weapon toolbar; score at the top right.
+          - A fictional training map is clearly labelled and never mistaken for real Dong-A campus geometry.
+          - Map request state now supports progress messages, cancelling, retrying and per-server HTTP/timeout diagnostics. Repeated requests no longer falsely show a download error, and selecting a new location cancels a previous request.
+          - Keep successfully cached maps and the current playable scene when a map server is unavailable.
+          - Closer default training camera, focused trees, toned-down windows/roofs and simple architectural trims.
+          - Replace invisible full-building collision after fracture with per-cell colliders for the surviving sections.
+          - Improved crater visibility at different terrain grid resolutions.
+          - Additional PR checks for map loading, recovery, gameplay UI, destruction collisions and terrain.
+
+          ## Limitations
+          This remains a stylized destruction-game preview and **not a complete reproduction of SMASH**. Real locations require internet access to third-party OpenStreetMap/Overpass map servers; actual Dong-A campus geometry is not bundled. Real Windows graphics, interaction feel, map service connectivity and performance still need post-release on-device testing. This EXE is **not Authenticode-signed**; Windows SmartScreen may issue a warning. Android is not supported.
+
+          ## Original build provenance
+          Windows CI source and tag commit: 3006608facc39c23bd9b7f6b7de6de902b227ba5
+          Successfully built at: https://github.com/sopo9880/SCBK/actions/runs/40108632210
+
+          The original Windows CI artifact is downloaded, checked against COMMIT_SHA.txt and SHA256SUMS.txt, then published **without rebuilding or re-signing**. These verification files are attached.
+
+          Map attribution: © OpenStreetMap contributors (ODbL). Elevation: AWS/Mapzen Terrain Tiles when available.
+          NOTES
+          gh release create "$RELEASE_TAG" \
+            "release-assets/SCBK.exe" \
+            "release-assets/SHA256SUMS.txt" \
+            "release-assets/COMMIT_SHA.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "SCBK v0.2.1 — Windows Preview" \
+            --notes-file release-notes.md
+          echo "Published $RELEASE_TAG from validated original CI artifacts"
