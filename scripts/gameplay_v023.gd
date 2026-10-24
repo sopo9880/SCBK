@@ -103,7 +103,10 @@ func _on_region_failed(message: String) -> void:
 	_hide_loader()
 
 func _on_region_loaded(region: Dictionary, source: String) -> void:
+	_cinematic_mode = ""
 	super._on_region_loaded(region, source)
+	if _camera != null:
+		_camera.far = 3200.0
 	_show_loader("실제 지역 3D 생성 완료", 100.0, false)
 	_hide_loader()
 
