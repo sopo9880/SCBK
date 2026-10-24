@@ -1,38 +1,57 @@
-# SCBK — Campus Smash (Windows)
+# SCBK — World Smash for Windows
 
-Native Windows 3D destruction sandbox powered by **Godot 4.5.1 / GDScript**, not a browser wrapper.
+SCBK v0.2.0 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
 
-## Current scope: v0.1.0 development
+## What changed for v0.2.0
 
-- Windows desktop project; **no Android project, APK, or Android CI**.
-- Offline **synthetic** training block available instantly (not actual Dong-A University geometry).
-- Load **real building footprints and roads from OpenStreetMap** for Dong-A University Seunghak campus or any selected point/rectangle. Native in-game world map supports place search, pan/zoom and click/drag bounding boxes (50–1600 m per side).
-- Cache downloaded map data under Godot's `user://regions` folder for later offline use.
-- Six stylized tools: bomb, bat, laser, meteor, quake, and nuke.
-- Click-to-destroy physics debris, collision, reset, one-step undo, camera orbit/zoom/pan, FPS counter and debris budget.
-- Low-overhead initial rendering: static geometry until a building is struck; limited physics objects.
-- **Not yet included:** DEM terrain elevation, photorealistic buildings, detailed fracture geometry, mobile controls and Android binaries. Native map clicking and rectangle selection ARE implemented in this branch.
+- Detailed procedural facades: generated walls, windows and roofing, with lit windows in night mode.
+- Partial building fractures: buildings initially render as a single static geometry. On the first hit they switch to up to 80 static cells; only the cells actually struck become physical fragments. Remaining floors stay in place and are breakable by later attacks. Dynamic fragments can be struck again.
+- More varied weapon behavior:
+  - Bomb: localized explosion and terrain crater.
+  - Bat: short-range directional impact with a visible swing.
+  - Laser: click-drag a path through buildings; charged sequential strikes along the stroke.
+  - Meteor: projectile falls from the sky, with a larger blast and crater.
+  - Quake: repeated impacts and camera shake over several seconds.
+  - Nuke: falling projectile, large stylized mushroom cloud, timed slow motion and huge blast.
+- Local score, combos, style ranks D–SSS, camera shake, generated sound effects and day/night mode.
+- Real terrain elevation: asynchronous AWS Terrain Tiles (Terrarium, Mapzen) decoder with tile caching. DEM drives collidable terrain height and helps place roads and buildings; temporary network failure retains flat ground.
+- 3D roads and light procedural vegetation generated using GPU MultiMesh.
+- Strict render/physics ceilings: maximum 280 loaded OSM buildings, ~160 tree instances and 160 simultaneously simulated debris bodies.
 
-## Play / controls
+## Map workflow preserved
 
-Open `project.godot` in [Godot 4.5.1](https://godotengine.org/download/) and press F6/F5, or run with `godot --path .`.
+Select **OPEN WORLD MAP** to search a place, pan/zoom the world map, then click or draw a rectangle and press **BUILD SELECTED 3D REGION**. Limited to 50–1600 metres on each side to protect memory and public APIs. Initial Dong-A Seunghak campus preset, direct coordinates and synthetic offline training scene also remain available.
 
-- Left click: use selected tool.
-- Right drag: rotate camera; middle drag: pan; wheel: zoom.
-- Keys **1–6**: switch tool; **R**: reset; **Ctrl+Z**: undo.
-- Left panel: click **OPEN WORLD MAP** to search a place, pan/zoom, click for a preset square or drag to select a rectangular region, then BUILD SELECTED 3D REGION. The original coordinate entry remains available.
-- Map download requires internet initially and uses public Overpass servers. Cached regions work offline. The native selection map uses OSM raster tiles (cached locally; may need internet), and explicit Nominatim search (no autocomplete). Please respect their usage limits.
+Initial map downloads need network access (OpenStreetMap tiles, Nominatim geocoding, Overpass building/road geometry, AWS Terrain Tiles elevation). These map/DEM downloads are locally cached when successful.
 
-## How the real map works
+## Windows controls
 
-The app asks OSM's public Overpass API for `building` and `highway` ways, translates their geographic positions into a local metre coordinate system, estimates untagged building heights, then extrudes buildings and lays out roads. OSM coverage is incomplete; a campus name does **not** mean official surveyed 3D geometry. A network failure leaves the offline **fictional** training block playable.
+| Action | Input |
+| --- | --- |
+| Attack / launch selected weapon | Left mouse |
+| Laser swipe | Choose tool 3, left-drag across the scene, release |
+| Orbit camera | Right mouse drag |
+| Pan camera | Middle mouse drag |
+| Zoom | Mouse wheel |
+| Tools bomb/bat/laser/meteor/quake/nuke | Number keys 1–6 |
+| Toggle night lights | N |
+| World map search/selection | M |
+| Undo last building group (not score) | Ctrl+Z |
+| Reset buildings, debris and terrain | R |
 
-OSM features and derived map data: © OpenStreetMap contributors, [ODbL](https://www.openstreetmap.org/copyright). Use the public Overpass endpoints responsibly; this v0.1 client limits region radius and caches results. Do not bulk scrape.
+## Accuracy and performance limitations
 
-## Development process
+This remains a stylized **game preview**, not a photographic reconstruction of the real place. OpenStreetMap building footprints and available floor heights are approximate. DEM is bare-earth, low-resolution SRTM-based elevation (not surveyed building foundations), and isn't always available. Replacing a whole building mesh with cells approximates the remaining building silhouette; true structural engineering/collision simulation, full-fidelity cracks, buried foundations and animated reverse-reconstruction are **not** claimed. Roads may visually bridge fresh craters. The six effects are independently implemented and are not direct copies of the original SMASH game's proprietary code or artwork.
 
-Pull requests run Godot headless parser/smoke tests and Python static tests. When code is merged, a separate CI job exports a Windows executable and stores its checksum and commit SHA. A release workflow can publish that **same** checked Windows build as v0.1.0 without recompilation. No automatic binaries are claimed until Actions pass.
+Windows CI will only compile and export a release executable after PR approval and merge. Real Windows gameplay/visual quality must be verified with the resulting officially published release, not inferred from headless tests. Keep v0.1.0 binaries unchanged.
 
-See `docs/ARCHITECTURE.md` for current limitations and the path toward selectable-map areas and terrain DEM data.
+Map data: © OpenStreetMap contributors (ODbL), AWS Terrain Tiles / Mapzen (see their attribution requirements). Third-party imagery is not bundled with the game. Please respect public API usage policies.
 
-The implementation is independent; no source code was copied from the SMASH project. Their repository is useful as a reference for the *concept*, but being publicly visible is not automatically a reuse license.
+## Developer workflow
+
+- PR: Godot headless import/parse, map projections, destructible-world/score regression, startup smoke test and source/data assertions.
+- After user command **확인해** and successful checks: merge PR; Windows Build CI exports one Windows executable with checksum and commit SHA.
+- Separate release stage publishes that *same* verified binary without re-compilation.
+- No Android features or export preset in this scope.
+
+This is an independently developed Godot implementation. No code was copied from Hong-Iron/SMASH repositories.

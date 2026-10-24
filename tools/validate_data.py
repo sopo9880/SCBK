@@ -29,4 +29,13 @@ assert "func load_bounds(" in region_loader
 assert "total_buildings" in region_loader
 assert "load_bounds(bounds, label)" in source
 assert (ROOT / "tests/test_map_math.gd").is_file()
-print("SCBK data, map selector and source layout validated.")
+for path in [
+    "scripts/gameplay_v2.gd", "scripts/terrain_surface.gd", "scripts/elevation_loader.gd",
+    "scripts/combat_effects.gd", "scripts/score_system.gd",
+    "scripts/synth_sfx.gd", "shaders/building_facade.gdshader",
+    "tests/test_gameplay.gd",
+]:
+    assert (ROOT / path).is_file(), path
+assert "gameplay_v2.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+assert "func damage_at(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
+print("SCBK v0.2.0 data, map selection, native destruction and source layout validated.")

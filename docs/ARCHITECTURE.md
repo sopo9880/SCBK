@@ -1,44 +1,42 @@
-# SCBK Windows architecture — v0.1.0
+# SCBK v0.2.0 — Windows game design and limitations
 
-## Initial development decision
+## Gameplay fidelity
 
-Godot 4.5.1 and GDScript target Windows desktop. Android is intentionally excluded until separately requested. This is not a Windows WebView wrapper.
+**Goal:** restore the feel of a stylized map-based destruction game before broadening map selection. The v0.1.0 version was a coarse destructible-box prototype. This iteration changes the actual data structures and cinematic timing.
 
-## Region pipeline
+### Rendering
+- OSM footprints and approximate heights are rendered as polygonal buildings with procedural window/brick-like shaders, generated roofs and GPU-batched foliage.
+- Unstruck buildings have **one** static polygonal surface/roof with a box collider. Upon first impact their footprint gets sampled into a bounded spatial grid of 2–4 columns/rows and 2–5 vertical cells, up to 80 cells. The remaining grid is rendered via one MultiMesh; damaged cells become rigid bodies.
+- This intentionally approximates silhouettes after a hit; it is not precise structural fracture and has no interiors.
+- Colliders for a damaged building are a coarse original bounding box, so a ray may strike a gap; cell damage calculations still require proximity to remaining sections.
 
-- Startup: bundled *fictional* training block loads without a network.
-- App then attempts Dong-A University Seunghak campus OSM query with cache-first lookup.
-- Native Godot world map shows visible OSM Standard raster tiles (seven-day disk cache). Explicit place searches use Nominatim with one-second user-initiated rate limit.
-- Map selection supports point-radius presets or drawn bounding rectangles. All selections are validated to 50–1600 metres per side.
-- RegionLoader reads the rectangle as an Overpass bbox, persists a separate cache entry and reuses preexisting radius-map cache when possible.
-- Public Overpass returns building footprints and roads (no proprietary map tiles).
-- MapService converts WGS84 points to local metres near selected coordinate and saves a derived JSON map to the user's local directory.
-- WorldBuilder generates static mesh/box collision buildings and batches roads to one mesh.
-- In this first cut heights are estimated when missing, ground is planar; campus boundary and vegetation are not surveyed yet.
+### Terrain
+- 49×49 collidable mesh; material vertex colors shade steep terrain.
+- Public AWS Terrain Tiles / Terrarium, zoom 12, 30-ish metres horizontal resolution depending on latitude. The app downloads only the tiles covering the selected playable region, caches on disk and subtracts a center elevation.
+- If the DEM request fails, the flat terrain fallback remains interactive. Terrain takes actual local heights for OSM building positions and for road ribbon vertices.
+- Craters lower the physical/visual terrain grid; reset recreates the reference heightfield.
+- No caves, water simulation or city-wide streaming yet.
 
-## Destruction and performance
+### Weapons
+- Bomb: local blast, crater, flash, shockwave and impulse.
+- Bat: directional close-range impulse and swing model.
+- Laser: mouse drawn path, delayed charge, sequential strikes and line marks.
+- Meteor: falling projectile then large impact, camera shake and crater.
+- Quake: multi-step earthquake strikes for ~3 seconds.
+- Nuke: falling projectile, blinding flash, expanding rings, stylized mushroom cloud and slowed time.
+- Simple synthesized sound plays per trigger. Procedural assets avoid third-party copyright issues.
 
-- Whole buildings stay static until hit.
-- On first impact a building becomes up to eight simplified physics pieces.
-- Total active rigid-body budget <=128; later impacts may remove buildings without producing additional fragments.
-- Explosion effects are transient; the bat only targets a single structure; the remaining tools use different radius/impulse settings.
-- Undo tracks the most recently affected action (not a complete action-history); reset restores all.
-- A building's collision uses a bounding box, not precise polygon collision; detailed physics and fracturing require future work.
-- Roads are visual only; network failures must not prevent playing.
+### Performance safety
+- Map requests: region <=1.6 km per side, 280 nearest buildings and 200 nearby roads.
+- Dense regions are still **truncated**, not true streaming. Craters rebuild 49×49 mesh/collider.
+- Active debris capped at 160, older sleeping debris retired as new pieces are needed.
+- Physics collisions use simple boxes and collision mask 1, not debris-to-debris broadphase.
+- No Android, not WebView, no backend services required for cached map use.
 
-## Known limitations
+### Remaining work
+- Visual manual Windows QA and tuning FPS/lighting after first post-merge preview release.
+- Faithful split geometry / fractured facades, collision precision, authentic projectile path, scorch trails, sound mixing, score/undo snapshot history, terrain craters under roads, more location-specific architecture and UI localization.
+- Interactive map selection from v0.1.0 remains supported unchanged.
 
-- No DEM elevation or hillside terrain yet; actual Seunghak campus is not topographically accurate.
-- No texture photography, interior models, sound design, scores or networking.
-- Map picker uses OpenStreetMap imagery and an explicit search, NOT a browser embed; it requires network for unseen tiles and geocoding. No continuous city streaming or full-road-network simulation.
-- Only point-and-click tool variants; no dedicated laser-drag or quake-over-time animation.
-- Large region data is capped to 280 buildings and 200 roads, selecting nearest buildings to the chosen centre first (not Overpass response order). Regions larger than 1600 m per side are rejected to bound CPU/memory/API cost.
-- No Android export, interface, APK or Android CI.
-- Headless CI checks parser/import and scene boot. GUI rendering and real-machine FPS require later user testing of a Windows binary.
-- Original Hong-Iron/SMASH source code was not copied; project uses its own Godot implementation.
-
-## CI pipeline
-
-- PR: Godot headless import/parse, schema verification, basic headless boot.
-- After PR validation and authorized merge: Windows Build exports EXE once and uploads checksum + commit provenance.
-- Real Windows runtime user testing and formal release are later independent steps.
+## CI / Release
+PR Godot parser/runtime/logic smoke tests; main Windows EXE export; artifacts (EXE, checksum, commit) generated once. Formal release will reuse the verified artifact. v0.1.0 is not edited or replaced.

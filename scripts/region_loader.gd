@@ -65,6 +65,10 @@ func _start_load(bounds: Dictionary, label: String, legacy_radius: int) -> void:
 		cached = _read_cache(_legacy_cache_path())
 	if cached is Dictionary:
 		cached["label"] = _label
+		# Upgrade v0.1.0 radius-cache data in memory to enable DEM terrain
+		# without invalidating the user's existing OSM geometry cache.
+		if not Mercator.validated(cached.get("bounds", {})):
+			cached["bounds"] = _bounds.duplicate(true)
 		region_loaded.emit(cached, "Cached OpenStreetMap")
 		return
 	_server_index = 0
