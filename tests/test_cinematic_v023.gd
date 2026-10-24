@@ -57,6 +57,17 @@ func _run() -> void:
 	if absf(quake_slider.value - 9.3) > 0.051 or absf(float(fx.call("get_quake_magnitude")) - 9.3) > 0.051:
 		_fail("Seismic slider and simulation must share the same magnitude.")
 		return
+	world.call("begin_massive_blast")
+	world.call("quake_pulse", Vector3.ZERO, 9.3, 4)
+	world.call("quake_pulse", Vector3.ZERO, 9.3, 8)
+	var seismic_damage: int = world.destroyed_count()
+	var seismic_restored: int = world.undo_last()
+	if seismic_restored < seismic_damage or world.destroyed_count() != 0:
+		_fail("Multiple quake pulses must undo as one complete action.")
+		return
+	if world.debris_count() > 160:
+		_fail("High magnitude earthquake exceeded the physics debris cap.")
+		return
 	game.call("_select_tool", 1)
 	var bat_controls: HBoxContainer = game.get("_bat_row")
 	if bat_controls == null or not bat_controls.visible:
