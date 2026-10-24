@@ -26,6 +26,13 @@ func _ready() -> void:
 	add_child(_request)
 	_request.request_completed.connect(_complete)
 
+func cancel_pending() -> void:
+	if _active:
+		_request.cancel_request()
+	_active = false
+	_queue.clear()
+	_current.clear()
+
 func load_bounds(bounds: Dictionary) -> void:
 	if not Mercator.validated(bounds):
 		elevation_failed.emit("DEM not requested: invalid region bounds.")
@@ -141,7 +148,8 @@ func _emit_dem() -> void:
 				elevation_failed.emit("Incomplete DEM tile sample; retaining flat terrain.")
 				return
 			samples[y * GRID + x] = elevation
-	var centre: float = samples[(GRID / 2) * GRID + (GRID / 2)]
+	var midpoint: int = int(floor(float(GRID) * 0.5))
+	var centre: float = samples[midpoint * GRID + midpoint]
 	for i in range(samples.size()):
 		samples[i] = clampf(samples[i] - centre, -180.0, 180.0)
 	elevation_ready.emit(_bounds.duplicate(true), samples, GRID, GRID)
