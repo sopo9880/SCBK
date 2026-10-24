@@ -127,7 +127,8 @@ func _on_world_build_progress(phase: String, completed: float) -> void:
 func _install_weapon_options() -> void:
 	var dock: PanelContainer = get_node("HUD/WeaponsDock")
 	var stack: VBoxContainer = _tool_label.get_parent() as VBoxContainer
-	_button(_nuke_row, "8 km", _set_nuke_radius.bind(GIANT_NUKE), 58).tooltip_text = "특수 핵폭탄: 반경 8km. 현재 로드된 지역의 건물에 상세 판정 적용."
+	var large_nuke: Button = _button(_nuke_row, "8 km", _set_nuke_radius.bind(GIANT_NUKE), 58)
+	large_nuke.tooltip_text = "특수 핵폭탄: 반경 8km. 현재 로드된 지역의 건물에 상세 판정 적용."
 	_quake_row = HBoxContainer.new()
 	_quake_row.name = "QuakeMagnitudeControls"
 	_quake_row.add_theme_constant_override("separation", 8)
