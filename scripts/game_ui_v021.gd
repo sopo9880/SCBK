@@ -279,6 +279,13 @@ func _update_map_buttons() -> void:
 
 func _on_region_loaded(region: Dictionary, source: String) -> void:
 	super._on_region_loaded(region, source)
+	var region_bounds: Dictionary = region.get("bounds", {})
+	if Mercator.validated(region_bounds):
+		var width: Vector2 = Mercator.meters(region_bounds)
+		_distance = clampf(maxf(width.x, width.y) * 0.70, 180.0, 1100.0)
+		_pitch = -0.68
+		_camera_target = Vector3(0.0, 13.0, 0.0)
+		_update_camera()
 	_map_state = "ready"
 	_update_map_buttons()
 	if _details_label != null:
@@ -300,6 +307,11 @@ func _load_training_block() -> void:
 	if _maps != null:
 		_maps.cancel_load()
 	super._load_training_block()
+	# Bring the player close enough to actually see the training buildings.
+	_distance = 290.0
+	_pitch = -0.63
+	_camera_target = Vector3(0.0, 13.0, 0.0)
+	_update_camera()
 	_map_state = "ready"
 	_update_map_buttons()
 	if _details_label != null:

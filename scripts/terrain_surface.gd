@@ -5,7 +5,7 @@ extends StaticBody3D
 const Mercator = preload("res://scripts/map_math.gd")
 const GRID := 49
 
-var extent: Vector2 = Vector2(2200.0, 2200.0)
+var extent: Vector2 = Vector2(720.0, 720.0)
 var _heights: PackedFloat32Array = PackedFloat32Array()
 var _mesh: MeshInstance3D
 var _collider: CollisionShape3D
@@ -33,7 +33,7 @@ func reset_plane(bounds: Dictionary) -> void:
 		extent = Mercator.meters(bounds)
 		extent += Vector2(160.0, 160.0)
 	else:
-		extent = Vector2(2200.0, 2200.0)
+		extent = Vector2(720.0, 720.0)
 	_heights.resize(GRID * GRID)
 	_heights.fill(0.0)
 	_base_heightmap = _heights.duplicate()
@@ -81,6 +81,11 @@ func height_at(x: float, z: float) -> float:
 func crater_at(world_position: Vector3, radius: float, depth: float) -> void:
 	if radius <= 0.0 or depth <= 0.0:
 		return
+	# A minimum radius in samples ensures small bomb craters remain visible
+	# at every selected region scale. The old 2200m / 48-cell fallback often
+	# left no crater vertex at all.
+	var grid_step: float = maxf(extent.x, extent.y) / float(GRID - 1)
+	radius = maxf(radius, grid_step * 1.55)
 	var modified: bool = false
 	for z in range(GRID):
 		for x in range(GRID):

@@ -187,11 +187,28 @@ func _build_vegetation(region: Dictionary) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(absf(float(region.get("center_lat", 35.11619))) * 10000.0) * 31 + int(absf(float(region.get("center_lon", 128.96733))) * 10000.0)
 	var positions: Array[Vector3] = []
+	# Sample the actual settlement, not kilometres of unused demo ground.
+	# The original 2200m fictional tile looked like empty grassland dotted
+	# with tiny spheres surrounding a handful of miniature buildings.
+	var spawn_center := Vector2.ZERO
+	var span := _terrain.extent * 0.88
+	if region_bounds.is_empty() and not buildings.is_empty():
+		var minp := Vector2(INF, INF)
+		var maxp := Vector2(-INF, -INF)
+		for building in buildings:
+			var p := Vector2(building.position.x, building.position.z)
+			minp = Vector2(minf(minp.x, p.x), minf(minp.y, p.y))
+			maxp = Vector2(maxf(maxp.x, p.x), maxf(maxp.y, p.y))
+		spawn_center = (minp + maxp) * 0.5
+		span = Vector2(
+			clampf(maxp.x - minp.x + 150.0, 250.0, _terrain.extent.x * 0.85),
+			clampf(maxp.y - minp.y + 150.0, 250.0, _terrain.extent.y * 0.85)
+		)
 	for attempt in range(MAX_TREES * 3):
 		if positions.size() >= MAX_TREES:
 			break
-		var x: float = rng.randf_range(-_terrain.extent.x * 0.46, _terrain.extent.x * 0.46)
-		var z: float = rng.randf_range(-_terrain.extent.y * 0.46, _terrain.extent.y * 0.46)
+		var x: float = spawn_center.x + rng.randf_range(-span.x * 0.5, span.x * 0.5)
+		var z: float = spawn_center.y + rng.randf_range(-span.y * 0.5, span.y * 0.5)
 		if not _tree_clear(Vector2(x, z)):
 			continue
 		positions.append(Vector3(x, _terrain.height_at(x, z), z))
