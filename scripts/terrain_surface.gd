@@ -14,6 +14,7 @@ var _base_heightmap: PackedFloat32Array = PackedFloat32Array()
 var _has_dem: bool = false
 var _map_texture: Texture2D
 var _scorch: PackedFloat32Array = PackedFloat32Array()
+var _crater_history: Array[Dictionary] = []
 
 func _ready() -> void:
 	collision_layer = 1
@@ -40,6 +41,7 @@ func reset_plane(bounds: Dictionary) -> void:
 	_heights.fill(0.0)
 	_scorch.resize(GRID * GRID)
 	_scorch.fill(0.0)
+	_crater_history.clear()
 	_map_texture = null
 	if _land_material != null:
 		_land_material.albedo_texture = null
@@ -74,6 +76,11 @@ func apply_dem(samples: PackedFloat32Array, width: int, depth: int) -> bool:
 			_heights[z * GRID + x] = lerpf(h0, h1, az)
 	_base_heightmap = _heights.duplicate()
 	_has_dem = true
+	_scorch.fill(0.0)
+	# Terrain elevation can finish loading while the player is already
+	# attacking. Re-apply pending blasts rather than magically healing them.
+	for entry in _crater_history:
+		_apply_crater(entry["point"], float(entry["radius"]), float(entry["depth"]))
 	_rebuild_surface()
 	return true
 
@@ -96,6 +103,14 @@ func height_at(x: float, z: float) -> float:
 func crater_at(world_position: Vector3, radius: float, depth: float) -> void:
 	if radius <= 0.0 or depth <= 0.0:
 		return
+	_crater_history.append({"point": world_position, "radius": radius, "depth": depth})
+	# Limit memory even during dozens of blasts on a single region.
+	if _crater_history.size() > 96:
+		_crater_history.remove_at(0)
+	_apply_crater(world_position, radius, depth)
+	_rebuild_surface()
+
+func _apply_crater(world_position: Vector3, radius: float, depth: float) -> void:
 	# A smooth excavation with an uplifted rim; the actual terrain mesh AND
 	# collision are rebuilt. This works for any blast centred on the ground.
 	var grid_step: float = maxf(extent.x, extent.y) / float(GRID - 1)
@@ -119,12 +134,14 @@ func crater_at(world_position: Vector3, radius: float, depth: float) -> void:
 				_heights[index] += depth * 0.10 * pow(1.0 - rim, 2.0)
 				_scorch[index] = maxf(_scorch[index], 0.26 * (1.0 - rim))
 			modified = true
+	# _rebuild_surface is deliberately called once by the outer transaction.
 	if modified:
-		_rebuild_surface()
+		pass
 
 func restore() -> void:
 	_heights = _base_heightmap.duplicate()
 	_scorch.fill(0.0)
+	_crater_history.clear()
 	_rebuild_surface()
 
 func _vertex(tool: SurfaceTool, point: Vector3, tint: Color, scar: float = 0.0) -> void:
