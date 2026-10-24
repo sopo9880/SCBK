@@ -9,7 +9,7 @@ const Mercator = preload("res://scripts/map_math.gd")
 const MapCanvas = preload("res://scripts/map_canvas.gd")
 const TILE_DIR := "user://map_tiles"
 const CACHE_SECONDS := 604800
-const TILE_USER_AGENT := "SCBK-Windows/0.1.0 (https://github.com/sopo9880/SCBK)"
+const TILE_USER_AGENT := "SCBK-Windows/0.2.1 (https://github.com/sopo9880/SCBK)"
 const TILE_HOST := "https://tile.openstreetmap.org"
 const SEARCH_ENDPOINT := "https://nominatim.openstreetmap.org/search"
 const MAX_TEXTURES := 70
@@ -42,6 +42,7 @@ var _tile_inflight: bool = false
 var _last_search_ms: int = -100000
 var _last_pan_update: int = 0
 var _tile_errors: int = 0
+var _tile_warning: Label
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -91,23 +92,23 @@ func _build_ui() -> void:
 	var head := HBoxContainer.new()
 	vbox.add_child(head)
 	var title := Label.new()
-	title.text = "SCBK  /  SELECT A REAL PLACE"
+	title.text = "SCBK  /  실제 장소 선택"
 	title.add_theme_font_size_override("font_size", 20)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
 	var close_btn := Button.new()
-	close_btn.text = "BACK TO GAME  [ESC]"
+	close_btn.text = "게임으로 돌아가기  [ESC]"
 	close_btn.pressed.connect(_close)
 	head.add_child(close_btn)
 	var search_bar := HBoxContainer.new()
 	vbox.add_child(search_bar)
 	_search_input = LineEdit.new()
-	_search_input.placeholder_text = "Place or address (e.g. Busan, Seoul, Tokyo)"
+	_search_input.placeholder_text = "장소 또는 주소 (부산, 서울, Tokyo 등)"
 	_search_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search_input.text_submitted.connect(_submit_search)
 	search_bar.add_child(_search_input)
 	_search_button = Button.new()
-	_search_button.text = "SEARCH"
+	_search_button.text = "검색"
 	_search_button.pressed.connect(_search)
 	search_bar.add_child(_search_button)
 	_results = OptionButton.new()
@@ -118,11 +119,11 @@ func _build_ui() -> void:
 	var bar := HBoxContainer.new()
 	vbox.add_child(bar)
 	_mode_button = Button.new()
-	_mode_button.text = "SELECT AREA (click / drag)"
+	_mode_button.text = "영역 선택 (클릭/드래그)"
 	_mode_button.pressed.connect(_switch_mode)
 	bar.add_child(_mode_button)
 	var pan_button := Button.new()
-	pan_button.text = "PAN MAP"
+	pan_button.text = "지도 이동"
 	pan_button.pressed.connect(_set_pan_mode)
 	bar.add_child(pan_button)
 	var zoom_in := Button.new()
@@ -134,7 +135,7 @@ func _build_ui() -> void:
 	zoom_out.pressed.connect(func() -> void: _zoom_at(-1))
 	bar.add_child(zoom_out)
 	var radius_label := Label.new()
-	radius_label.text = "Click radius:"
+	radius_label.text = "클릭 반경:"
 	bar.add_child(radius_label)
 	_radius = OptionButton.new()
 	_radius.add_item("250 m", 250)
@@ -154,15 +155,21 @@ func _build_ui() -> void:
 	_canvas.gui_input.connect(_map_input)
 	_canvas.resized.connect(_refresh_tiles)
 	vbox.add_child(_canvas)
+	_tile_warning = Label.new()
+	_tile_warning.visible = false
+	_tile_warning.text = "지도 배경 타일 연결이 불안정합니다. 좌표 입력은 게임 화면에서도 가능합니다."
+	_tile_warning.add_theme_color_override("font_color", Color(1.0, 0.73, 0.38))
+	_tile_warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(_tile_warning)
 	var actions := HBoxContainer.new()
 	vbox.add_child(actions)
 	_notice = Label.new()
-	_notice.text = "Zoom and drag a selection; click selects a preset-radius square."
+	_notice.text = "지도를 확대하고 원하는 영역을 클릭하거나 드래그하세요."
 	_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_notice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	actions.add_child(_notice)
 	_choose_button = Button.new()
-	_choose_button.text = "BUILD SELECTED 3D REGION"
+	_choose_button.text = "선택 지역 3D 생성"
 	_choose_button.disabled = true
 	_choose_button.pressed.connect(_confirm)
 	actions.add_child(_choose_button)
@@ -173,7 +180,7 @@ func _build_ui() -> void:
 
 func _set_pan_mode() -> void:
 	_mode_select = false
-	_mode_button.text = "PAN MAP (drag)"
+	_mode_button.text = "지도 이동 (드래그)"
 
 func _switch_mode() -> void:
 	_mode_select = true
@@ -251,15 +258,15 @@ func _update_selection_status() -> void:
 	if _notice == null:
 		return
 	if _selection.is_empty():
-		_notice.text = "Select: click for a radius or drag a rectangle. Switch to PAN MAP to move around."
+		_notice.text = "지역 선택: 클릭 또는 드래그 / 지도를 움직이려면 '지도 이동' 선택"
 		_choose_button.disabled = true
 		return
 	var extent: Vector2 = Mercator.meters(_selection)
 	if not Mercator.validated(_selection):
-		_notice.text = "Selection %.0f x %.0f m is invalid. Zoom closer / select 50–1600 m per side; dateline not supported yet." % [extent.x, extent.y]
+		_notice.text = "선택 영역 %.0f x %.0f m은 범위를 벗어났습니다 (한 변 50~1600 m)." % [extent.x, extent.y]
 		_choose_button.disabled = true
 		return
-	_notice.text = "Selected area %.0f x %.0f m. Press BUILD to download building and road outlines." % [extent.x, extent.y]
+	_notice.text = "선택 영역 %.0f × %.0f m. '3D 생성'을 누르면 실제 건물을 가져옵니다." % [extent.x, extent.y]
 	_choose_button.disabled = false
 
 func _confirm() -> void:
@@ -277,48 +284,48 @@ func _submit_search(_text: String) -> void:
 func _search() -> void:
 	var query: String = _search_input.text.strip_edges()
 	if query.length() < 3:
-		_notice.text = "Enter a place name of at least three characters."
+		_notice.text = "장소 이름을 세 글자 이상 입력해 주세요."
 		return
 	if _search_http.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
-		_notice.text = "A search request is still active."
+		_notice.text = "장소 검색 중입니다. 완료 후 다시 시도해 주세요."
 		return
 	var now: int = Time.get_ticks_msec()
 	if now - _last_search_ms < 1100:
-		_notice.text = "Public Nominatim policy: wait at least one second between searches."
+		_notice.text = "공공 지도 서버 이용 제한: 검색 간격은 1초 이상이어야 합니다."
 		return
 	_last_search_ms = now
 	_results.clear()
 	_results.visible = false
 	_place_results.clear()
 	_search_button.disabled = true
-	_notice.text = "Searching OpenStreetMap places..."
+	_notice.text = "OpenStreetMap에서 장소 검색 중..."
 	var url: String = SEARCH_ENDPOINT + "?format=jsonv2&limit=5&q=" + query.uri_encode()
 	var headers := PackedStringArray(["User-Agent: " + TILE_USER_AGENT, "Accept: application/json"])
 	var err: Error = _search_http.request(url, headers)
 	if err != OK:
 		_search_button.disabled = false
-		_notice.text = "Search could not start."
+		_notice.text = "장소 검색을 시작하지 못했습니다."
 
 func _search_done(result: int, status: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_search_button.disabled = false
 	if result != HTTPRequest.RESULT_SUCCESS or status != 200:
-		_notice.text = "Place search unavailable; pan the map or enter coordinates in the main game."
+		_notice.text = "장소 검색 서버에 연결하지 못했습니다. 지도를 움직이거나 직접 좌표를 입력해 주세요."
 		return
 	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 	if not parsed is Array:
-		_notice.text = "Invalid search response."
+		_notice.text = "지도 검색 응답 형식이 잘못됐습니다."
 		return
 	for p in parsed:
 		if p is Dictionary and p.has("lat") and p.has("lon"):
 			_place_results.append(p)
 			_results.add_item(str(p.get("display_name", "Place")))
 	if _place_results.is_empty():
-		_notice.text = "No results found. Try another spelling."
+		_notice.text = "검색 결과가 없습니다. 다른 이름으로 다시 검색하세요."
 		return
 	_results.visible = true
 	_results.select(0)
 	_choose_result(0)
-	_notice.text = "Found %d result(s). Choose a place, then click or drag on the map." % _place_results.size()
+	_notice.text = "%d개 장소를 찾았습니다. 선택 후 지도에서 영역을 지정하세요." % _place_results.size()
 
 func _choose_result(index: int) -> void:
 	if index < 0 or index >= _place_results.size():
@@ -400,6 +407,9 @@ func _tile_done(result: int, response: int, _headers: PackedStringArray, body: P
 	_tile_inflight = false
 	_active_tile.clear()
 	if result == HTTPRequest.RESULT_SUCCESS and response == 200 and body.size() > 100 and key != "":
+		_tile_errors = 0
+		if _tile_warning != null:
+			_tile_warning.visible = false
 		var image := Image.new()
 		if image.load_png_from_buffer(body) == OK:
 			_textures[key] = ImageTexture.create_from_image(image)
@@ -411,6 +421,8 @@ func _tile_done(result: int, response: int, _headers: PackedStringArray, body: P
 				f.close()
 	else:
 		_tile_errors += 1
+		if _tile_errors >= 3 and _tile_warning != null:
+			_tile_warning.visible = true
 	if _canvas != null:
 		_canvas.queue_redraw()
 	# Throttle public OSM imagery; only tiles visible in the active viewport.
