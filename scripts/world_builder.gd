@@ -93,7 +93,7 @@ func _add_landmark(building: Node3D, name_text: String) -> void:
 	marker.shaded = false
 	marker.modulate = Color(1.0, 0.98, 0.85)
 	marker.outline_modulate = Color(0.10, 0.16, 0.18, 0.96)
-	marker.position = Vector3(0, building.height_m + 8.0, 0)
+	marker.position = Vector3(0, float(building.get("height_m")) + 8.0, 0)
 	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	building.add_child(marker)
 
