@@ -75,3 +75,27 @@ Terrain uses a grid; small craters that fell between vertices are expanded to at
 ### CI discipline
 
 `tests/test_map_loading.gd` is an offline state/caching test. `tests/test_ui_shell.gd` instantiates the actual game scene in a headless Godot runtime. `tests/test_gameplay.gd` checks fragment collision shape transitions in addition to destruction/terrain/score. PR tests do not certify visuals or public network availability; they precede the Windows-only release build. Existing v0.2.0 release files are immutable and Android remains out of scope.
+
+## v0.2.2 — projection, ground hit and blast pipeline
+
+### Rendering real geographic identity
+
+The selected 3D region remains based on real OpenStreetMap way geometries from `region_loader.gd`. `ground_map_projection.gd` converts the original road/building footprint coordinates into a bounded 512x512 terrain image, aligned to the mesh extents including 80m DEM margins using planar UVs. `terrain_surface.gd` multiplies this texture by the existing slope tint and extra crater scorch. Regenerating the collidable terrain after a crater retains the texture.
+
+If a user already interacted with the Godot 2D world-map picker, its `user://map_tiles/z/x/y.png` entries may instead cover the selected region: the ground-map projector reuses the **complete** set of at most 16 already cached OSM raster tiles without issuing a single network request. When raster coverage is incomplete it falls back to generated OSM vector imagery. This is not satellite imagery. The game does not bulk-prefetch raster imagery, and OpenStreetMap attribution remains visible while in game. Keeping tile requests tied to direct 2D map browsing and caching is necessary under the OSMF tile usage policy (https://operations.osmfoundation.org/policies/tiles/). User-selected images from arbitrary satellite providers are intentionally not fetched.
+
+A bounded number of proper building names from the real OSM response receive 3D label markers; no made-up campus names are generated.
+
+### Ground ray and weapon rules
+
+`gameplay_v022.gd` extends the v0.2.1 UI/gameplay, overriding target selection. The usual Godot physics ray detects terrain, buildings and debris. For non-bat weapons a fallback intersects the camera ray against the deformable height surface (3 iterations), rejecting hits outside the current terrain extents. Bomb, meteor, quake and nuke impacts snap to actual terrain elevation even after a building is hit. The bat requires `scbk_building` metadata and does not affect ground. Lasers keep their original drag/strike path.
+
+Weapon 6 offers a 40–360m blast radius with presets and a ground-following ring rebuilt only when aim/radius changes. The configured radius is propagated to `combat_effects.gd` and governs the staged nuclear pressure, full damage footprint, central crater, particles and camera shake. Death/score/debris caps are still governed by `WorldBuilder`.
+
+### Debris and terrain lifecycle
+
+`destructible_building.gd` uses a shared chipped mesh for dynamic rubble, keeping a compact box collision per physical fragment. Only surviving building cells remain static collision bodies after a fracture; up to three unsupported upper cells may also fall when the supporting floor is destroyed within the local blast/physics budget. The original whole-building collider returns on Reset. No true fracture-network or finite-element engineering simulation is claimed.
+
+`terrain_surface.gd` uses a 49x49 height and concave collider grid with excavation, raised rim and scorch. Up to 96 crater events are retained so a delayed external DEM update can reapply existing damage instead of silently flattening it. Reset clears both topography damage and the visual scorch mask. Geometry is still coarse for very small craters; roads can bridge fresh craters.
+
+`tests/test_projection_v022.gd` and `tests/test_weapon_v022.gd` validate the offline cartographic raster, ground ray, nuke slider binding, BAT restrictions, crater/reset, and delayed DEM damage persistence. The existing gameplay test also verifies irregular physical rubble. The next CI phase uses headless Godot tests only; real Windows visual acceptability remains a separate post-release user test.

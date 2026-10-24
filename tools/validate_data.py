@@ -36,11 +36,24 @@ for path in [
     "tests/test_gameplay.gd",
 ]:
     assert (ROOT / path).is_file(), path
-assert "game_ui_v021.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+assert "gameplay_v022.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+for new_script in ("scripts/gameplay_v022.gd", "scripts/ground_map_projection.gd"):
+    assert (ROOT / new_script).is_file(), new_script
+weapons = (ROOT / "scripts/combat_effects.gd").read_text("utf-8")
+assert "func set_nuke_radius(" in weapons
+assert "terrain_struck.emit" in weapons
+ground = (ROOT / "scripts/terrain_surface.gd").read_text("utf-8")
+assert "func set_map_texture(" in ground
+assert "func crater_at(" in ground
+map_projection = (ROOT / "scripts/ground_map_projection.gd").read_text("utf-8")
+assert "func _try_cached_map(" in map_projection
+assert "_request.request(" not in map_projection and "HTTPRequest.new()" not in map_projection
+for regression in ("tests/test_projection_v022.gd", "tests/test_weapon_v022.gd"):
+    assert (ROOT / regression).is_file(), regression
 assert (ROOT / "scripts/game_ui_v021.gd").is_file()
 for feature in ("func cancel_load(", "func retry_last(", "loading_progress"):
     assert feature in region_loader, feature
 for test in ("tests/test_map_loading.gd", "tests/test_ui_shell.gd"):
     assert (ROOT / test).is_file(), test
 assert "func damage_at(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
-print("SCBK v0.2.1 maps, HUD, destruction and source layout validated.")
+print("SCBK v0.2.2 map projection, editable nuclear radius and weapon source validated.")

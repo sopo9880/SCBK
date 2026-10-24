@@ -1,6 +1,33 @@
 # SCBK — World Smash for Windows
 
-SCBK v0.2.1 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+SCBK v0.2.2 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+
+## v0.2.2 — grounded world maps, ground strikes and scalable nuclear blasts
+
+**This update follows real Windows v0.2.1 testing.** Real Dong-A campus OSM geometry and elevation loaded successfully, but the plain terrain did not communicate which place was being viewed, bombs were too geometric, and destructible building chunks were overly regular.
+
+- **Live 3D terrain map projection:** selected OSM roads, footprints and terrain are drawn into a geographically aligned 512x512 land texture. The app may reuse **only OpenStreetMap map-picker tiles already cached through normal interactive viewing** for an accurate road/label image. It does not scrape/bulk-download or prefetch raster imagery when generating the 3D scene. An always-visible OSM attribution appears at the bottom left. Press **T** or click **지형 지도** to toggle the overlay. Actual OSM building names (if available) appear as a limited number of billboard markers.
+- **Ground targeting:** bomb, laser, meteor, quake and nuke can now target terrain even when the mouse is not over a building. The bat is intentionally limited to buildings and fragments. The hit ray can fall back to heightmap intersection within the actual visible ground. Explosion centres are projected to ground level; crater geometry and collision match.
+- **Real terrain damage:** a bowl-shaped crater with raised rim and scorching is written into the heightmap and collision surface. Impact effects also work with textured terrain. If high-resolution elevation data arrives after an explosion, the crater remains. Reset clears craters and scorch.
+- **Custom nuke blast radius:** select weapon **6** to expose a slider (40–360 m), three quick presets (60/160/320 m), an actual ground-following target circle, and Shift+mouse wheel adjustments. The effective damage range, pressure-wave visuals, crater radius, dust and shake are tied to the selected radius.
+- **Weapon differentiation:** bombs descend before detonation; meteor and nuclear strikes display impact warnings, pressure waves and bounded CPU particle dust/sparks. A nucleus-like stem and smoke lobes replace the single opaque nuke circle. Nuclear damage unfolds in multiple radial phases.
+- **Improved fragmentation:** chunk meshes have chipped, irregular concrete surfaces rather than window-textured boxes. Unsupported upper pieces can fall after lower sections fail (budgeted to avoid mass physics growth), and surviving walls gain modest wear shading.
+- **Tests:** offline 3D map raster projection, ground crater/late DEM/scorch/reset, bat-only restrictions and nuke slider-to-weapon synchronization are included in PR checks along with existing fracture tests.
+
+### What this does not do
+
+The 3D projection uses **OSM cartographic/vector mapping**, not satellite or photographic imagery. Third-party satellite photography cannot be bundled or downloaded without an appropriate license/API. OSM map data and the cached, previously viewed map tiles still depend on the user's available coverage. Physics and effects are stylized prototypes rather than engineering-accurate structural simulation; a 160 active-debris-body cap remains. Larger nuclear ranges can hit many buildings while physics limits constrain simultaneously simulated rubble. Profiling FPS, input hit accuracy and visual acceptance on Windows is still necessary after the official release.
+
+### New controls
+
+| Function | Key / interaction |
+| --- | --- |
+| Toggle projected cartographic ground | T / 지형 지도 |
+| Bomb, meteor, quake or nuke | Ground or building left click |
+| Bat | Building/fragment left click only |
+| Nuke range | Weapon 6 slider, presets, or Shift+wheel |
+| Inspect nuclear target radius | Select tool 6 and move mouse over terrain |
+| Clear craters, damaged buildings and fragments | R |
 
 ## v0.2.1 — changes after the first real Windows screenshot
 

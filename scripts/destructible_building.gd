@@ -29,6 +29,8 @@ var _section_colliders: Array[CollisionShape3D] = []
 var _chunks: MultiMeshInstance3D
 var _facade: ShaderMaterial
 var _roof_material: StandardMaterial3D
+var _rubble_mat: StandardMaterial3D
+var _rubble_mesh: Mesh
 var _sections: Array[Dictionary] = []
 var _pieces: Array[RigidBody3D] = []
 var _fractured: bool = false
@@ -62,6 +64,11 @@ func configure(record: Dictionary) -> void:
 	_roof_material.albedo_color = color.darkened(0.22)
 	_roof_material.roughness = 0.93
 	_roof_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_rubble_mat = StandardMaterial3D.new()
+	_rubble_mat.albedo_color = color.darkened(0.33)
+	_rubble_mat.roughness = 0.96
+	_rubble_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_rubble_mesh = _make_rough_chunk_mesh()
 	_solid = StaticBody3D.new()
 	_solid.collision_layer = 1
 	_solid.collision_mask = 1
@@ -168,6 +175,28 @@ func _make_trim_mesh() -> Mesh:
 	tool.generate_normals()
 	return tool.commit()
 
+func _make_rough_chunk_mesh() -> Mesh:
+	# A low-poly, chipped masonry block shared by every rubble fragment.
+	# The collider is still an efficient box, inset very slightly around it.
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bottom: Array[Vector3] = [
+		Vector3(-0.46, -0.48, -0.47), Vector3(0.48, -0.48, -0.44),
+		Vector3(0.46, -0.46, 0.48), Vector3(-0.47, -0.48, 0.46)]
+	var top: Array[Vector3] = [
+		Vector3(-0.41, 0.49, -0.49), Vector3(0.30, 0.46, -0.42),
+		Vector3(0.43, 0.48, 0.43), Vector3(-0.48, 0.39, 0.37)]
+	for face in range(4):
+		var next: int = (face + 1) % 4
+		for vertex in [bottom[face], top[face], bottom[next], bottom[next], top[face], top[next]]:
+			_vertex(tool, vertex, Vector2.ZERO)
+	for vertex in [top[0], top[2], top[1], top[0], top[3], top[2]]:
+		_vertex(tool, vertex, Vector2.ZERO)
+	for vertex in [bottom[0], bottom[1], bottom[2], bottom[0], bottom[2], bottom[3]]:
+		_vertex(tool, vertex, Vector2.ZERO)
+	tool.generate_normals()
+	return tool.commit()
+
 func set_night(enabled: bool) -> void:
 	_night = enabled
 	if _facade != null:
@@ -228,6 +257,8 @@ func _rebuild_static_chunks() -> void:
 			remaining.append(section)
 	if remaining.is_empty():
 		_chunks.visible = false
+		if has_node("LandmarkLabel"):
+			get_node("LandmarkLabel").visible = false
 		broken = true
 		return
 	var mm := MultiMesh.new()
@@ -270,13 +301,60 @@ func damage_at(impact: Vector3, radius: float, impulse: float, direction: Vector
 		_section_colliders[idx].set_deferred("disabled", true)
 		_spawn_piece(piece["center"], piece["size"], impact, impulse, direction)
 		released += 1
+	if released > 0 and released < maximum:
+		# Secondary damage is deterministic and budgeted: some upper
+		# sections fall when the column underneath has been punched out.
+		released += _collapse_unsupported(impact, impulse, maximum - released)
 	_released_sections += released
 	if released > 0:
+		_facade.set_shader_parameter("damage_tint", clampf(damage_fraction() * 0.38, 0.0, 0.32))
 		_rebuild_static_chunks()
 		if not broken and _released_sections >= _sections.size():
 			broken = true
 			building_broken.emit(self)
 	return released
+
+func _collapse_unsupported(impact: Vector3, impulse: float, limit: int) -> int:
+	if limit <= 0:
+		return 0
+	var unsupported: Array[Dictionary] = []
+	for i in range(_sections.size()):
+		var cell: Dictionary = _sections[i]
+		if not cell["intact"]:
+			continue
+		var at: Vector3 = cell["center"]
+		var cell_size: Vector3 = cell["size"]
+		if at.y < cell_size.y * 1.5:
+			continue
+		if to_global(at).distance_to(impact) > maxf(48.0, cell_size.length() * 4.0):
+			continue
+		var has_support: bool = false
+		for lower in _sections:
+			if not lower["intact"]:
+				continue
+			var other: Vector3 = lower["center"]
+			if other.y >= at.y - cell_size.y * 0.45 or other.y < at.y - cell_size.y * 1.65:
+				continue
+			if absf(other.x - at.x) <= cell_size.x * 0.35 and absf(other.z - at.z) <= cell_size.z * 0.35:
+				has_support = true
+				break
+		if not has_support:
+			unsupported.append({"index": i, "distance": to_global(at).distance_to(impact)})
+	unsupported.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["distance"]) < float(b["distance"]))
+	var count: int = 0
+	for candidate in unsupported:
+		if count >= mini(limit, 3):
+			break
+		var index: int = int(candidate["index"])
+		var block: Dictionary = _sections[index]
+		if not block["intact"]:
+			continue
+		block["intact"] = false
+		_sections[index] = block
+		_section_colliders[index].set_deferred("disabled", true)
+		_spawn_piece(block["center"], block["size"], impact, impulse * 0.47, Vector3.UP * 0.15)
+		count += 1
+	return count
 
 func _spawn_piece(local_pos: Vector3, size: Vector3, impact: Vector3, impulse: float, direction: Vector3) -> void:
 	var body := RigidBody3D.new()
@@ -292,10 +370,10 @@ func _spawn_piece(local_pos: Vector3, size: Vector3, impact: Vector3, impulse: f
 	body.set_meta("scbk_fragment", true)
 	body.set_meta("scbk_fragment_size", size)
 	var display := MeshInstance3D.new()
-	var cube := BoxMesh.new()
-	cube.size = size * 0.96
-	cube.material = _facade
-	display.mesh = cube
+	display.mesh = _rubble_mesh
+	display.material_override = _rubble_mat
+	display.scale = size * 0.97
+	display.rotation_degrees = Vector3(randf_range(-4.0, 4.0), randf_range(-18.0, 18.0), randf_range(-4.0, 4.0))
 	body.add_child(display)
 	var col := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -369,6 +447,8 @@ func reset_building() -> void:
 			piece.queue_free()
 	_pieces.clear()
 	_sections.clear()
+	if _facade != null:
+		_facade.set_shader_parameter("damage_tint", 0.0)
 	for node in _section_colliders:
 		if is_instance_valid(node):
 			node.set_deferred("disabled", true)
@@ -378,6 +458,8 @@ func reset_building() -> void:
 	_fractured = false
 	_released_sections = 0
 	broken = false
+	if has_node("LandmarkLabel"):
+		get_node("LandmarkLabel").visible = true
 	_wall.visible = true
 	_roof.visible = true
 	_trim.visible = true

@@ -55,6 +55,7 @@ func load_region(region: Dictionary, source: String) -> int:
 	_terrain.reset_plane(region_bounds)
 	_dem_active = false
 	var entries: Array = region.get("buildings", [])
+	var landmark_count: int = 0
 	for entry in entries:
 		if not entry is Dictionary:
 			continue
@@ -67,6 +68,12 @@ func load_region(region: Dictionary, source: String) -> int:
 		obj.set_ground_height(_terrain.height_at(obj.position.x, obj.position.z))
 		obj.set_night(_night)
 		obj.building_broken.connect(_on_building_broken)
+		var title: String = str(entry.get("name", "")).strip_edges()
+		# Only mapped proper names become floating landmarks; never invent
+		# a campus name from a feature ID or address.
+		if title != "" and not title.begins_with("Building ") and landmark_count < 14:
+			_add_landmark(obj, title)
+			landmark_count += 1
 		buildings.append(obj)
 		if buildings.size() >= MAX_BUILDINGS:
 			break
@@ -75,8 +82,33 @@ func load_region(region: Dictionary, source: String) -> int:
 	_build_vegetation(region)
 	return buildings.size()
 
+func _add_landmark(building: Node3D, name_text: String) -> void:
+	var marker := Label3D.new()
+	marker.name = "LandmarkLabel"
+	marker.text = name_text.left(28)
+	marker.font_size = 32
+	marker.pixel_size = 0.15
+	marker.outline_size = 7
+	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	marker.shaded = false
+	marker.modulate = Color(1.0, 0.98, 0.85)
+	marker.outline_modulate = Color(0.10, 0.16, 0.18, 0.96)
+	marker.position = Vector3(0, float(building.get("height_m")) + 8.0, 0)
+	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	building.add_child(marker)
+
 func terrain_height_at(x: float, z: float) -> float:
 	return _terrain.height_at(x, z)
+
+func terrain_extent() -> Vector2:
+	return _terrain.extent
+
+func point_over_ground(point: Vector3) -> bool:
+	var size: Vector2 = _terrain.extent
+	return absf(point.x) <= size.x * 0.5 and absf(point.z) <= size.y * 0.5
+
+func set_ground_projection(texture: Texture2D) -> void:
+	_terrain.set_map_texture(texture)
 
 func has_dem() -> bool:
 	return _dem_active

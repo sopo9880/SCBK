@@ -29,6 +29,15 @@ func _run() -> void:
 	if building.active_debris_count() > first:
 		_fail("Debris budget overflow.")
 		return
+	var fragments: Array = building.get("_pieces")
+	if fragments.is_empty():
+		_fail("Impact must create visible physical fragments.")
+		return
+	var fragment: RigidBody3D = fragments[0]
+	var appearance: MeshInstance3D = fragment.get_child(0)
+	if appearance.mesh is BoxMesh:
+		_fail("Falling rubble should be irregular geometry, not plain windowed boxes.")
+		return
 	await process_frame
 	var original_shape: CollisionShape3D = building.get("_collision")
 	var cell_shapes: Array = building.get("_section_colliders")
