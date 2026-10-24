@@ -24,5 +24,9 @@ jobs:
         run: godot --headless --path . --script res://tests/test_map_math.gd
       - name: Gameplay physics and terrain regression (offline)
         run: godot --headless --path . --script res://tests/test_gameplay.gd
+      - name: Offline map cache, cancellation and retry regression
+        run: godot --headless --path . --script res://tests/test_map_loading.gd
+      - name: Boot new game HUD and map-retry UI
+        run: godot --headless --path . --script res://tests/test_ui_shell.gd
       - name: Smoke-test scene startup (offline; 3 seconds)
         run: godot --headless --path . --quit-after 180
