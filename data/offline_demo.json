@@ -1,0 +1,337 @@
+{
+  "label": "OFFLINE TRAINING BLOCK — synthetic data, not the real campus",
+  "center_lat": 35.11619,
+  "center_lon": 128.96733,
+  "buildings": [
+    {
+      "id": "demo01",
+      "name": "Training library",
+      "height": 26,
+      "outline": [
+        [
+          -73,
+          -69
+        ],
+        [
+          -27,
+          -69
+        ],
+        [
+          -27,
+          -32
+        ],
+        [
+          -73,
+          -32
+        ]
+      ]
+    },
+    {
+      "id": "demo02",
+      "name": "Training engineering hall A",
+      "height": 33,
+      "outline": [
+        [
+          15,
+          -77
+        ],
+        [
+          68,
+          -77
+        ],
+        [
+          68,
+          -37
+        ],
+        [
+          15,
+          -37
+        ]
+      ]
+    },
+    {
+      "id": "demo03",
+      "name": "Training engineering hall B",
+      "height": 20,
+      "outline": [
+        [
+          93,
+          -74
+        ],
+        [
+          129,
+          -74
+        ],
+        [
+          129,
+          -32
+        ],
+        [
+          93,
+          -32
+        ]
+      ]
+    },
+    {
+      "id": "demo04",
+      "name": "Training hall C",
+      "height": 19,
+      "outline": [
+        [
+          -126,
+          22
+        ],
+        [
+          -81,
+          22
+        ],
+        [
+          -81,
+          65
+        ],
+        [
+          -126,
+          65
+        ]
+      ]
+    },
+    {
+      "id": "demo05",
+      "name": "Training student center",
+      "height": 17,
+      "outline": [
+        [
+          -49,
+          18
+        ],
+        [
+          -5,
+          18
+        ],
+        [
+          -5,
+          55
+        ],
+        [
+          -49,
+          55
+        ]
+      ]
+    },
+    {
+      "id": "demo06",
+      "name": "Training hall D",
+      "height": 29,
+      "outline": [
+        [
+          31,
+          19
+        ],
+        [
+          89,
+          19
+        ],
+        [
+          89,
+          61
+        ],
+        [
+          31,
+          61
+        ]
+      ]
+    },
+    {
+      "id": "demo07",
+      "name": "Training lab",
+      "height": 14,
+      "outline": [
+        [
+          109,
+          27
+        ],
+        [
+          142,
+          27
+        ],
+        [
+          142,
+          62
+        ],
+        [
+          109,
+          62
+        ]
+      ]
+    },
+    {
+      "id": "demo08",
+      "name": "Training main hall",
+      "height": 35,
+      "outline": [
+        [
+          -108,
+          106
+        ],
+        [
+          -38,
+          106
+        ],
+        [
+          -38,
+          153
+        ],
+        [
+          -108,
+          153
+        ]
+      ]
+    },
+    {
+      "id": "demo09",
+      "name": "Training gym",
+      "height": 13,
+      "outline": [
+        [
+          8,
+          102
+        ],
+        [
+          73,
+          102
+        ],
+        [
+          73,
+          153
+        ],
+        [
+          8,
+          153
+        ]
+      ]
+    },
+    {
+      "id": "demo10",
+      "name": "Training dormitory",
+      "height": 38,
+      "outline": [
+        [
+          105,
+          103
+        ],
+        [
+          145,
+          103
+        ],
+        [
+          145,
+          148
+        ],
+        [
+          105,
+          148
+        ]
+      ]
+    },
+    {
+      "id": "demo11",
+      "name": "Training lecture hall",
+      "height": 22,
+      "outline": [
+        [
+          -177,
+          -69
+        ],
+        [
+          -141,
+          -69
+        ],
+        [
+          -141,
+          -25
+        ],
+        [
+          -177,
+          -25
+        ]
+      ]
+    },
+    {
+      "id": "demo12",
+      "name": "Training workshop",
+      "height": 19,
+      "outline": [
+        [
+          -176,
+          90
+        ],
+        [
+          -148,
+          90
+        ],
+        [
+          -148,
+          132
+        ],
+        [
+          -176,
+          132
+        ]
+      ]
+    }
+  ],
+  "roads": [
+    {
+      "width": 9,
+      "path": [
+        [
+          -220,
+          -8
+        ],
+        [
+          210,
+          -8
+        ]
+      ]
+    },
+    {
+      "width": 7,
+      "path": [
+        [
+          -20,
+          -120
+        ],
+        [
+          -20,
+          190
+        ]
+      ]
+    },
+    {
+      "width": 7,
+      "path": [
+        [
+          90,
+          -113
+        ],
+        [
+          90,
+          197
+        ]
+      ]
+    },
+    {
+      "width": 5,
+      "path": [
+        [
+          -205,
+          86
+        ],
+        [
+          197,
+          86
+        ]
+      ]
+    }
+  ]
+}
