@@ -78,6 +78,16 @@ func load_region(region: Dictionary, source: String) -> int:
 func terrain_height_at(x: float, z: float) -> float:
 	return _terrain.height_at(x, z)
 
+func terrain_extent() -> Vector2:
+	return _terrain.extent
+
+func point_over_ground(point: Vector3) -> bool:
+	var size: Vector2 = _terrain.extent
+	return absf(point.x) <= size.x * 0.5 and absf(point.z) <= size.y * 0.5
+
+func set_ground_projection(texture: Texture2D) -> void:
+	_terrain.set_map_texture(texture)
+
 func has_dem() -> bool:
 	return _dem_active
 
