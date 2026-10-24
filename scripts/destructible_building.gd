@@ -7,10 +7,10 @@ signal building_broken(building: Node3D)
 
 const FACADE_SHADER = preload("res://shaders/building_facade.gdshader")
 const PALETTE := [
-	Color(0.72, 0.69, 0.65), Color(0.61, 0.66, 0.70),
-	Color(0.77, 0.67, 0.57), Color(0.66, 0.69, 0.62),
-	Color(0.74, 0.72, 0.67), Color(0.61, 0.62, 0.68),
-	Color(0.73, 0.62, 0.58)
+	Color(0.60, 0.57, 0.52), Color(0.53, 0.57, 0.60),
+	Color(0.67, 0.55, 0.47), Color(0.57, 0.60, 0.53),
+	Color(0.65, 0.63, 0.58), Color(0.52, 0.54, 0.60),
+	Color(0.64, 0.54, 0.48)
 ]
 const MAX_LOCAL_CELLS := 80
 
@@ -23,6 +23,8 @@ var bounds: Rect2 = Rect2()
 var _solid: StaticBody3D
 var _wall: MeshInstance3D
 var _roof: MeshInstance3D
+var _trim: MeshInstance3D
+var _section_colliders: Array[CollisionShape3D] = []
 var _chunks: MultiMeshInstance3D
 var _facade: ShaderMaterial
 var _roof_material: StandardMaterial3D
@@ -54,9 +56,9 @@ func configure(record: Dictionary) -> void:
 	_facade.shader = FACADE_SHADER
 	_facade.set_shader_parameter("wall_color", color)
 	_facade.set_shader_parameter("trim_color", color.darkened(0.32))
-	_facade.set_shader_parameter("glass_color", Color(0.13, 0.27, 0.37))
+	_facade.set_shader_parameter("glass_color", Color(0.10, 0.16, 0.22))
 	_roof_material = StandardMaterial3D.new()
-	_roof_material.albedo_color = color.lightened(0.22)
+	_roof_material.albedo_color = color.darkened(0.22)
 	_roof_material.roughness = 0.93
 	_roof_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_solid = StaticBody3D.new()
@@ -72,6 +74,10 @@ func configure(record: Dictionary) -> void:
 	_roof.mesh = _make_roof_mesh()
 	_roof.material_override = _roof_material
 	_solid.add_child(_roof)
+	_trim = MeshInstance3D.new()
+	_trim.mesh = _make_trim_mesh()
+	_trim.material_override = _roof_material
+	_solid.add_child(_trim)
 	var col := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(maxf(1.0, bounds.size.x), height_m, maxf(1.0, bounds.size.y))
@@ -134,6 +140,32 @@ func _make_roof_mesh() -> Mesh:
 	tool.generate_normals()
 	return tool.commit()
 
+func _make_trim_mesh() -> Mesh:
+	# Architectural trim is one inexpensive mesh rather than hundreds of nodes.
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var bands: Array = [[0.0, 0.65, 0.16], [height_m - 0.7, height_m + 0.28, 0.32]]
+	if height_m > 14.0:
+		bands.append([height_m * 0.52, height_m * 0.52 + 0.20, 0.13])
+	for i in range(footprint.size()):
+		var a: Vector2 = footprint[i]
+		var b: Vector2 = footprint[(i + 1) % footprint.size()]
+		if a.distance_to(b) <= 0.05:
+			continue
+		var side: Vector2 = (b - a).orthogonal().normalized()
+		for band in bands:
+			var y0: float = float(band[0])
+			var y1: float = float(band[1])
+			var out: Vector2 = side * float(band[2])
+			var c := Vector3(a.x + out.x, y0, a.y + out.y)
+			var d := Vector3(b.x + out.x, y0, b.y + out.y)
+			var e := Vector3(a.x + out.x, y1, a.y + out.y)
+			var f := Vector3(b.x + out.x, y1, b.y + out.y)
+			for vert in [c, e, d, d, e, f]:
+				_vertex(tool, vert, Vector2.ZERO)
+	tool.generate_normals()
+	return tool.commit()
+
 func set_night(enabled: bool) -> void:
 	_night = enabled
 	if _facade != null:
@@ -147,6 +179,7 @@ func _fracture_on_demand() -> void:
 		return
 	_fractured = true
 	_sections.clear()
+	_section_colliders.clear()
 	var nx: int = clampi(int(ceil(bounds.size.x / 10.0)), 2, 4)
 	var nz: int = clampi(int(ceil(bounds.size.y / 10.0)), 2, 4)
 	var ny: int = clampi(int(ceil(height_m / 8.0)), 2, 5)
@@ -163,10 +196,26 @@ func _fracture_on_demand() -> void:
 				_sections.append({"center": pos, "size": size, "intact": true})
 				if _sections.size() >= MAX_LOCAL_CELLS:
 					break
+			if _sections.size() >= MAX_LOCAL_CELLS:
+				break
+		if _sections.size() >= MAX_LOCAL_CELLS:
+			break
 	if _sections.is_empty():
 		_sections.append({"center": Vector3(bounds.get_center().x, height_m * 0.5, bounds.get_center().y), "size": Vector3(maxf(1.0, bounds.size.x), height_m, maxf(1.0, bounds.size.y)), "intact": true})
+	# Replace the original full-box collision with real surviving-cell
+	# colliders. Otherwise hits and debris collide with invisible walls.
+	_collision.set_deferred("disabled", true)
+	for item in _sections:
+		var shape := BoxShape3D.new()
+		shape.size = item["size"] * 0.985
+		var node := CollisionShape3D.new()
+		node.shape = shape
+		node.position = item["center"]
+		_solid.add_child(node)
+		_section_colliders.append(node)
 	_wall.visible = false
 	_roof.visible = false
+	_trim.visible = false
 	_chunks.visible = true
 	_rebuild_static_chunks()
 
@@ -216,6 +265,7 @@ func damage_at(impact: Vector3, radius: float, impulse: float, direction: Vector
 		var piece: Dictionary = _sections[idx]
 		piece["intact"] = false
 		_sections[idx] = piece
+		_section_colliders[idx].set_deferred("disabled", true)
 		_spawn_piece(piece["center"], piece["size"], impact, impulse, direction)
 		released += 1
 	_released_sections += released
@@ -317,11 +367,18 @@ func reset_building() -> void:
 			piece.queue_free()
 	_pieces.clear()
 	_sections.clear()
+	for node in _section_colliders:
+		if is_instance_valid(node):
+			node.set_deferred("disabled", true)
+			node.queue_free()
+	_section_colliders.clear()
+	_collision.set_deferred("disabled", false)
 	_fractured = false
 	_released_sections = 0
 	broken = false
 	_wall.visible = true
 	_roof.visible = true
+	_trim.visible = true
 	_chunks.visible = false
 	_chunks.multimesh = null
 	_solid.collision_layer = 1
