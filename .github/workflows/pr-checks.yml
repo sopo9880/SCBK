@@ -39,6 +39,12 @@ jobs:
       - name: Ground attacks, bat-only hit restriction and nuclear blast radius
         run: |
           bash tools/check_godot.sh 'SCBK v0.2.2 weapon ground/only-bat/adjustable nuke UI: PASS' --script res://tests/test_weapon_v022.gd
+      - name: V0.2.3 8km nuke, quake, bat and measured HUD regression
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.3 8km nuke / collapse cap / undo / M4-10 quake / bat / loading HUD: PASS' --script res://tests/test_cinematic_v023.gd
+      - name: V0.2.3 staged cache/parser progress and continuous laser trench
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.3 loader real-stage percentages / one-pass laser cut / delayed DEM: PASS' --script res://tests/test_progress_laser_v023.gd
       - name: Smoke-test scene startup (offline; 3 seconds)
         run: |
           bash tools/check_godot.sh - --quit-after 180

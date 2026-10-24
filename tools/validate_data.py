@@ -36,8 +36,8 @@ for path in [
     "tests/test_gameplay.gd",
 ]:
     assert (ROOT / path).is_file(), path
-assert "gameplay_v022.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
-for new_script in ("scripts/gameplay_v022.gd", "scripts/ground_map_projection.gd"):
+assert "gameplay_v023.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+for new_script in ("scripts/gameplay_v022.gd", "scripts/gameplay_v023.gd", "scripts/ground_map_projection.gd"):
     assert (ROOT / new_script).is_file(), new_script
 weapons = (ROOT / "scripts/combat_effects.gd").read_text("utf-8")
 assert "func set_nuke_radius(" in weapons
@@ -48,7 +48,7 @@ assert "func crater_at(" in ground
 map_projection = (ROOT / "scripts/ground_map_projection.gd").read_text("utf-8")
 assert "func _try_cached_map(" in map_projection
 assert "_request.request(" not in map_projection and "HTTPRequest.new()" not in map_projection
-for regression in ("tests/test_projection_v022.gd", "tests/test_weapon_v022.gd"):
+for regression in ("tests/test_projection_v022.gd", "tests/test_weapon_v022.gd", "tests/test_cinematic_v023.gd", "tests/test_progress_laser_v023.gd"):
     assert (ROOT / regression).is_file(), regression
 assert (ROOT / "scripts/game_ui_v021.gd").is_file()
 for feature in ("func cancel_load(", "func retry_last(", "loading_progress"):
@@ -56,4 +56,17 @@ for feature in ("func cancel_load(", "func retry_last(", "loading_progress"):
 for test in ("tests/test_map_loading.gd", "tests/test_ui_shell.gd"):
     assert (ROOT / test).is_file(), test
 assert "func damage_at(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
-print("SCBK v0.2.2 map projection, editable nuclear radius and weapon source validated.")
+assert 'config/name="SCBK - World Smash v0.2.3"' in (ROOT / "project.godot").read_text("utf-8")
+assert 'application/product_version="0.2.3"' in (ROOT / "export_presets.cfg").read_text("utf-8")
+assert "signal load_stage(" in region_loader and "load_stage.emit(" in region_loader
+world = (ROOT / "scripts/world_builder.gd").read_text("utf-8")
+assert "func massive_blast(" in world and "func quake_pulse(" in world
+assert "func collapse_lightweight(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
+assert "func laser_cut(" in ground
+hud = (ROOT / "scripts/gameplay_v023.gd").read_text("utf-8")
+for feature in ("_install_loading_meter", "_set_quake_magnitude", "_set_bat_size", "_v2_fire_laser", "GIANT_NUKE"):
+    assert feature in hud, feature
+assert "signal laser_ground_cut(" in weapons
+assert "signal seismic_wave(" in weapons
+assert "signal massive_impact(" in weapons
+print("SCBK v0.2.3 measured map loader, 8km blast, quake, bat and cinematic laser source validated.")
