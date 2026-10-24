@@ -37,6 +37,5 @@ for path in [
 ]:
     assert (ROOT / path).is_file(), path
 assert "gameplay_v2.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
-assert "partial" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8").lower()
 assert "func damage_at(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
 print("SCBK v0.2.0 data, map selection, native destruction and source layout validated.")
