@@ -33,6 +33,12 @@ jobs:
       - name: Boot new game HUD and map-retry UI
         run: |
           bash tools/check_godot.sh 'SCBK v0.2.1 compact HUD + weapon dock + retry UI: PASS' --script res://tests/test_ui_shell.gd
+      - name: Offline OSM projection and collidable craters
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.2 offline map projection / ground crater / scorch / reset: PASS' --script res://tests/test_projection_v022.gd
+      - name: Ground attacks, bat-only hit restriction and nuclear blast radius
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.2 weapon ground/only-bat/adjustable nuke UI: PASS' --script res://tests/test_weapon_v022.gd
       - name: Smoke-test scene startup (offline; 3 seconds)
         run: |
           bash tools/check_godot.sh - --quit-after 180
