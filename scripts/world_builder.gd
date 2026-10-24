@@ -379,6 +379,8 @@ func massive_blast(point: Vector3, radius: float, impulse: float) -> Dictionary:
 	var physical: int = 0
 	var fragments: int = 0
 	var affected: Array[Node3D] = []
+	var visual_sites := PackedVector3Array()
+	var visual_stride: int = maxi(1, int(ceil(float(nearby.size()) / 16.0)))
 	for item in nearby:
 		var building: Node3D = item["building"]
 		if physical < 7 and _budget() >= 8:
@@ -386,8 +388,10 @@ func massive_blast(point: Vector3, radius: float, impulse: float) -> Dictionary:
 			physical += 1
 		if building.collapse_lightweight():
 			affected.append(building)
+			if affected.size() % visual_stride == 0:
+				visual_sites.append(building.global_position)
 	_last_damaged = affected
-	return {"buildings": affected.size(), "pieces": fragments, "lightweight": affected.size()}
+	return {"buildings": affected.size(), "pieces": fragments, "lightweight": affected.size(), "visual_sites": visual_sites}
 
 func quake_pulse(point: Vector3, magnitude: float, beat: int) -> Dictionary:
 	var strength: float = clampf((magnitude - 4.0) / 6.0, 0.0, 1.0)

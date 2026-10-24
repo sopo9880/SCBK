@@ -133,6 +133,34 @@ func _laser_beam_segment(a: Vector3, b: Vector3) -> void:
 		var tween := create_tween()
 		tween.tween_property(glowing, "albedo_color:a", 0.0, 0.24)
 		tween.tween_callback(beam.queue_free)
+	_laser_heat_trace(a, b)
+
+func _laser_heat_trace(a: Vector3, b: Vector3) -> void:
+	var horizontal := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	if horizontal.length_squared() < 0.25:
+		return
+	var heat := MeshInstance3D.new()
+	var strip := BoxMesh.new()
+	strip.size = Vector3(5.8, 0.19, horizontal.length())
+	heat.mesh = strip
+	heat.transform = Transform3D(Basis(Quaternion(Vector3.FORWARD, horizontal.normalized())), (a + b) * 0.5 - Vector3.UP * 1.58)
+	var ember := StandardMaterial3D.new()
+	ember.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ember.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ember.albedo_color = Color(0.98, 0.27, 0.08, 0.69)
+	ember.emission_enabled = true
+	ember.emission = Color(0.96, 0.22, 0.06)
+	ember.emission_energy_multiplier = 1.9
+	heat.material_override = ember
+	heat.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(heat)
+	var cooling := create_tween()
+	cooling.tween_property(ember, "albedo_color:a", 0.0, 2.8)
+	cooling.tween_callback(heat.queue_free)
+
+func dust_column_at(point: Vector3) -> void:
+	_burst_particles(point, 25.0, 12, 1.8, Color(0.39, 0.35, 0.31, 0.71), false)
+	_smoke_lobe(point + Vector3.UP * 9.0, 13.0, 2.3)
 
 func _bomb(target: Vector3) -> void:
 	_active = true

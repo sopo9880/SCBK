@@ -196,7 +196,7 @@ func _set_bat_size(factor: float) -> void:
 	if _bat_slider != null:
 		_bat_slider.set_value_no_signal(_bat_size)
 	if _bat_caption != null:
-		_bat_caption.text = "배트 크기 x%.2g" % _bat_size
+		_bat_caption.text = "배트 크기 x%.2f" % _bat_size
 	if _v2_fx != null:
 		_v2_fx.set_bat_scale(_bat_size)
 
@@ -223,6 +223,11 @@ func _on_seismic_wave(point: Vector3, magnitude: float, beat: int) -> void:
 
 func _on_massive_impact(point: Vector3, radius: float, impulse: float) -> void:
 	var outcome: Dictionary = _world.massive_blast(point, radius, impulse)
+	# Spawn only a few bounded rubble-cloud cues; far buildings collapse
+	# visually without each requiring its own physical debris simulation.
+	var sites: PackedVector3Array = outcome.get("visual_sites", PackedVector3Array())
+	for site in sites:
+		_v2_fx.dust_column_at(site)
 	_v2_award(5, outcome)
 
 func _v2_fire_laser(screen: Vector2) -> void:
