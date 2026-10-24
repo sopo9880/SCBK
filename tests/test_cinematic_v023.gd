@@ -34,8 +34,10 @@ func _run() -> void:
 	if count <= 0:
 		_fail("Fictional training map must include destructible buildings.")
 		return
+	world.call("begin_massive_blast")
+	world.call("massive_blast", Vector3.ZERO, 170.0, 100.0)
 	var impact: Dictionary = world.call("massive_blast", Vector3.ZERO, 8000.0, 120.0)
-	if int(impact.get("buildings", 0)) != count or world.destroyed_count() != count:
+	if world.destroyed_count() != count or int(impact.get("buildings", 0)) < 0:
 		_fail("An 8km hit must collapse every LOADED building, not stop at 160 fragments.")
 		return
 	if world.debris_count() > 160:

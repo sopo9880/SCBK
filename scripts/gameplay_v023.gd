@@ -264,6 +264,9 @@ func _v2_fire_laser(screen: Vector2) -> void:
 	_v2_audio.weapon_sound(2)
 
 func _on_cinematic_start(weapon: int) -> void:
+	# Staged quakes and the six nuke blast waves are one undo transaction.
+	if weapon == 4 or (weapon == 5 and _nuke_range >= GIANT_NUKE):
+		_world.begin_massive_blast()
 	if weapon != 3 and weapon != 5:
 		return
 	_saved_distance = _distance

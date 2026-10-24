@@ -365,6 +365,9 @@ func strike_radius(point: Vector3, radius: float, impulse: float, direction: Vec
 	_last_damaged = touched
 	return {"buildings": touched.size(), "pieces": fragments}
 
+func begin_massive_blast() -> void:
+	_last_damaged.clear()
+
 func massive_blast(point: Vector3, radius: float, impulse: float) -> Dictionary:
 	# An 8km blast affects every loaded building within the radius, without
 	# constructing unbounded numbers of rigid-body fragments.
@@ -390,14 +393,20 @@ func massive_blast(point: Vector3, radius: float, impulse: float) -> Dictionary:
 			affected.append(building)
 			if affected.size() % visual_stride == 0:
 				visual_sites.append(building.global_position)
-	_last_damaged = affected
+	for building in affected:
+		if not _last_damaged.has(building):
+			_last_damaged.append(building)
 	return {"buildings": affected.size(), "pieces": fragments, "lightweight": affected.size(), "visual_sites": visual_sites}
 
 func quake_pulse(point: Vector3, magnitude: float, beat: int) -> Dictionary:
 	var strength: float = clampf((magnitude - 4.0) / 6.0, 0.0, 1.0)
 	var radius: float = lerpf(20.0, 820.0, pow(strength, 1.65))
 	var impulse: float = lerpf(2.2, 29.0, strength * strength)
+	var previously_damaged: Array[Node3D] = _last_damaged.duplicate()
 	var result: Dictionary = strike_radius(point, radius, impulse, Vector3.UP * 0.4, 2 + int(round(strength * 9.0)))
+	for existing in previously_damaged:
+		if is_instance_valid(existing) and not _last_damaged.has(existing):
+			_last_damaged.append(existing)
 	if magnitude >= 8.0 and beat >= 4:
 		var collapsed: int = 0
 		for building in buildings:
@@ -410,6 +419,8 @@ func quake_pulse(point: Vector3, magnitude: float, beat: int) -> Dictionary:
 			var noise: float = float(posmod(hash(building.identity) + beat * 31, 1000)) / 1000.0
 			if noise <= threshold * 0.65 and building.collapse_lightweight():
 				collapsed += 1
+				if not _last_damaged.has(building):
+					_last_damaged.append(building)
 		result["buildings"] = int(result["buildings"]) + collapsed
 	return result
 
