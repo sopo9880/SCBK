@@ -17,12 +17,22 @@ jobs:
           use-dotnet: false
           include-templates: false
       - name: Import and parse Godot project
-        run: godot --headless --path . --editor --import --quit
+        run: |
+          bash tools/check_godot.sh - --editor --import --quit
       - name: Validate map-data schema and input bounds
         run: python3 tools/validate_data.py
       - name: Test map projection and selection bounds (offline)
-        run: godot --headless --path . --script res://tests/test_map_math.gd
+        run: |
+          bash tools/check_godot.sh 'SCBK map math tests passed' --script res://tests/test_map_math.gd
       - name: Gameplay physics and terrain regression (offline)
-        run: godot --headless --path . --script res://tests/test_gameplay.gd
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.1 surviving collider / crater / combo regression passed.' --script res://tests/test_gameplay.gd
+      - name: Offline map cache, cancellation and retry regression
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.1 cache / no-false-error / cancel / retry: PASS' --script res://tests/test_map_loading.gd
+      - name: Boot new game HUD and map-retry UI
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.1 compact HUD + weapon dock + retry UI: PASS' --script res://tests/test_ui_shell.gd
       - name: Smoke-test scene startup (offline; 3 seconds)
-        run: godot --headless --path . --quit-after 180
+        run: |
+          bash tools/check_godot.sh - --quit-after 180

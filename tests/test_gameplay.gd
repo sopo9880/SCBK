@@ -29,11 +29,28 @@ func _run() -> void:
 	if building.active_debris_count() > first:
 		_fail("Debris budget overflow.")
 		return
+	await process_frame
+	var original_shape: CollisionShape3D = building.get("_collision")
+	var cell_shapes: Array = building.get("_section_colliders")
+	if not original_shape.disabled or cell_shapes.is_empty():
+		_fail("Full building collision must be replaced with per-section collision.")
+		return
+	var still_solid: int = 0
+	for shape in cell_shapes:
+		if is_instance_valid(shape) and not shape.disabled:
+			still_solid += 1
+	if still_solid <= 0 or still_solid >= cell_shapes.size():
+		_fail("Only surviving building sections should remain solid.")
+		return
 	var second: int = building.damage_at(Vector3(12, 12, 6), 16.0, 9.0, Vector3.UP, 8, 4)
 	if second <= 0:
 		_fail("Later hits should damage a different building section.")
 		return
 	building.reset_building()
+	await process_frame
+	if original_shape.disabled:
+		_fail("Reset must restore original full building collider.")
+		return
 	if building.damage_fraction() != 0.0 or building.active_debris_count() != 0:
 		_fail("Reset did not restore an intact building.")
 		return
@@ -56,5 +73,5 @@ func _run() -> void:
 	if score.add_hit(1, 1, second) <= 0 or score.combo < 2:
 		_fail("Combo did not increase after switching tools.")
 		return
-	print("SCBK v0.2.0 fracture / crater / combo regression passed.")
+	print("SCBK v0.2.1 surviving collider / crater / combo regression passed.")
 	quit(0)

@@ -36,6 +36,11 @@ for path in [
     "tests/test_gameplay.gd",
 ]:
     assert (ROOT / path).is_file(), path
-assert "gameplay_v2.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+assert "game_ui_v021.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+assert (ROOT / "scripts/game_ui_v021.gd").is_file()
+for feature in ("func cancel_load(", "func retry_last(", "loading_progress"):
+    assert feature in region_loader, feature
+for test in ("tests/test_map_loading.gd", "tests/test_ui_shell.gd"):
+    assert (ROOT / test).is_file(), test
 assert "func damage_at(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
-print("SCBK v0.2.0 data, map selection, native destruction and source layout validated.")
+print("SCBK v0.2.1 maps, HUD, destruction and source layout validated.")

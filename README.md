@@ -1,6 +1,18 @@
 # SCBK — World Smash for Windows
 
-SCBK v0.2.0 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+SCBK v0.2.1 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+
+## v0.2.1 — changes after the first real Windows screenshot
+
+- **Compact in-game HUD:** the old screen-height diagnostic sidebar is replaced by a small collapsible world/map card in the upper-left corner and a six-weapon dock at the bottom. Score and style remain in the upper right. The world-map picker remains fully accessible.
+- **Honest map status:** duplicate region clicks no longer falsely display a download failure. While data is loading, a visible Cancel button is available; after a real Overpass failure, Retry and per-server HTTP/timeout details are shown. Selecting a different region cancels the previous request.
+- **Offline behavior:** already downloaded regions continue to load from cache, and failures do not erase the active 3D scene. The first scene is explicitly identified as *fictional training data* until the real campus has successfully loaded. Real campus data is **not bundled**, so Windows still needs access to public OpenStreetMap/Overpass servers to show it.
+- **Less artificial appearance:** the default camera starts closer to the training buildings; masonry/window materials, cornices, roof colors, trees and terrain size were adjusted to reduce a blue-checkered-box-on-empty-grass impression.
+- **More accurate collisions after destruction:** on first fracture, the coarse full-building collision is disabled and replaced by individual still-intact cell colliders; destroyed cells no longer leave invisible solid walls.
+- **Reliable craters on small maps:** the crater radius adapts to the grid resolution instead of disappearing between sparse vertices.
+- **Tests:** added offline cache / cancellation / retry coverage, scene-tree HUD smoke checks and fracture-collider regression.
+
+**Important:** This is still a stylized sandbox under active development, not a faithful graphical or mechanical reproduction of SMASH. Only Godot headless tests run in PR CI. Windows visual quality and actual map connectivity must be tested on the officially released EXE by the user.
 
 ## What changed for v0.2.0
 
@@ -20,7 +32,7 @@ SCBK v0.2.0 development: **native Godot 4.5.1 Windows 3D destruction sandbox** b
 
 ## Map workflow preserved
 
-Select **OPEN WORLD MAP** to search a place, pan/zoom the world map, then click or draw a rectangle and press **BUILD SELECTED 3D REGION**. Limited to 50–1600 metres on each side to protect memory and public APIs. Initial Dong-A Seunghak campus preset, direct coordinates and synthetic offline training scene also remain available.
+Select **지도 [M]** to search a place, pan/zoom the world map, then click or draw a rectangle and press **BUILD SELECTED 3D REGION**. Limited to 50–1600 metres on each side to protect memory and public APIs. Initial Dong-A Seunghak campus preset, direct coordinates and synthetic offline training scene also remain available.
 
 Initial map downloads need network access (OpenStreetMap tiles, Nominatim geocoding, Overpass building/road geometry, AWS Terrain Tiles elevation). These map/DEM downloads are locally cached when successful.
 
