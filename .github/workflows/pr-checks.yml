@@ -22,5 +22,7 @@ jobs:
         run: python3 tools/validate_data.py
       - name: Test map projection and selection bounds (offline)
         run: godot --headless --path . --script res://tests/test_map_math.gd
+      - name: Gameplay physics and terrain regression (offline)
+        run: godot --headless --path . --script res://tests/test_gameplay.gd
       - name: Smoke-test scene startup (offline; 3 seconds)
         run: godot --headless --path . --quit-after 180
