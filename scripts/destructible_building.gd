@@ -257,6 +257,8 @@ func _rebuild_static_chunks() -> void:
 			remaining.append(section)
 	if remaining.is_empty():
 		_chunks.visible = false
+		if has_node("LandmarkLabel"):
+			get_node("LandmarkLabel").visible = false
 		broken = true
 		return
 	var mm := MultiMesh.new()
@@ -456,6 +458,8 @@ func reset_building() -> void:
 	_fractured = false
 	_released_sections = 0
 	broken = false
+	if has_node("LandmarkLabel"):
+		get_node("LandmarkLabel").visible = true
 	_wall.visible = true
 	_roof.visible = true
 	_trim.visible = true
