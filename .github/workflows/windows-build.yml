@@ -1,0 +1,38 @@
+name: Windows Build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: chickensoft-games/setup-godot@v2.4.1
+        with:
+          version: 4.5.1
+          use-dotnet: false
+          include-templates: true
+      - name: Import project
+        shell: bash
+        run: godot --headless --path . --editor --import --quit
+      - name: Export Windows release executable
+        shell: bash
+        run: |
+          mkdir -p dist
+          godot --headless --path . --export-release "Windows Desktop" "dist/SCBK.exe"
+          test -s dist/SCBK.exe
+      - name: Write provenance and checksum
+        shell: pwsh
+        run: |
+          (Get-FileHash dist/SCBK.exe -Algorithm SHA256).Hash.ToLower() + '  SCBK.exe' | Out-File -Encoding ascii dist/SHA256SUMS.txt
+          "${{ github.sha }}" | Out-File -Encoding ascii dist/COMMIT_SHA.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scbk-windows-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
