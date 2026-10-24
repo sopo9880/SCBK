@@ -4,18 +4,21 @@ extends Node
 
 signal region_loaded(region: Dictionary, source: String)
 signal region_failed(message: String)
+signal loading_started(region_label: String)
+signal loading_progress(message: String, attempt: int, total_attempts: int)
+signal loading_cancelled
 
 const Mercator = preload("res://scripts/map_math.gd")
 const SERVERS := [
-	"https://overpass.kumi.systems/api/interpreter",
 	"https://overpass-api.de/api/interpreter",
+	"https://overpass.kumi.systems/api/interpreter",
 	"https://overpass.private.coffee/api/interpreter"
 ]
 const MAX_BUILDINGS := 280
 const MAX_ROADS := 200
 const MAX_RADIUS := 700
 const CACHE_DIR := "user://regions"
-const USER_AGENT := "SCBK-Windows/0.1.0 (https://github.com/sopo9880/SCBK)"
+const USER_AGENT := "SCBK-Windows/0.2.1 (https://github.com/sopo9880/SCBK)"
 
 var _request: HTTPRequest
 var _bounds: Dictionary = {}
@@ -25,10 +28,12 @@ var _label: String = ""
 var _server_index: int = 0
 var _active: bool = false
 var _legacy_radius: int = 0
+var _attempt_errors: Array[String] = []
+var _last_error: String = ""
 
 func _ready() -> void:
 	_request = HTTPRequest.new()
-	_request.timeout = 20.0
+	_request.timeout = 34.0 # Server query timeout is 25 sec.
 	_request.body_size_limit = 12 * 1024 * 1024
 	add_child(_request)
 	_request.request_completed.connect(_on_completed)
@@ -48,31 +53,57 @@ func load_bounds(bounds: Dictionary, label: String) -> void:
 func is_busy() -> bool:
 	return _active
 
+func get_last_error() -> String:
+	return _last_error
+
+func get_requested_region() -> String:
+	return _label
+
+func cancel_load() -> void:
+	if not _active:
+		return
+	_active = false
+	_request.cancel_request()
+	loading_cancelled.emit()
+
+func retry_last() -> void:
+	if _bounds.is_empty():
+		region_failed.emit("다시 시도할 지역이 없습니다. 먼저 지도에서 지역을 선택해 주세요.")
+		return
+	var region: Dictionary = _bounds.duplicate(true)
+	var previous_label: String = _label
+	var previous_radius: int = _legacy_radius
+	cancel_load()
+	_start_load(region, previous_label, previous_radius)
+
 func _start_load(bounds: Dictionary, label: String, legacy_radius: int) -> void:
-	if _active:
-		region_failed.emit("Map request still running. Please try again after it finishes.")
-		return
 	if not Mercator.validated(bounds):
-		region_failed.emit("Region must be within 50–1600 m on each side; avoid the 180-degree meridian.")
+		region_failed.emit("선택 범위 오류: 한 변 50~1600m의 지역을 선택해 주세요.")
 		return
+	if _active:
+		if _bounds == bounds:
+			loading_progress.emit("이미 같은 지역을 불러오는 중입니다. 취소할 수 있습니다.", _server_index + 1, SERVERS.size())
+			return
+		cancel_load()
 	_bounds = bounds.duplicate(true)
 	_lat = (float(_bounds["south"]) + float(_bounds["north"])) * 0.5
 	_lon = (float(_bounds["west"]) + float(_bounds["east"])) * 0.5
 	_label = label
 	_legacy_radius = legacy_radius
+	_last_error = ""
 	var cached: Variant = _read_cache(_cache_path())
 	if not cached is Dictionary and _legacy_radius > 0:
 		cached = _read_cache(_legacy_cache_path())
 	if cached is Dictionary:
 		cached["label"] = _label
-		# Upgrade v0.1.0 radius-cache data in memory to enable DEM terrain
-		# without invalidating the user's existing OSM geometry cache.
 		if not Mercator.validated(cached.get("bounds", {})):
 			cached["bounds"] = _bounds.duplicate(true)
 		region_loaded.emit(cached, "Cached OpenStreetMap")
 		return
 	_server_index = 0
+	_attempt_errors.clear()
 	_active = true
+	loading_started.emit(_label)
 	_send_request()
 
 func _cache_path() -> String:
@@ -95,21 +126,29 @@ func _read_cache(path: String) -> Variant:
 	return null
 
 func _send_request() -> void:
+	if not _active:
+		return
 	if _server_index >= SERVERS.size():
 		_active = false
-		region_failed.emit("All Overpass servers failed. Cached maps and the offline training map remain playable.")
+		_last_error = "지도 서버 연결 실패: " + (" / ".join(_attempt_errors) if not _attempt_errors.is_empty() else "응답 없음")
+		region_failed.emit(_last_error)
 		return
 	var south: float = float(_bounds["south"])
 	var west: float = float(_bounds["west"])
 	var north: float = float(_bounds["north"])
 	var east: float = float(_bounds["east"])
 	var bbox: String = "%.6f,%.6f,%.6f,%.6f" % [south, west, north, east]
-	var query: String = '[out:json][timeout:35];(way["building"](%s);way["highway"](%s););out tags geom;' % [bbox, bbox]
-	var headers := PackedStringArray(["Content-Type: application/x-www-form-urlencoded; charset=UTF-8", "User-Agent: " + USER_AGENT])
+	var query: String = '[out:json][timeout:25];(way["building"](%s);way["highway"](%s););out tags geom;' % [bbox, bbox]
+	loading_progress.emit("실제 지도 가져오는 중 (%d/%d) · 서버 응답 대기" % [_server_index + 1, SERVERS.size()], _server_index + 1, SERVERS.size())
+	var headers := PackedStringArray([
+		"Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
+		"Accept: application/json", "User-Agent: " + USER_AGENT
+	])
 	var err: Error = _request.request(SERVERS[_server_index], headers, HTTPClient.METHOD_POST, "data=" + query.uri_encode())
 	if err != OK:
+		_attempt_errors.append("서버 %d: 요청 오류 %d" % [_server_index + 1, int(err)])
 		_server_index += 1
-		_send_request()
+		call_deferred("_send_request")
 
 func _on_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if not _active:
@@ -125,8 +164,15 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
 			_active = false
 			region_loaded.emit(region, "Live OpenStreetMap")
 			return
+		_attempt_errors.append("서버 %d: 잘못된 응답 형식" % (_server_index + 1))
+	elif result == HTTPRequest.RESULT_TIMEOUT:
+		_attempt_errors.append("서버 %d: 시간 초과" % (_server_index + 1))
+	elif result != HTTPRequest.RESULT_SUCCESS:
+		_attempt_errors.append("서버 %d: 연결 오류 %d" % [_server_index + 1, result])
+	else:
+		_attempt_errors.append("서버 %d: HTTP %d" % [_server_index + 1, response_code])
 	_server_index += 1
-	_send_request()
+	call_deferred("_send_request")
 
 func _meters(lat: float, lon: float) -> Vector2:
 	var x: float = (lon - _lon) * 111320.0 * cos(deg_to_rad(_lat))
