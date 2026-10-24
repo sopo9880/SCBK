@@ -292,7 +292,10 @@ func _on_region_loaded(region: Dictionary, source: String) -> void:
 		var n: int = _world.buildings.size()
 		_details_label.text = "%s  ·  건물 %d개" % [str(region.get("label", "지도")), n]
 		_details_label.tooltip_text = "%s / %s" % [str(region.get("label", "지도")), source]
-	_set_status("실제 지역을 표시합니다. 건물을 공격해 보세요.")
+	if _world.buildings.is_empty():
+		_set_status("선택한 영역에 등록된 건물이 없습니다. 지도에서 다른 장소를 선택해 주세요.")
+	else:
+		_set_status("실제 지역 %d개 건물을 표시했습니다. 무기를 선택해 공격해 보세요." % _world.buildings.size())
 
 func _on_region_failed(message: String) -> void:
 	# Failures are network errors, not evidence that the current demo map
