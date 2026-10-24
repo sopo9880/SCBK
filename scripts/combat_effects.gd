@@ -173,10 +173,10 @@ func _camera_blast(power: float, duration: float) -> void:
 
 func _flash(point: Vector3, scale_size: float, color: Color, fade_time: float) -> void:
 	var sphere := MeshInstance3D.new()
-	sphere.mesh = SphereMesh.new()
-	var mesh: SphereMesh = sphere.mesh
+	var mesh := SphereMesh.new()
 	mesh.radius = 1.0
 	mesh.height = 2.0
+	sphere.mesh = mesh
 	var material := StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.albedo_color = color

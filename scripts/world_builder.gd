@@ -169,6 +169,18 @@ func _tree_clear(pos: Vector2) -> bool:
 		var local: Vector2 = pos - Vector2(building.position.x, building.position.z)
 		if Geometry2D.is_point_in_polygon(local, building.footprint):
 			return false
+	for road in _road_data:
+		var route: Array = road.get("path", [])
+		var clear_width: float = float(road.get("width", 4.0)) * 0.5 + 5.0
+		for i in range(route.size() - 1):
+			var a := Vector2(float(route[i][0]), float(route[i][1]))
+			var b := Vector2(float(route[i + 1][0]), float(route[i + 1][1]))
+			var offset := b - a
+			if offset.length_squared() <= 0.001:
+				continue
+			var t: float = clampf((pos - a).dot(offset) / offset.length_squared(), 0.0, 1.0)
+			if pos.distance_to(a + offset * t) < clear_width:
+				return false
 	return true
 
 func _build_vegetation(region: Dictionary) -> void:
@@ -256,7 +268,9 @@ func strike_building(building: Node3D, point: Vector3, impulse: float) -> Dictio
 		return {"buildings": 0, "pieces": 0}
 	var remaining: int = _budget()
 	var pieces: int = building.damage_at(point, 10.0, impulse, Vector3.ZERO, remaining, 5)
-	_last_damaged = [building] if pieces > 0 else []
+	_last_damaged.clear()
+	if pieces > 0:
+		_last_damaged.append(building)
 	return {"buildings": 1 if pieces > 0 else 0, "pieces": pieces}
 
 func strike_debris(piece: RigidBody3D, point: Vector3, impulse: float) -> Dictionary:
