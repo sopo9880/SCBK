@@ -59,6 +59,13 @@ func _run() -> void:
 	if floor.get("_map_texture") != texture:
 		_fail("Deforming terrain must not drop the projected map image.")
 		return
+	# DEM arrives asynchronously after the first blast: do not undo damage.
+	var later_dem := PackedFloat32Array()
+	later_dem.resize(49 * 49)
+	later_dem.fill(0.0)
+	if not floor.apply_dem(later_dem, 49, 49) or floor.height_at(0.0, 0.0) > initial - 5.0:
+		_fail("Late terrain elevation must preserve existing craters.")
+		return
 	floor.restore()
 	if absf(floor.height_at(0.0, 0.0) - initial) > 0.001:
 		_fail("Reset must restore the ground elevation.")
