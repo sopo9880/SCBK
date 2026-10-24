@@ -191,7 +191,7 @@ func _build_vegetation(region: Dictionary) -> void:
 	# The original 2200m fictional tile looked like empty grassland dotted
 	# with tiny spheres surrounding a handful of miniature buildings.
 	var spawn_center := Vector2.ZERO
-	var span := _terrain.extent * 0.88
+	var span: Vector2 = _terrain.extent * 0.88
 	if region_bounds.is_empty() and not buildings.is_empty():
 		var minp := Vector2(INF, INF)
 		var maxp := Vector2(-INF, -INF)

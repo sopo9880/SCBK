@@ -21,6 +21,7 @@ var broken: bool = false
 var footprint: PackedVector2Array = PackedVector2Array()
 var bounds: Rect2 = Rect2()
 var _solid: StaticBody3D
+var _collision: CollisionShape3D
 var _wall: MeshInstance3D
 var _roof: MeshInstance3D
 var _trim: MeshInstance3D
@@ -84,6 +85,7 @@ func configure(record: Dictionary) -> void:
 	col.shape = shape
 	col.position = Vector3(bounds.get_center().x, height_m * 0.5, bounds.get_center().y)
 	_solid.add_child(col)
+	_collision = col
 	_chunks = MultiMeshInstance3D.new()
 	_chunks.visible = false
 	_chunks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
