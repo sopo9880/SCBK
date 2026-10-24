@@ -8,6 +8,9 @@ Godot 4.5.1 and GDScript target Windows desktop. Android is intentionally exclud
 
 - Startup: bundled *fictional* training block loads without a network.
 - App then attempts Dong-A University Seunghak campus OSM query with cache-first lookup.
+- Native Godot world map shows visible OSM Standard raster tiles (seven-day disk cache). Explicit place searches use Nominatim with one-second user-initiated rate limit.
+- Map selection supports point-radius presets or drawn bounding rectangles. All selections are validated to 50–1600 metres per side.
+- RegionLoader reads the rectangle as an Overpass bbox, persists a separate cache entry and reuses preexisting radius-map cache when possible.
 - Public Overpass returns building footprints and roads (no proprietary map tiles).
 - MapService converts WGS84 points to local metres near selected coordinate and saves a derived JSON map to the user's local directory.
 - WorldBuilder generates static mesh/box collision buildings and batches roads to one mesh.
@@ -27,9 +30,9 @@ Godot 4.5.1 and GDScript target Windows desktop. Android is intentionally exclud
 
 - No DEM elevation or hillside terrain yet; actual Seunghak campus is not topographically accurate.
 - No texture photography, interior models, sound design, scores or networking.
-- No mouse-driven interactive 2D map selection; latitude/longitude input works instead.
+- Map picker uses OpenStreetMap imagery and an explicit search, NOT a browser embed; it requires network for unseen tiles and geocoding. No continuous city streaming or full-road-network simulation.
 - Only point-and-click tool variants; no dedicated laser-drag or quake-over-time animation.
-- Large region data is capped to 280 buildings and 200 roads. Long lists are truncated in response order.
+- Large region data is capped to 280 buildings and 200 roads, selecting nearest buildings to the chosen centre first (not Overpass response order). Regions larger than 1600 m per side are rejected to bound CPU/memory/API cost.
 - No Android export, interface, APK or Android CI.
 - Headless CI checks parser/import and scene boot. GUI rendering and real-machine FPS require later user testing of a Windows binary.
 - Original Hong-Iron/SMASH source code was not copied; project uses its own Godot implementation.

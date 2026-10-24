@@ -104,7 +104,7 @@ func _build_ui() -> void:
 	_search_input = LineEdit.new()
 	_search_input.placeholder_text = "Place or address (e.g. Busan, Seoul, Tokyo)"
 	_search_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_search_input.text_submitted.connect(func(_text: String) -> void: _search())
+	_search_input.text_submitted.connect(_submit_search)
 	search_bar.add_child(_search_input)
 	_search_button = Button.new()
 	_search_button.text = "SEARCH"
@@ -123,7 +123,7 @@ func _build_ui() -> void:
 	bar.add_child(_mode_button)
 	var pan_button := Button.new()
 	pan_button.text = "PAN MAP"
-	pan_button.pressed.connect(func() -> void: _mode_select = false; _mode_button.text = "PAN MAP (drag)")
+	pan_button.pressed.connect(_set_pan_mode)
 	bar.add_child(pan_button)
 	var zoom_in := Button.new()
 	zoom_in.text = "+"
@@ -170,6 +170,10 @@ func _build_ui() -> void:
 	attribution.text = "Map © OpenStreetMap contributors (ODbL)  |  Tiles © OpenStreetMap contributors  |  Search by Nominatim  |  selection limit 1.6 km per side"
 	attribution.add_theme_font_size_override("font_size", 11)
 	vbox.add_child(attribution)
+
+func _set_pan_mode() -> void:
+	_mode_select = false
+	_mode_button.text = "PAN MAP (drag)"
 
 func _switch_mode() -> void:
 	_mode_select = true
@@ -266,6 +270,9 @@ func _confirm() -> void:
 		var label: String = "Selected map (%.5f, %.5f)" % [lat, lon]
 		visible = false
 		area_chosen.emit(bounds, label)
+
+func _submit_search(_text: String) -> void:
+	_search()
 
 func _search() -> void:
 	var query: String = _search_input.text.strip_edges()

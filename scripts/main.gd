@@ -5,6 +5,7 @@ extends Node3D
 
 const WorldBuilder = preload("res://scripts/world_builder.gd")
 const RegionLoader = preload("res://scripts/region_loader.gd")
+const MapPicker = preload("res://scripts/map_picker.gd")
 const DONGA_LAT := 35.11619
 const DONGA_LON := 128.96733
 const DONGA_RADIUS := 450
@@ -14,6 +15,9 @@ const TOOL_IMPULSES := [13.0, 25.0, 18.0, 24.0, 9.0, 32.0]
 
 var _world: Node3D
 var _maps: Node
+var _picker: Control
+var _last_map_lat: float = DONGA_LAT
+var _last_map_lon: float = DONGA_LON
 var _camera: Camera3D
 var _camera_target: Vector3 = Vector3(0.0, 5.0, 0.0)
 var _yaw: float = 0.6
@@ -105,12 +109,20 @@ func _load_custom_region() -> void:
 	_maps.load_region(lat, lon, radius, "Custom map (%.5f, %.5f)" % [lat, lon])
 
 func _on_region_loaded(region: Dictionary, source: String) -> void:
+	_last_map_lat = float(region.get("center_lat", _last_map_lat))
+	_last_map_lon = float(region.get("center_lon", _last_map_lon))
 	var count: int = _world.load_region(region, source)
 	_camera_target = Vector3(0.0, 8.0, 0.0)
 	_distance = 580.0
 	_update_camera()
 	_details_label.text = "%s\n%d OSM buildings  |  %s" % [str(region.get("label", "Map")), count, source]
-	_set_status("Real OSM footprints loaded. Building heights may be estimated.")
+	var total: int = int(region.get("total_buildings", count))
+	if count == 0:
+		_set_status("No building footprints mapped in this area. Try a nearby location.")
+	elif total > count:
+		_set_status("Loaded %d/%d buildings (nearest first for performance). Heights may be estimated." % [count, total])
+	else:
+		_set_status("Real OSM footprints loaded. Building heights may be estimated.")
 
 func _on_region_failed(message: String) -> void:
 	_set_status(message)
@@ -152,6 +164,10 @@ func _make_interface() -> void:
 	campus_btn.text = "LOAD DONG-A CAMPUS"
 	campus_btn.pressed.connect(_load_donga)
 	column.add_child(campus_btn)
+	var map_btn := Button.new()
+	map_btn.text = "OPEN WORLD MAP  /  SEARCH + DRAW"
+	map_btn.pressed.connect(_open_map_picker)
+	column.add_child(map_btn)
 	var demo_btn := Button.new()
 	demo_btn.text = "OFFLINE TRAINING BLOCK"
 	demo_btn.pressed.connect(_load_training_block)
@@ -228,6 +244,12 @@ func _make_interface() -> void:
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(instructions)
 	_select_tool(0)
+	_picker = MapPicker.new()
+	_picker.name = "WorldMapPicker"
+	_picker.visible = false
+	layer.add_child(_picker)
+	_picker.area_chosen.connect(_on_map_area_chosen)
+	_picker.dismissed.connect(func() -> void: _set_status("Map selector closed."))
 
 func _make_separator(parent: VBoxContainer) -> void:
 	var line := HSeparator.new()
@@ -241,6 +263,8 @@ func _select_tool(index: int) -> void:
 		_tool_label.text = "Selected: %s  /  radius %.0f m" % [TOOL_NAMES[_active_tool], TOOL_RADII[_active_tool]]
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _picker != null and _picker.visible:
+		return
 	if event is InputEventMouseMotion:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			_yaw -= event.relative.x * 0.006
@@ -270,6 +294,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			_reset()
 		elif event.keycode == KEY_Z and event.ctrl_pressed:
 			_undo()
+
+func _open_map_picker() -> void:
+	_picker.open_picker(_last_map_lat, _last_map_lon)
+	_set_status("Use the world map to search and select an area.")
+
+func _on_map_area_chosen(bounds: Dictionary, label: String) -> void:
+	_set_status("Fetching selected map area, then building the 3D scene...")
+	_maps.load_bounds(bounds, label)
 
 func _pick_and_fire(screen: Vector2) -> void:
 	var start: Vector3 = _camera.project_ray_origin(screen)

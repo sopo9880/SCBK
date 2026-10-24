@@ -6,12 +6,12 @@ Native Windows 3D destruction sandbox powered by **Godot 4.5.1 / GDScript**, not
 
 - Windows desktop project; **no Android project, APK, or Android CI**.
 - Offline **synthetic** training block available instantly (not actual Dong-A University geometry).
-- Load **real building footprints and roads from OpenStreetMap** for Dong-A University Seunghak campus (35.11619, 128.96733) or any latitude/longitude.
+- Load **real building footprints and roads from OpenStreetMap** for Dong-A University Seunghak campus or any selected point/rectangle. Native in-game world map supports place search, pan/zoom and click/drag bounding boxes (50–1600 m per side).
 - Cache downloaded map data under Godot's `user://regions` folder for later offline use.
 - Six stylized tools: bomb, bat, laser, meteor, quake, and nuke.
 - Click-to-destroy physics debris, collision, reset, one-step undo, camera orbit/zoom/pan, FPS counter and debris budget.
 - Low-overhead initial rendering: static geometry until a building is struck; limited physics objects.
-- **Not yet included:** real terrain elevation, photorealistic buildings, detailed fracture geometry, map-click selection, mobile controls and Android binaries.
+- **Not yet included:** DEM terrain elevation, photorealistic buildings, detailed fracture geometry, mobile controls and Android binaries. Native map clicking and rectangle selection ARE implemented in this branch.
 
 ## Play / controls
 
@@ -20,8 +20,8 @@ Open `project.godot` in [Godot 4.5.1](https://godotengine.org/download/) and pre
 - Left click: use selected tool.
 - Right drag: rotate camera; middle drag: pan; wheel: zoom.
 - Keys **1–6**: switch tool; **R**: reset; **Ctrl+Z**: undo.
-- Left panel: select real Dong-A campus / synthetic offline demo, or enter latitude, longitude and radius to load another area.
-- Map download requires internet initially and uses public Overpass servers. Cached maps work offline; temporary server outages can occur.
+- Left panel: click **OPEN WORLD MAP** to search a place, pan/zoom, click for a preset square or drag to select a rectangular region, then BUILD SELECTED 3D REGION. The original coordinate entry remains available.
+- Map download requires internet initially and uses public Overpass servers. Cached regions work offline. The native selection map uses OSM raster tiles (cached locally; may need internet), and explicit Nominatim search (no autocomplete). Please respect their usage limits.
 
 ## How the real map works
 
