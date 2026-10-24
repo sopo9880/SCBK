@@ -30,6 +30,7 @@ var _active: bool = false
 var _legacy_radius: int = 0
 var _attempt_errors: Array[String] = []
 var _last_error: String = ""
+var _generation: int = 0
 
 func _ready() -> void:
 	_request = HTTPRequest.new()
@@ -62,6 +63,7 @@ func get_requested_region() -> String:
 func cancel_load() -> void:
 	if not _active:
 		return
+	_generation += 1
 	_active = false
 	_request.cancel_request()
 	loading_cancelled.emit()
@@ -102,6 +104,7 @@ func _start_load(bounds: Dictionary, label: String, legacy_radius: int) -> void:
 		return
 	_server_index = 0
 	_attempt_errors.clear()
+	_generation += 1
 	_active = true
 	loading_started.emit(_label)
 	_send_request()
@@ -130,7 +133,7 @@ func _send_request() -> void:
 		return
 	if _server_index >= SERVERS.size():
 		_active = false
-		_last_error = "지도 서버 연결 실패: " + (" / ".join(_attempt_errors) if not _attempt_errors.is_empty() else "응답 없음")
+		_last_error = "지도 서버 연결 실패: " + (" / ".join(PackedStringArray(_attempt_errors)) if not _attempt_errors.is_empty() else "응답 없음")
 		region_failed.emit(_last_error)
 		return
 	var south: float = float(_bounds["south"])
@@ -148,7 +151,11 @@ func _send_request() -> void:
 	if err != OK:
 		_attempt_errors.append("서버 %d: 요청 오류 %d" % [_server_index + 1, int(err)])
 		_server_index += 1
-		call_deferred("_send_request")
+		call_deferred("_send_if_current", _generation)
+
+func _send_if_current(expected_generation: int) -> void:
+	if _active and expected_generation == _generation:
+		_send_request()
 
 func _on_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if not _active:
@@ -172,7 +179,7 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
 	else:
 		_attempt_errors.append("서버 %d: HTTP %d" % [_server_index + 1, response_code])
 	_server_index += 1
-	call_deferred("_send_request")
+	call_deferred("_send_if_current", _generation)
 
 func _meters(lat: float, lon: float) -> Vector2:
 	var x: float = (lon - _lon) * 111320.0 * cos(deg_to_rad(_lat))
