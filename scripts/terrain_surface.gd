@@ -12,6 +12,8 @@ var _collider: CollisionShape3D
 var _land_material: StandardMaterial3D
 var _base_heightmap: PackedFloat32Array = PackedFloat32Array()
 var _has_dem: bool = false
+var _map_texture: Texture2D
+var _scorch: PackedFloat32Array = PackedFloat32Array()
 
 func _ready() -> void:
 	collision_layer = 1
@@ -36,8 +38,21 @@ func reset_plane(bounds: Dictionary) -> void:
 		extent = Vector2(720.0, 720.0)
 	_heights.resize(GRID * GRID)
 	_heights.fill(0.0)
+	_scorch.resize(GRID * GRID)
+	_scorch.fill(0.0)
+	_map_texture = null
+	if _land_material != null:
+		_land_material.albedo_texture = null
+		_land_material.albedo_color = Color(0.37, 0.46, 0.35)
 	_base_heightmap = _heights.duplicate()
 	_has_dem = false
+	_rebuild_surface()
+
+func set_map_texture(texture: Texture2D) -> void:
+	_map_texture = texture
+	if _land_material != null:
+		_land_material.albedo_texture = texture
+		_land_material.albedo_color = Color.WHITE if texture != null else Color(0.37, 0.46, 0.35)
 	_rebuild_surface()
 
 func apply_dem(samples: PackedFloat32Array, width: int, depth: int) -> bool:
@@ -81,11 +96,10 @@ func height_at(x: float, z: float) -> float:
 func crater_at(world_position: Vector3, radius: float, depth: float) -> void:
 	if radius <= 0.0 or depth <= 0.0:
 		return
-	# A minimum radius in samples ensures small bomb craters remain visible
-	# at every selected region scale. The old 2200m / 48-cell fallback often
-	# left no crater vertex at all.
+	# A smooth excavation with an uplifted rim; the actual terrain mesh AND
+	# collision are rebuilt. This works for any blast centred on the ground.
 	var grid_step: float = maxf(extent.x, extent.y) / float(GRID - 1)
-	radius = maxf(radius, grid_step * 1.55)
+	var core: float = maxf(radius, grid_step * 1.55)
 	var modified: bool = false
 	for z in range(GRID):
 		for x in range(GRID):
@@ -93,22 +107,32 @@ func crater_at(world_position: Vector3, radius: float, depth: float) -> void:
 				(float(x) / float(GRID - 1) - 0.5) * extent.x,
 				(float(z) / float(GRID - 1) - 0.5) * extent.y)
 			var d: float = at.distance_to(Vector2(world_position.x, world_position.z))
-			if d >= radius:
+			if d >= core * 1.30:
 				continue
-			var t: float = d / radius
-			# Bowl shape: smooth rim and a deeper centre.
-			_heights[z * GRID + x] -= depth * pow(1.0 - t * t, 2.0)
+			var t: float = d / core
+			var index: int = z * GRID + x
+			if t < 1.0:
+				_heights[index] -= depth * pow(1.0 - t * t, 2.0)
+				_scorch[index] = maxf(_scorch[index], 0.72 * (1.0 - t * 0.45))
+			else:
+				var rim: float = (t - 1.0) / 0.30
+				_heights[index] += depth * 0.10 * pow(1.0 - rim, 2.0)
+				_scorch[index] = maxf(_scorch[index], 0.26 * (1.0 - rim))
 			modified = true
 	if modified:
 		_rebuild_surface()
 
 func restore() -> void:
 	_heights = _base_heightmap.duplicate()
+	_scorch.fill(0.0)
 	_rebuild_surface()
 
-func _vertex(tool: SurfaceTool, point: Vector3, tint: Color) -> void:
-	tool.set_color(tint)
-	tool.set_uv(Vector2(point.x, point.z) / 45.0)
+func _vertex(tool: SurfaceTool, point: Vector3, tint: Color, scar: float = 0.0) -> void:
+	var underlying: Color = Color.WHITE.lerp(tint, 0.18) if _map_texture != null else tint
+	tool.set_color(underlying.lerp(Color(0.23, 0.17, 0.13), clampf(scar, 0.0, 0.95)))
+	# UVs are bound to the actual selected region plus the 80m terrain
+	# border. They remain fixed when the ground is cratered or DEM changes.
+	tool.set_uv(Vector2(point.x / extent.x + 0.5, point.z / extent.y + 0.5))
 	tool.add_vertex(point)
 
 func _rebuild_surface() -> void:
@@ -127,15 +151,25 @@ func _rebuild_surface() -> void:
 			var b := Vector3(x1, _heights[z * GRID + x + 1], z0)
 			var c := Vector3(x0, _heights[(z + 1) * GRID + x], z1)
 			var d := Vector3(x1, _heights[(z + 1) * GRID + x + 1], z1)
-			for triangle in [[a, c, b], [b, c, d]]:
-				var e: Vector3 = triangle[0]
-				var f: Vector3 = triangle[1]
-				var g: Vector3 = triangle[2]
-				var height_diff: float = maxf(absf(e.y-f.y), maxf(absf(f.y-g.y), absf(g.y-e.y)))
+			var ia: int = z * GRID + x
+			var ib: int = z * GRID + x + 1
+			var ic: int = (z + 1) * GRID + x
+			var id: int = (z + 1) * GRID + x + 1
+			for tri in [
+				{"vertices": [a, c, b], "index": [ia, ic, ib]},
+				{"vertices": [b, c, d], "index": [ib, ic, id]}
+			]:
+				var vertices: Array = tri["vertices"]
+				var indices: Array = tri["index"]
+				var e: Vector3 = vertices[0]
+				var f: Vector3 = vertices[1]
+				var g: Vector3 = vertices[2]
+				var height_diff: float = maxf(absf(e.y - f.y), maxf(absf(f.y - g.y), absf(g.y - e.y)))
 				var steepness: float = clampf(height_diff / 16.0, 0.0, 1.0)
-				var grassy := Color(0.33, 0.44, 0.31).lerp(Color(0.50, 0.46, 0.38), steepness)
-				for p in [e, f, g]:
-					_vertex(tool, p, grassy)
+				var grassy: Color = Color(0.33, 0.44, 0.31).lerp(Color(0.50, 0.46, 0.38), steepness)
+				for vertex_index in range(3):
+					var p: Vector3 = vertices[vertex_index]
+					_vertex(tool, p, grassy, _scorch[int(indices[vertex_index])])
 					faces.append(p)
 	tool.generate_normals()
 	_mesh.mesh = tool.commit()
