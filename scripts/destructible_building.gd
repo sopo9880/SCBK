@@ -417,7 +417,30 @@ func hit_debris(body: RigidBody3D, impact: Vector3, impulse: float, budget: int)
 	_spawn_piece(local_pos + offset, half, impact, impulse, direction)
 	return 1 # Replaced one existing body with two; only one additional slot.
 
+func collapse_lightweight() -> bool:
+	# Far from a major blast, preserve an immediate, visible collapse without
+	# allocating thousands of RigidBody3D fragments. Reset still restores it.
+	if broken:
+		return false
+	broken = true
+	_collision.set_deferred("disabled", true)
+	for section in _section_colliders:
+		if is_instance_valid(section):
+			section.set_deferred("disabled", true)
+	_solid.collision_layer = 0
+	_wall.visible = false
+	_roof.visible = false
+	_trim.visible = false
+	_chunks.visible = false
+	_chunks.multimesh = null
+	if has_node("LandmarkLabel"):
+		get_node("LandmarkLabel").visible = false
+	building_broken.emit(self)
+	return true
+
 func damage_fraction() -> float:
+	if broken:
+		return 1.0
 	if not _fractured or _sections.is_empty():
 		return 0.0
 	return float(_released_sections) / float(_sections.size())
