@@ -24,6 +24,7 @@ var _active: bool = false
 var _nuke_radius: float = 160.0
 var _quake_magnitude: float = 6.0
 var _bat_scale: float = 1.0
+var _drop_tween: Tween
 const SUPER_NUKE_RADIUS := 8000.0
 
 func set_nuke_radius(metres: float) -> void:
@@ -47,9 +48,25 @@ func is_busy() -> bool:
 func cancel_pending() -> void:
 	_epoch += 1
 	_active = false
+	if _drop_tween != null and _drop_tween.is_running():
+		_drop_tween.kill()
+	_drop_tween = null
 	Engine.time_scale = 1.0
 	for item in get_children():
 		item.queue_free()
+
+func skip_cinematic() -> bool:
+	# Fast-forward the falling projectile without suppressing its impact or
+	# skipping destruction. Escape/click during slow motion restores real time.
+	if not _active:
+		return false
+	if _drop_tween != null and _drop_tween.is_running():
+		_drop_tween.set_speed_scale(35.0)
+		return true
+	if Engine.time_scale < 1.0:
+		Engine.time_scale = 1.0
+		return true
+	return false
 
 func set_night(enabled: bool) -> void:
 	_night = enabled
@@ -239,8 +256,10 @@ func _drop(target: Vector3, weapon: int) -> void:
 	if not nuclear:
 		_burst_particles(projectile.position, 9.0, 14, 0.8, Color(1.0, 0.42, 0.14, 0.60), true)
 	var tween := create_tween()
+	_drop_tween = tween
 	tween.tween_property(projectile, "position", target + Vector3(0, 7.0, 0), 1.8 if nuclear else 1.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	await tween.finished
+	_drop_tween = null
 	if id != _epoch:
 		return
 	projectile.queue_free()

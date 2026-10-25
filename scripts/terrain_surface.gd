@@ -4,6 +4,10 @@ extends StaticBody3D
 
 const Mercator = preload("res://scripts/map_math.gd")
 const GRID := 49
+# Large Earth depths are deliberately condensed for local destruction play.
+# 1m of deformed terrain visually represents 8km of progress toward the core.
+const VIRTUAL_KM_PER_M := 8.0
+const EARTH_RADIUS_KM := 6371.0
 
 var extent: Vector2 = Vector2(720.0, 720.0)
 var _heights: PackedFloat32Array = PackedFloat32Array()
@@ -15,6 +19,7 @@ var _has_dem: bool = false
 var _map_texture: Texture2D
 var _scorch: PackedFloat32Array = PackedFloat32Array()
 var _crater_history: Array[Dictionary] = []
+var _dem_epoch: int = 0
 
 func _ready() -> void:
 	collision_layer = 1
@@ -32,6 +37,7 @@ func _ready() -> void:
 	reset_plane({})
 
 func reset_plane(bounds: Dictionary) -> void:
+	_dem_epoch += 1
 	if Mercator.validated(bounds):
 		extent = Mercator.meters(bounds)
 		extent += Vector2(160.0, 160.0)
@@ -75,6 +81,7 @@ func apply_dem(samples: PackedFloat32Array, width: int, depth: int) -> bool:
 			var h1: float = lerpf(samples[z1 * width + x0], samples[z1 * width + x1], ax)
 			_heights[z * GRID + x] = lerpf(h0, h1, az)
 	_base_heightmap = _heights.duplicate()
+	_dem_epoch += 1
 	_has_dem = true
 	_scorch.fill(0.0)
 	# Terrain elevation can finish loading while the player is already
@@ -173,15 +180,95 @@ func _apply_laser_cut(points: Array[Vector3], width: float, depth: float) -> voi
 			_heights[index] -= depth * strength
 			_scorch[index] = maxf(_scorch[index], 0.88 * strength)
 
+func capture_checkpoint() -> Dictionary:
+	# Fixed grid snapshots are small. Retain the event ledger as well so
+	# undo after an asynchronous DEM arrival replays into the new base map.
+	return {
+		"epoch": _dem_epoch,
+		"heights": _heights.duplicate(),
+		"scorch": _scorch.duplicate(),
+		"events": _crater_history.duplicate(true)
+	}
+
+func checkpoint_changed(checkpoint: Dictionary) -> bool:
+	if checkpoint.is_empty():
+		return false
+	var old_events: Array = checkpoint.get("events", [])
+	if _crater_history.size() != old_events.size():
+		return true
+	if int(checkpoint.get("epoch", -1)) != _dem_epoch:
+		return true
+	return _heights != checkpoint["heights"] or _scorch != checkpoint["scorch"]
+
+func restore_checkpoint(checkpoint: Dictionary) -> void:
+	if checkpoint.is_empty():
+		return
+	_crater_history = checkpoint.get("events", []).duplicate(true)
+	if int(checkpoint.get("epoch", -1)) == _dem_epoch:
+		_heights = checkpoint["heights"].duplicate()
+		_scorch = checkpoint["scorch"].duplicate()
+	else:
+		# A terrain elevation download may have landed after the checkpoint.
+		_heights = _base_heightmap.duplicate()
+		_scorch.resize(GRID * GRID)
+		_scorch.fill(0.0)
+		for event in _crater_history:
+			if event.has("path"):
+				_apply_laser_cut(event["path"], float(event["width"]), float(event["depth"]))
+			else:
+				_apply_crater(event["point"], float(event["radius"]), float(event["depth"]))
+	_rebuild_surface()
+
+func depth_info() -> Dictionary:
+	var deepest: float = 0.0
+	var location: int = 0
+	for i in range(mini(_heights.size(), _base_heightmap.size())):
+		var depression: float = maxf(0.0, _base_heightmap[i] - _heights[i])
+		if depression > deepest:
+			deepest = depression
+			location = i
+	var km: float = minf(EARTH_RADIUS_KM, deepest * VIRTUAL_KM_PER_M)
+	var layer: String = "지표 / 흙"
+	if km >= 5150.0:
+		layer = "내핵"
+	elif km >= 2900.0:
+		layer = "외핵"
+	elif km >= 35.0:
+		layer = "맨틀"
+	elif km >= 0.3:
+		layer = "지각"
+	var x: int = location % GRID
+	var z: int = int(location / GRID)
+	return {
+		"world_depth_m": deepest,
+		"virtual_depth_km": km,
+		"layer": layer,
+		"point": Vector3(
+			(float(x) / float(GRID - 1) - 0.5) * extent.x,
+			_heights[location] if not _heights.is_empty() else 0.0,
+			(float(z) / float(GRID - 1) - 0.5) * extent.y)
+	}
+
 func restore() -> void:
 	_heights = _base_heightmap.duplicate()
 	_scorch.fill(0.0)
 	_crater_history.clear()
 	_rebuild_surface()
 
-func _vertex(tool: SurfaceTool, point: Vector3, tint: Color, scar: float = 0.0) -> void:
+func _vertex(tool: SurfaceTool, point: Vector3, tint: Color, scar: float = 0.0, depth_m: float = 0.0) -> void:
 	var underlying: Color = Color.WHITE.lerp(tint, 0.18) if _map_texture != null else tint
-	tool.set_color(underlying.lerp(Color(0.23, 0.17, 0.13), clampf(scar, 0.0, 0.95)))
+	var km: float = maxf(0.0, depth_m) * VIRTUAL_KM_PER_M
+	# Stylized exposed-stratum colors fade into the OSM surface texture.
+	# No copied textures or photos from the reference browser title.
+	if km >= 5150.0:
+		underlying = underlying.lerp(Color(1.0, 0.83, 0.36), 0.95)
+	elif km >= 2900.0:
+		underlying = underlying.lerp(Color(0.89, 0.28, 0.10), 0.91)
+	elif km >= 35.0:
+		underlying = underlying.lerp(Color(0.40, 0.22, 0.18), 0.89)
+	elif km >= 0.3:
+		underlying = underlying.lerp(Color(0.37, 0.34, 0.31), 0.72)
+	tool.set_color(underlying.lerp(Color(0.22, 0.13, 0.10), clampf(scar, 0.0, 0.85)))
 	# UVs are bound to the actual selected region plus the 80m terrain
 	# border. They remain fixed when the ground is cratered or DEM changes.
 	tool.set_uv(Vector2(point.x / extent.x + 0.5, point.z / extent.y + 0.5))
@@ -221,7 +308,9 @@ func _rebuild_surface() -> void:
 				var grassy: Color = Color(0.33, 0.44, 0.31).lerp(Color(0.50, 0.46, 0.38), steepness)
 				for vertex_index in range(3):
 					var p: Vector3 = vertices[vertex_index]
-					_vertex(tool, p, grassy, _scorch[int(indices[vertex_index])])
+					var vertex_id: int = int(indices[vertex_index])
+					var exposed: float = maxf(0.0, _base_heightmap[vertex_id] - p.y) if _base_heightmap.size() > vertex_id else 0.0
+					_vertex(tool, p, grassy, _scorch[vertex_id], exposed)
 					faces.append(p)
 	tool.generate_normals()
 	_mesh.mesh = tool.commit()

@@ -47,6 +47,43 @@ func add_hit(tool: int, buildings: int, pieces: int) -> int:
 	updated.emit(score, multiplier, rank, combo)
 	return earned
 
+func award_bonus(label: String, base_points: int) -> int:
+	if base_points <= 0:
+		return 0
+	var earned: int = int(round(float(base_points) * multiplier))
+	score += earned
+	_style_points += clampf(float(base_points) / 30.0, 0.0, 75.0)
+	_update_rank()
+	updated.emit(score, multiplier, rank, combo)
+	return earned
+
+func capture_score() -> Dictionary:
+	return {
+		"score": score,
+		"multiplier": multiplier,
+		"combo": combo,
+		"best_combo": best_combo,
+		"rank": rank,
+		"last_tool": _last_tool,
+		"last_hit": _last_hit,
+		"game_time": _game_time,
+		"style_points": _style_points
+	}
+
+func restore_score(state: Dictionary) -> void:
+	if state.is_empty():
+		return
+	score = int(state.get("score", 0))
+	multiplier = float(state.get("multiplier", 1.0))
+	combo = int(state.get("combo", 0))
+	best_combo = int(state.get("best_combo", 0))
+	rank = str(state.get("rank", "D"))
+	_last_tool = int(state.get("last_tool", -1))
+	_last_hit = float(state.get("last_hit", -100.0))
+	_game_time = float(state.get("game_time", _game_time))
+	_style_points = float(state.get("style_points", 0.0))
+	updated.emit(score, multiplier, rank, combo)
+
 func reset() -> void:
 	score = 0
 	multiplier = 1.0

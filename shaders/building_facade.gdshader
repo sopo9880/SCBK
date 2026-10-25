@@ -8,6 +8,8 @@ uniform vec4 trim_color : source_color = vec4(0.38, 0.39, 0.38, 1.0);
 uniform vec4 glass_color : source_color = vec4(0.10, 0.16, 0.22, 1.0);
 uniform float night_factor : hint_range(0.0, 1.0) = 0.0;
 uniform float damage_tint : hint_range(0.0, 1.0) = 0.0;
+uniform float facade_style : hint_range(0.0, 4.0, 1.0) = 0.0;
+uniform float facade_variation : hint_range(0.0, 1.0) = 0.4;
 
 float rand2(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -29,6 +31,33 @@ void fragment() {
 	float sills = step(0.20, unit.x) * (1.0 - step(0.81, unit.x)) * step(0.345, unit.y) * (1.0 - step(0.37, unit.y));
 	float brick = rand2(floor(UV * vec2(3.0, 7.0))) * 0.07;
 	vec3 plaster = wall_color.rgb * (0.89 + brick + 0.06 * age);
+	// Procedural building families: limestone, brick, glass, ribbon, dorm.
+	// No reference-game textures, screenshots or facade code are reused.
+	if (facade_style > 0.5 && facade_style < 1.5) {
+		vec2 joint = fract(UV * vec2(2.5, 6.5) + vec2(mod(floor(UV.y * 6.5), 2.0) * 0.5, 0.0));
+		float mortar = step(joint.x, 0.045) + step(joint.y, 0.075);
+		plaster = mix(wall_color.rgb * (0.81 + brick + age * 0.16), trim_color.rgb * 0.90, min(mortar, 1.0) * 0.49);
+	}
+	if (facade_style > 1.5 && facade_style < 2.5) {
+		float tile = step(0.06, fract(UV.y * 1.0)) * step(0.04, fract(UV.x * 0.75));
+		plaster = mix(trim_color.rgb * 0.77, wall_color.rgb * (0.82 + 0.17 * age), tile);
+		window_w = step(0.12, unit.x) * (1.0 - step(0.87, unit.x));
+		window_h = step(0.12, unit.y) * (1.0 - step(0.90, unit.y));
+		opening = window_w * window_h;
+		glass_mask = step(0.16, unit.x) * (1.0 - step(0.84, unit.x)) * step(0.16, unit.y) * (1.0 - step(0.87, unit.y));
+	}
+	if (facade_style > 2.5 && facade_style < 3.5) {
+		float band = step(0.32, fract(UV.y * 0.5));
+		plaster = mix(wall_color.rgb * 0.78, trim_color.rgb * 0.89, band * 0.37);
+		glass_mask *= 1.12;
+	}
+	if (facade_style > 3.5) {
+		float balcony = step(0.09, unit.y) * (1.0 - step(0.19, unit.y));
+		float pilaster = step(0.44, unit.x) * (1.0 - step(0.57, unit.x));
+		plaster = mix(plaster, trim_color.rgb * 0.74, max(balcony * 0.56, pilaster * 0.28));
+		glass_mask *= 0.81;
+	}
+	plaster *= 0.93 + 0.12 * facade_variation;
 	plaster = mix(plaster, trim_color.rgb, max(facade_band * 0.26, pillar * 0.14));
 	plaster = mix(plaster, trim_color.rgb * 0.67, opening);
 	vec3 glass = glass_color.rgb * (0.85 + 0.28 * rand2(room));

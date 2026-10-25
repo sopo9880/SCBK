@@ -36,8 +36,8 @@ for path in [
     "tests/test_gameplay.gd",
 ]:
     assert (ROOT / path).is_file(), path
-assert "gameplay_v023.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
-for new_script in ("scripts/gameplay_v022.gd", "scripts/gameplay_v023.gd", "scripts/ground_map_projection.gd"):
+assert "gameplay_v024.gd" in (ROOT / "scenes/main.tscn").read_text("utf-8")
+for new_script in ("scripts/gameplay_v022.gd", "scripts/gameplay_v023.gd", "scripts/gameplay_v024.gd", "scripts/ground_map_projection.gd"):
     assert (ROOT / new_script).is_file(), new_script
 weapons = (ROOT / "scripts/combat_effects.gd").read_text("utf-8")
 assert "func set_nuke_radius(" in weapons
@@ -48,7 +48,7 @@ assert "func crater_at(" in ground
 map_projection = (ROOT / "scripts/ground_map_projection.gd").read_text("utf-8")
 assert "func _try_cached_map(" in map_projection
 assert "_request.request(" not in map_projection and "HTTPRequest.new()" not in map_projection
-for regression in ("tests/test_projection_v022.gd", "tests/test_weapon_v022.gd", "tests/test_cinematic_v023.gd", "tests/test_progress_laser_v023.gd"):
+for regression in ("tests/test_projection_v022.gd", "tests/test_weapon_v022.gd", "tests/test_cinematic_v023.gd", "tests/test_progress_laser_v023.gd", "tests/test_local_feel_v024.gd", "tests/test_rewind_depth_v024.gd"):
     assert (ROOT / regression).is_file(), regression
 assert (ROOT / "scripts/game_ui_v021.gd").is_file()
 for feature in ("func cancel_load(", "func retry_last(", "loading_progress"):
@@ -56,8 +56,8 @@ for feature in ("func cancel_load(", "func retry_last(", "loading_progress"):
 for test in ("tests/test_map_loading.gd", "tests/test_ui_shell.gd"):
     assert (ROOT / test).is_file(), test
 assert "func damage_at(" in (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
-assert 'config/name="SCBK - World Smash v0.2.3"' in (ROOT / "project.godot").read_text("utf-8")
-assert 'application/product_version="0.2.3"' in (ROOT / "export_presets.cfg").read_text("utf-8")
+assert 'config/name="SCBK - World Smash v0.2.4"' in (ROOT / "project.godot").read_text("utf-8")
+assert 'application/product_version="0.2.4"' in (ROOT / "export_presets.cfg").read_text("utf-8")
 assert "signal load_stage(" in region_loader and "load_stage.emit(" in region_loader
 world = (ROOT / "scripts/world_builder.gd").read_text("utf-8")
 assert "func massive_blast(" in world and "func quake_pulse(" in world
@@ -69,4 +69,21 @@ for feature in ("_install_loading_meter", "_set_quake_magnitude", "_set_bat_size
 assert "signal laser_ground_cut(" in weapons
 assert "signal seismic_wave(" in weapons
 assert "signal massive_impact(" in weapons
-print("SCBK v0.2.3 measured map loader, 8km blast, quake, bat and cinematic laser source validated.")
+from subprocess import run
+parity = (ROOT / "scripts/gameplay_v024.gd").read_text("utf-8")
+earth = (ROOT / "scripts/terrain_surface.gd").read_text("utf-8")
+fragments = (ROOT / "scripts/destructible_building.gd").read_text("utf-8")
+effects = (ROOT / "scripts/combat_effects.gd").read_text("utf-8")
+for fragment in (
+    "func _undo(", "func _focus_deepest(", "func _overhead_view(",
+    "func _build_night_sky(", "func _v2_fire_laser(", "func _pick_and_fire(",
+    "func _toggle_sound(", "func _unhandled_input("
+):
+    assert fragment in parity, fragment
+for requirement in ("func capture_checkpoint(", "func restore_checkpoint(", "func depth_info("):
+    assert requirement in earth, requirement
+assert "func capture_damage_state(" in fragments and "func restore_damage_state(" in fragments
+assert "func begin_rewind_action(" in world and "func undo_rewind_action(" in world
+assert "func skip_cinematic(" in effects
+assert "func award_bonus(" in (ROOT / "scripts/score_system.gd").read_text("utf-8")
+print("SCBK v0.2.4 independent local gameplay feel / native rewind / Earth layers / offline UI: VALID")
