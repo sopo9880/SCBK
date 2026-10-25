@@ -60,6 +60,16 @@ func configure(record: Dictionary) -> void:
 	_facade.set_shader_parameter("wall_color", color)
 	_facade.set_shader_parameter("trim_color", color.darkened(0.32))
 	_facade.set_shader_parameter("glass_color", Color(0.10, 0.16, 0.22))
+	var style: int = posmod(hash(identity), 5)
+	var lower: String = display_name.to_lower()
+	if lower.contains("도서관") or lower.contains("library"):
+		style = 2
+	elif lower.contains("기숙사") or lower.contains("dorm"):
+		style = 4
+	elif lower.contains("연구") or lower.contains("science"):
+		style = 3
+	_facade.set_shader_parameter("facade_style", float(style))
+	_facade.set_shader_parameter("facade_variation", float(posmod(hash(display_name), 100)) / 100.0)
 	_roof_material = StandardMaterial3D.new()
 	_roof_material.albedo_color = color.darkened(0.22)
 	_roof_material.roughness = 0.93
