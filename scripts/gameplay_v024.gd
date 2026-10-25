@@ -16,6 +16,9 @@ var _moon: MeshInstance3D
 var _sound_toggle: Button
 var _sound_on: bool = true
 var _feedback_clock: float = 0.0
+var _orbit_candidate: bool = false
+var _orbit_moved: bool = false
+var _orbit_begin: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	super._ready()
@@ -83,6 +86,8 @@ func _install_local_controls() -> void:
 	_sound_toggle = _button(audio_row, "소리 켜짐", _toggle_sound, 108)
 	_button(audio_row, "되감기 [Ctrl+Z]", _undo, 130)
 	_button(audio_row, "모두 복구 [R]", _reset, 116)
+	var guide := _add_label(_world_body, "드래그: 회전 · 오른쪽 드래그: 이동 · 클릭: 공격", 11, COLOR_BLUE)
+	guide.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _build_night_sky() -> void:
 	# 120 small instances, not 120 draw calls or remote texture assets.
@@ -190,6 +195,10 @@ func _refresh_depth_readout() -> void:
 	_depth_readout.text = "최대 게임 심도 %.1f km  ·  %s" % [km, str(depth.get("layer", "지표"))]
 	_depth_progress.value = km
 	_depth_readout.tooltip_text = "지형 깊이를 게임 진행을 위해 압축한 값입니다. 실제 지구 내부를 정확한 축척으로 재현한 것은 아닙니다."
+
+func _select_tool(index: int) -> void:
+	_orbit_candidate = false
+	super._select_tool(index)
 
 func _pick_and_fire(screen: Vector2) -> void:
 	if _rewinding or _v2_fx == null or _v2_fx.is_busy():
@@ -324,6 +333,41 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _rewinding:
 		get_viewport().set_input_as_handled()
 		return
+	# Match the reference game's practical desktop feel using independent
+	# input logic: left-drag orbits, simple click attacks, right-drag pans.
+	# Laser (weapon 3) reserves left-drag for drawing the beam trajectory.
+	if event is InputEventMouseMotion:
+		if _orbit_candidate and _active_tool != 2:
+			if event.position.distance_to(_orbit_begin) > 5.5:
+				_orbit_moved = true
+			if _orbit_moved:
+				_yaw -= event.relative.x * 0.006
+				_pitch = clampf(_pitch - event.relative.y * 0.006, -1.47, -0.17)
+				_update_camera()
+			get_viewport().set_input_as_handled()
+			return
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			var right: Vector3 = _camera.global_transform.basis.x
+			var front: Vector3 = _camera.global_transform.basis.z
+			front.y = 0.0
+			if front.length_squared() > 0.0001:
+				_camera_target += (-right * event.relative.x + front.normalized() * event.relative.y) * (_distance / 900.0)
+				_update_camera()
+			get_viewport().set_input_as_handled()
+			return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and _active_tool != 2:
+		if event.pressed:
+			_orbit_candidate = true
+			_orbit_moved = false
+			_orbit_begin = event.position
+			get_viewport().set_input_as_handled()
+			return
+		if _orbit_candidate:
+			_orbit_candidate = false
+			if not _orbit_moved:
+				_pick_and_fire(event.position)
+			get_viewport().set_input_as_handled()
+			return
 	super._unhandled_input(event)
 
 func _process(delta: float) -> void:
