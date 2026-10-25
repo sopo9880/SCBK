@@ -382,12 +382,13 @@ func _process(delta: float) -> void:
 	for item in get_tree().get_nodes_in_group("scbk_debris"):
 		if not item is RigidBody3D or not is_instance_valid(item):
 			continue
-		if item.has_meta("scbk_home_run") or not item.has_meta("scbk_building"):
+		var fragment: RigidBody3D = item as RigidBody3D
+		if fragment.has_meta("scbk_home_run") or not fragment.has_meta("scbk_building"):
 			continue
-		var owner: Node3D = item.get_meta("scbk_building")
+		var owner: Node3D = fragment.get_meta("scbk_building")
 		if not is_instance_valid(owner):
 			continue
-		if item.global_position.distance_to(owner.global_position) >= 70.0:
-			item.set_meta("scbk_home_run", true)
+		if fragment.global_position.distance_to(owner.global_position) >= 70.0:
+			fragment.set_meta("scbk_home_run", true)
 			var bonus: int = _v2_score.award_bonus("HOME RUN", 700)
 			_set_status("홈런! 멀리 날아간 파편 보너스 +%d" % bonus)
