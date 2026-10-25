@@ -11,6 +11,7 @@ const Terrain = preload("res://scripts/terrain_surface.gd")
 const MAX_DEBRIS := 160
 const MAX_BUILDINGS := 280
 const MAX_TREES := 160
+const MAX_REWIND_ACTIONS := 12
 
 var buildings: Array[Node3D] = []
 var region_name: String = ""
@@ -24,6 +25,8 @@ var _road_data: Array = []
 var _last_damaged: Array[Node3D] = []
 var _night: bool = false
 var _dem_active: bool = false
+var _rewind_history: Array[Dictionary] = []
+var _pending_rewind: Dictionary = {}
 
 func _ready() -> void:
 	_terrain = Terrain.new()
@@ -40,6 +43,7 @@ func _ready() -> void:
 	add_child(_trees_root)
 
 func load_region(region: Dictionary, source: String) -> int:
+	clear_rewind_history()
 	for old in buildings:
 		if is_instance_valid(old):
 			old.remove_from_group("scbk_buildings")
@@ -106,6 +110,9 @@ func _add_landmark(building: Node3D, name_text: String) -> void:
 
 func terrain_height_at(x: float, z: float) -> float:
 	return _terrain.height_at(x, z)
+
+func earth_depth_info() -> Dictionary:
+	return _terrain.depth_info()
 
 func terrain_extent() -> Vector2:
 	return _terrain.extent
@@ -325,6 +332,7 @@ func _budget() -> int:
 func strike_building(building: Node3D, point: Vector3, impulse: float) -> Dictionary:
 	if not is_instance_valid(building):
 		return {"buildings": 0, "pieces": 0}
+	_remember_building(building)
 	var remaining: int = _budget()
 	var pieces: int = building.damage_at(point, 10.0, impulse, Vector3.ZERO, remaining, 5)
 	_last_damaged.clear()
@@ -338,6 +346,7 @@ func strike_debris(piece: RigidBody3D, point: Vector3, impulse: float) -> Dictio
 	var building: Node3D = piece.get_meta("scbk_building")
 	if not is_instance_valid(building):
 		return {"buildings": 0, "pieces": 0}
+	_remember_building(building)
 	var gained: int = building.hit_debris(piece, point, impulse, _budget())
 	return {"buildings": 0, "pieces": gained}
 
@@ -357,6 +366,7 @@ func strike_radius(point: Vector3, radius: float, impulse: float, direction: Vec
 		if remaining <= 0:
 			break
 		var building: Node3D = item["building"]
+		_remember_building(building)
 		var count: int = building.damage_at(point, radius, impulse, direction, remaining, per_building)
 		if count > 0:
 			touched.append(building)
@@ -386,6 +396,7 @@ func massive_blast(point: Vector3, radius: float, impulse: float) -> Dictionary:
 	var visual_stride: int = maxi(1, int(ceil(float(nearby.size()) / 16.0)))
 	for item in nearby:
 		var building: Node3D = item["building"]
+		_remember_building(building)
 		if physical < 7 and _budget() >= 8:
 			fragments += building.damage_at(point, maxf(40.0, radius * 0.12), impulse * 1.5, Vector3.UP, _budget(), 18)
 			physical += 1
@@ -417,12 +428,80 @@ func quake_pulse(point: Vector3, magnitude: float, beat: int) -> Dictionary:
 				continue
 			var threshold: float = clampf((magnitude - 7.5) / 2.5 * (1.0 - d / maxf(radius, 1.0)), 0.0, 1.0)
 			var noise: float = float(posmod(hash(building.identity) + beat * 31, 1000)) / 1000.0
-			if noise <= threshold * 0.65 and building.collapse_lightweight():
-				collapsed += 1
-				if not _last_damaged.has(building):
-					_last_damaged.append(building)
+			if noise <= threshold * 0.65:
+				_remember_building(building)
+				if building.collapse_lightweight():
+					collapsed += 1
+					if not _last_damaged.has(building):
+						_last_damaged.append(building)
 		result["buildings"] = int(result["buildings"]) + collapsed
 	return result
+
+func begin_rewind_action(score_state: Dictionary = {}) -> void:
+	if not _pending_rewind.is_empty():
+		commit_rewind_action()
+	_pending_rewind = {
+		"buildings": {},
+		"terrain": _terrain.capture_checkpoint(),
+		"score": score_state.duplicate(true)
+	}
+
+func _remember_building(building: Node3D) -> void:
+	if _pending_rewind.is_empty() or not is_instance_valid(building):
+		return
+	var checkpoints: Dictionary = _pending_rewind["buildings"]
+	var id: int = building.get_instance_id()
+	if not checkpoints.has(id):
+		checkpoints[id] = {
+			"building": building,
+			"before": building.capture_damage_state()
+		}
+
+func commit_rewind_action() -> void:
+	if _pending_rewind.is_empty():
+		return
+	var buildings_before: Dictionary = _pending_rewind["buildings"]
+	var terrain_before: Dictionary = _pending_rewind["terrain"]
+	if not buildings_before.is_empty() or _terrain.checkpoint_changed(terrain_before):
+		_rewind_history.append(_pending_rewind)
+		if _rewind_history.size() > MAX_REWIND_ACTIONS:
+			_rewind_history.remove_at(0)
+	_pending_rewind = {}
+
+func rewind_action_count() -> int:
+	return _rewind_history.size()
+
+func latest_rewind_buildings() -> Array[Node3D]:
+	var affected: Array[Node3D] = []
+	if _rewind_history.is_empty():
+		return affected
+	var snapshots: Dictionary = _rewind_history.back()["buildings"]
+	for entry in snapshots.values():
+		var building: Node3D = entry["building"]
+		if is_instance_valid(building):
+			affected.append(building)
+	return affected
+
+func undo_rewind_action() -> Dictionary:
+	if not _pending_rewind.is_empty():
+		commit_rewind_action()
+	if _rewind_history.is_empty():
+		return {"buildings": 0, "terrain": false, "score": {}}
+	var action: Dictionary = _rewind_history.pop_back()
+	var touched: int = 0
+	var originals: Dictionary = action["buildings"]
+	for entry in originals.values():
+		var building: Node3D = entry["building"]
+		if is_instance_valid(building):
+			building.restore_damage_state(entry["before"])
+			touched += 1
+	_terrain.restore_checkpoint(action["terrain"])
+	_last_damaged.clear()
+	return {"buildings": touched, "terrain": true, "score": action["score"]}
+
+func clear_rewind_history() -> void:
+	_pending_rewind.clear()
+	_rewind_history.clear()
 
 func undo_last() -> int:
 	var total: int = 0
@@ -434,6 +513,7 @@ func undo_last() -> int:
 	return total
 
 func reset_all() -> void:
+	clear_rewind_history()
 	for building in buildings:
 		if is_instance_valid(building):
 			building.reset_building()
