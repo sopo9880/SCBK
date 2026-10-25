@@ -190,6 +190,15 @@ func capture_checkpoint() -> Dictionary:
 		"events": _crater_history.duplicate(true)
 	}
 
+func checkpoint_changed(checkpoint: Dictionary) -> bool:
+	if checkpoint.is_empty():
+		return false
+	if _crater_history.size() != Array(checkpoint.get("events", [])).size():
+		return true
+	if int(checkpoint.get("epoch", -1)) != _dem_epoch:
+		return true
+	return _heights != checkpoint["heights"] or _scorch != checkpoint["scorch"]
+
 func restore_checkpoint(checkpoint: Dictionary) -> void:
 	if checkpoint.is_empty():
 		return
