@@ -45,6 +45,12 @@ jobs:
       - name: V0.2.3 staged cache/parser progress and continuous laser trench
         run: |
           bash tools/check_godot.sh 'SCBK v0.2.3 loader real-stage percentages / one-pass laser cut / delayed DEM: PASS' --script res://tests/test_progress_laser_v023.gd
+      - name: V0.2.4 night, input orbit, audio and deep-hole HUD
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.4 local camera / night / audio / depth HUD / laser orbit controls: PASS' --script res://tests/test_local_feel_v024.gd
+      - name: V0.2.4 reversible terrain, building, fragments and score
+        run: |
+          bash tools/check_godot.sh 'SCBK v0.2.4 layered-earth depth / atomic rewind / partial fragment+score+DEM: PASS' --script res://tests/test_rewind_depth_v024.gd
       - name: Smoke-test scene startup (offline; 3 seconds)
         run: |
           bash tools/check_godot.sh - --quit-after 180
