@@ -89,7 +89,8 @@ func _run() -> void:
 	if absf(stand_alone.damage_fraction() - proportion) > 0.01:
 		_fail("Rewind must retain older partial structural damage exactly.")
 		return
-	if stand_alone.active_debris_count() != Array(halfway["fragments"]).size():
+	var previous_fragments: Array = halfway["fragments"]
+	if stand_alone.active_debris_count() != previous_fragments.size():
 		_fail("Rewind must rebuild the original fragment count.")
 		return
 	var backup: Dictionary = ground.capture_checkpoint()
