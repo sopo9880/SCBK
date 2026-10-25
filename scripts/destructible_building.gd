@@ -417,6 +417,72 @@ func hit_debris(body: RigidBody3D, impact: Vector3, impulse: float, budget: int)
 	_spawn_piece(local_pos + offset, half, impact, impulse, direction)
 	return 1 # Replaced one existing body with two; only one additional slot.
 
+func capture_damage_state() -> Dictionary:
+	# Snapshot only impacted buildings, not the entire map for each strike.
+	var intact: Array[bool] = []
+	for cell in _sections:
+		intact.append(bool(cell["intact"]))
+	var fragments: Array[Dictionary] = []
+	for body in _pieces:
+		if is_instance_valid(body) and not body.is_queued_for_deletion():
+			fragments.append({
+				"position": body.position,
+				"rotation": body.rotation,
+				"size": body.get_meta("scbk_fragment_size", Vector3.ONE),
+				"velocity": body.linear_velocity,
+				"spin": body.angular_velocity,
+				"sleeping": body.sleeping
+			})
+	return {
+		"fractured": _fractured,
+		"broken": broken,
+		"intact": intact,
+		"released": _released_sections,
+		"fragments": fragments
+	}
+
+func restore_damage_state(saved: Dictionary) -> void:
+	reset_building()
+	if bool(saved.get("fractured", false)):
+		_fracture_on_demand()
+		var intact: Array = saved.get("intact", [])
+		for i in range(mini(intact.size(), _sections.size())):
+			var cell: Dictionary = _sections[i]
+			cell["intact"] = bool(intact[i])
+			_sections[i] = cell
+			_section_colliders[i].set_deferred("disabled", not bool(intact[i]))
+		_released_sections = int(saved.get("released", 0))
+		if _facade != null:
+			_facade.set_shader_parameter("damage_tint", clampf(damage_fraction() * 0.38, 0.0, 0.32))
+		_rebuild_static_chunks()
+		for frag in saved.get("fragments", []):
+			if not frag is Dictionary:
+				continue
+			_spawn_piece(frag.get("position", Vector3.ZERO), frag.get("size", Vector3.ONE), global_position, 0.0, Vector3.ZERO)
+			var body: RigidBody3D = _pieces.back()
+			body.position = frag.get("position", Vector3.ZERO)
+			body.rotation = frag.get("rotation", Vector3.ZERO)
+			body.linear_velocity = frag.get("velocity", Vector3.ZERO)
+			body.angular_velocity = frag.get("spin", Vector3.ZERO)
+			body.sleeping = bool(frag.get("sleeping", false))
+	if bool(saved.get("broken", false)):
+		if not _fractured:
+			collapse_lightweight()
+		else:
+			broken = true
+			_solid.collision_layer = 0
+			for shape in _section_colliders:
+				shape.set_deferred("disabled", true)
+			_chunks.visible = false
+			if has_node("LandmarkLabel"):
+				get_node("LandmarkLabel").visible = false
+	else:
+		broken = false
+		if _fractured:
+			_solid.collision_layer = 1
+			if has_node("LandmarkLabel"):
+				get_node("LandmarkLabel").visible = true
+
 func collapse_lightweight() -> bool:
 	# Far from a major blast, preserve an immediate, visible collapse without
 	# allocating thousands of RigidBody3D fragments. Reset still restores it.
