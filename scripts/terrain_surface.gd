@@ -80,7 +80,10 @@ func apply_dem(samples: PackedFloat32Array, width: int, depth: int) -> bool:
 	# Terrain elevation can finish loading while the player is already
 	# attacking. Re-apply pending blasts rather than magically healing them.
 	for entry in _crater_history:
-		_apply_crater(entry["point"], float(entry["radius"]), float(entry["depth"]))
+		if entry.has("path"):
+			_apply_laser_cut(entry["path"], float(entry["width"]), float(entry["depth"]))
+		else:
+			_apply_crater(entry["point"], float(entry["radius"]), float(entry["depth"]))
 	_rebuild_surface()
 	return true
 
@@ -137,6 +140,38 @@ func _apply_crater(world_position: Vector3, radius: float, depth: float) -> void
 	# _rebuild_surface is deliberately called once by the outer transaction.
 	if modified:
 		pass
+
+func laser_cut(points: Array[Vector3], width: float, depth: float) -> void:
+	if points.size() < 2 or width <= 0.0 or depth <= 0.0:
+		return
+	var bounded: Array[Vector3] = points.slice(0, 128)
+	_crater_history.append({"path": bounded.duplicate(), "width": width, "depth": depth})
+	if _crater_history.size() > 96:
+		_crater_history.remove_at(0)
+	_apply_laser_cut(bounded, width, depth)
+	_rebuild_surface()
+
+func _apply_laser_cut(points: Array[Vector3], width: float, depth: float) -> void:
+	# A single mesh/collision rebuild for the whole drawn beam path.
+	var practical_width: float = maxf(width, maxf(extent.x, extent.y) / float(GRID - 1) * 0.70)
+	for z in range(GRID):
+		for x in range(GRID):
+			var at := Vector2(
+				(float(x) / float(GRID - 1) - 0.5) * extent.x,
+				(float(z) / float(GRID - 1) - 0.5) * extent.y)
+			var distance: float = INF
+			for i in range(points.size() - 1):
+				var a := Vector2(points[i].x, points[i].z)
+				var b := Vector2(points[i + 1].x, points[i + 1].z)
+				var segment: Vector2 = b - a
+				var ratio: float = clampf((at - a).dot(segment) / maxf(segment.length_squared(), 0.0001), 0.0, 1.0)
+				distance = minf(distance, at.distance_to(a + segment * ratio))
+			if distance >= practical_width:
+				continue
+			var index: int = z * GRID + x
+			var strength: float = pow(1.0 - distance / practical_width, 1.7)
+			_heights[index] -= depth * strength
+			_scorch[index] = maxf(_scorch[index], 0.88 * strength)
 
 func restore() -> void:
 	_heights = _base_heightmap.duplicate()

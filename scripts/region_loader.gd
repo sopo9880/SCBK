@@ -7,6 +7,7 @@ signal region_failed(message: String)
 signal loading_started(region_label: String)
 signal loading_progress(message: String, attempt: int, total_attempts: int)
 signal loading_cancelled
+signal load_stage(percent: float, description: String, indeterminate: bool)
 
 const Mercator = preload("res://scripts/map_math.gd")
 const SERVERS := [
@@ -18,7 +19,7 @@ const MAX_BUILDINGS := 280
 const MAX_ROADS := 200
 const MAX_RADIUS := 700
 const CACHE_DIR := "user://regions"
-const USER_AGENT := "SCBK-Windows/0.2.1 (https://github.com/sopo9880/SCBK)"
+const USER_AGENT := "SCBK-Windows/0.2.3 (https://github.com/sopo9880/SCBK)"
 
 var _request: HTTPRequest
 var _bounds: Dictionary = {}
@@ -66,6 +67,7 @@ func cancel_load() -> void:
 	_generation += 1
 	_active = false
 	_request.cancel_request()
+	load_stage.emit(0.0, "지도 다운로드 취소", false)
 	loading_cancelled.emit()
 
 func retry_last() -> void:
@@ -100,13 +102,16 @@ func _start_load(bounds: Dictionary, label: String, legacy_radius: int) -> void:
 		cached["label"] = _label
 		if not Mercator.validated(cached.get("bounds", {})):
 			cached["bounds"] = _bounds.duplicate(true)
+		load_stage.emit(0.68, "캐시 지도 읽기 완료 · 3D 지역 생성", false)
 		region_loaded.emit(cached, "Cached OpenStreetMap")
+		load_stage.emit(1.0, "캐시 지도 준비 완료", false)
 		return
 	_server_index = 0
 	_attempt_errors.clear()
 	_generation += 1
 	_active = true
 	loading_started.emit(_label)
+	load_stage.emit(0.0, "지도 요청 준비", false)
 	_send_request()
 
 func _cache_path() -> String:
@@ -134,6 +139,7 @@ func _send_request() -> void:
 	if _server_index >= SERVERS.size():
 		_active = false
 		_last_error = "지도 서버 연결 실패: " + (" / ".join(PackedStringArray(_attempt_errors)) if not _attempt_errors.is_empty() else "응답 없음")
+		load_stage.emit(0.0, "지도 서버 연결 실패", false)
 		region_failed.emit(_last_error)
 		return
 	var south: float = float(_bounds["south"])
@@ -143,6 +149,8 @@ func _send_request() -> void:
 	var bbox: String = "%.6f,%.6f,%.6f,%.6f" % [south, west, north, east]
 	var query: String = '[out:json][timeout:25];(way["building"](%s);way["highway"](%s););out tags geom;' % [bbox, bbox]
 	loading_progress.emit("실제 지도 가져오는 중 (%d/%d) · 서버 응답 대기" % [_server_index + 1, SERVERS.size()], _server_index + 1, SERVERS.size())
+	# No fake network percentages: total byte count is unknown until reply.
+	load_stage.emit(0.12, "지도 서버 %d/%d 응답 대기" % [_server_index + 1, SERVERS.size()], true)
 	var headers := PackedStringArray([
 		"Content-Type: application/x-www-form-urlencoded; charset=UTF-8",
 		"Accept: application/json", "User-Agent: " + USER_AGENT
@@ -161,15 +169,18 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
 	if not _active:
 		return
 	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200 and body.size() > 2:
+		load_stage.emit(0.30, "지도 파일 수신 완료 · JSON 해석", false)
 		var decoded: Variant = JSON.parse_string(body.get_string_from_utf8())
 		if decoded is Dictionary and decoded.get("elements") is Array:
 			var region: Dictionary = _convert_osm(decoded)
+			load_stage.emit(0.68, "지도 데이터 정리 완료 · 3D 지역 생성", false)
 			var output: FileAccess = FileAccess.open(_cache_path(), FileAccess.WRITE)
 			if output != null:
 				output.store_string(JSON.stringify(region))
 				output.close()
 			_active = false
 			region_loaded.emit(region, "Live OpenStreetMap")
+			load_stage.emit(1.0, "실제 지도 준비 완료", false)
 			return
 		_attempt_errors.append("서버 %d: 잘못된 응답 형식" % (_server_index + 1))
 	elif result == HTTPRequest.RESULT_TIMEOUT:
@@ -192,7 +203,11 @@ func _within_selection(lat: float, lon: float) -> bool:
 func _convert_osm(doc: Dictionary) -> Dictionary:
 	var buildings_found: Array[Dictionary] = []
 	var roads_found: Array[Dictionary] = []
-	for element in doc["elements"]:
+	var elements: Array = doc["elements"]
+	for index in range(elements.size()):
+		if index % 64 == 0:
+			load_stage.emit(0.34 + 0.28 * float(index) / float(maxi(1, elements.size())), "건물·도로 분석 %d/%d" % [index, elements.size()], false)
+		var element: Variant = elements[index]
 		if not element is Dictionary or str(element.get("type", "")) != "way":
 			continue
 		var tags: Dictionary = element.get("tags", {})

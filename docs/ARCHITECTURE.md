@@ -99,3 +99,33 @@ Weapon 6 offers a 40–360m blast radius with presets and a ground-following rin
 `terrain_surface.gd` uses a 49x49 height and concave collider grid with excavation, raised rim and scorch. Up to 96 crater events are retained so a delayed external DEM update can reapply existing damage instead of silently flattening it. Reset clears both topography damage and the visual scorch mask. Geometry is still coarse for very small craters; roads can bridge fresh craters.
 
 `tests/test_projection_v022.gd` and `tests/test_weapon_v022.gd` validate the offline cartographic raster, ground ray, nuke slider binding, BAT restrictions, crater/reset, and delayed DEM damage persistence. The existing gameplay test also verifies irregular physical rubble. The next CI phase uses headless Godot tests only; real Windows visual acceptability remains a separate post-release user test.
+
+## v0.2.3 — standalone cinematic weapon pipeline and truthful progress
+
+### 8km nuclear blast and physics limits
+
+The nuclear weapon remains weapon index 5, preserving all existing controls, and `gameplay_v023.gd` adds a dedicated **8km** action alongside the regular 40–360m slider. `combat_effects.gd` computes a real 8000m radius and emits six outward radial pulses with a world-space warning, flash, smoke and shockwaves. `gameplay_v023.gd` moves the camera back temporarily, expands its far plane to 20km and restores the user's original orbit after the effect.
+
+The old `strike_radius` mechanic could hit only a handful of buildings when the 160-fragment budget filled. The new `world_builder.gd::massive_blast` uses **seven nearest physical building hits** at most, then `destructible_building.gd::collapse_lightweight` disables the geometry and collision of all remaining **loaded mapped** buildings inside the expanding blast. This is reversible on Undo and Reset, counts as destroyed for scoring and preserves the global 160-body limit.
+
+**Scope:** The existing region loader limits one selection to at most 1.6km per side. The 8km nuclear weapon is *not a new 16km terrain/OSM importer*. Its damage ring correctly reaches 8km in the game coordinate system, but terrain and mapped building effects only apply to the currently loaded playable location. No unrequested OSM bulk data collection, fake off-map buildings or full-city physics are implied.
+
+### Earthquake intensity and weapon handling
+
+`combat_effects.gd` provides `set_quake_magnitude(4.0..10.0)`. Quake input produces about 3 seconds of pressure pulses with scaled shake, amplitude and simulated epicentral radius. `world_builder.gd::quake_pulse` applies fragment-limited localized stress; at high magnitude some unsupported, high-damage structures can collapse by a cheap visual/physics-disable operation without generating massive extra debris.
+
+The bat size is adjustable from 0.5x to 3.0x. Its visual model, impact radius and force all scale together. Bombs and meteors use stronger local impulses and slightly larger terrain excavations. Meteor/nuke sequences emit action start/finish for cinematic camera orbit recovery.
+
+### Laser line and persistent scar
+
+The 2D drag stroke is ray-cast onto the 3D surface and interpolated into at most 96 world-space points. The weapon charges then sweeps a three-layer cyan/white cylinder along each segment, producing bounded impact pulses instead of a single circle. The full path is also sent through the `laser_ground_cut` signal; `terrain_surface.gd::laser_cut` computes closest distance from every terrain mesh vertex to the entire path, excavates and scorches, then rebuilds visual and concave collision meshes exactly once. It records the stroke in the existing capped crater history for DEM replay and Reset. Continuous high-precision geometry is limited by the retained 49x49 terrain grid and physics budget.
+
+### Map loading progress semantics
+
+`region_loader.gd::load_stage(percent,description,indeterminate)` distinguishes honest unknown network wait time from completed parsing/data-processing work. During HTTP requests the progress bar animates as **indeterminate**, without showing fabricated percentages; it becomes a determinate count when downloaded data is parsed into OSM elements. `world_builder.gd::world_build_progress(phase, progress)` reports construction counters and transitions into road/vegetation finalization. The HUD reacts to cancellation, cache hits, failure, and completion, while the earlier Retry/Cancel controls and cached file structure are preserved.
+
+Future true smooth per-frame building construction would require asynchronous world transactions and explicit cancellation tokens; the current synchronous assembly provides truthful counters but can still occupy a frame on a dense region.
+
+### Regression / shipping
+
+PR checks add `tests/test_cinematic_v023.gd` (giant nuke hit-count vs physics cap, Undo, M4–M10 and bat controls, map loading panel) and `tests/test_progress_laser_v023.gd` (cache progress, actual OSM-entry counting, continuous terrain scar, delayed DEM and Reset). Existing v0.2.2 and older regression suites stay in place. The project remains Windows-only, and a future official release must reuse the successful post-merge Windows EXE with verified provenance rather than compiling a second binary.

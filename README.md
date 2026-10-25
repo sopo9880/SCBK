@@ -1,6 +1,34 @@
 # SCBK — World Smash for Windows
 
-SCBK v0.2.2 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+SCBK v0.2.3 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+
+## v0.2.3 — offline native cinematic weapons, 8km nuke, earthquakes and progress
+
+This Windows-only Godot update focuses on the feel of a standalone physics/destruction game rather than the speed and restrictions of a browser scene. It remains an **original independent implementation** that does not bundle source code, graphics, audio or other copyrighted materials from the reference browser game.
+
+### Major changes
+
+- **Dedicated 8km nuclear preset:** Select weapon 6 then **8 km**. Regular fine adjustment stays at 40–360m. The 8km blast has a world-space radius of 8,000 metres, bigger camera far plane, cinematic pullback and staged fireball/pressure-ring propagation. Within the **currently loaded OSM region** every mapped building in the blast range can collapse; nearby ones receive detailed physical chunks, distant ones use lightweight graphical collapse rather than exhausting the 160-rigid-body cap. Reset or Undo restores the collapsed buildings.
+- **Explicit 3D map coverage:** The 8km effect extends geographically beyond the visible region, but 3D map selection still loads up to ~1.6km per side. **Buildings outside the actual loaded region are not secretly generated or damaged.** The controls state this openly; the 8km mode provides spectacular impact on the loaded neighbourhood without asserting unrealistic full-city simulation.
+- **Truthful map progress bar:** Top-centre panel appears for live map requests, cache hits and world generation. Network requests have an **animated indeterminate bar** and server number, never a made-up network percentage. After receiving data it switches to measurable stages (JSON parse, actual count of OSM elements processed, building creation, roads, vegetation, ready). On cancel/failure it disappears and preserves Retry/Cancel behavior.
+- **Adjustable earthquake intensity:** Weapon 5 exposes magnitude **M4.0–M10.0** in 0.1 increments with 4/6/8/10 presets. About three seconds of pulses change shake, epicentral radius, damage, surface deformation and secondary collapse. High intensity is deliberately heavy on *loaded* structures but uses bounded physics.
+- **Reference-inspired laser:** Weapon 3 traces a user-drawn world-space path (up to 96 points) after a visible charge; three concentric cyan/white beams sweep across it, repeatedly fracture nearby structures, and carve/scorch one continuous real terrain collision groove. A single mesh rebuild avoids a frame hitch per sample.
+- **Weapon improvements:** Bomb and meteor base damage and craters are stronger; the bat gets a 0.5–3.0x size/strength slider with presets. Meteor and nuclear drops trigger an aerial camera pullback and restore the previous viewpoint when the action finishes.
+- **Performance design:** no Android build; the number of *simulated* flying pieces is still capped at 160, visible small areas get high-fidelity destruction, and wide-area collapses reuse existing mapped buildings rather than spawning millions of fragments. Transient FX expire automatically. Existing cached regions, user data, controls and the v0.2.2 installed application identity are preserved.
+
+### Updated controls
+
+| Action | How |
+| --- | --- |
+| Choose nuclear blast | Weapon 6, 40–360m slider or **8 km** preset |
+| Nuclear aiming | Move cursor for a ground-following radius ring; click ground/building |
+| Earthquake magnitude | Weapon 5, M4.0–M10.0 slider or M4/M6/M8/M10 preset |
+| Bat size | Weapon 2, 0.5–3.0x size slider and quick presets |
+| Charged laser | Weapon 3, hold left click and draw across terrain/buildings, release |
+| Map loading status | Top centre when fetching/assembling map; Cancel/Retry in map card |
+| Reset collapsed buildings, rubble and terrain | R; existing undo remains Ctrl+Z |
+
+**Preview notes:** The 8km blast is a game effect scale, **not a licensed nuclear weapons simulator** or an 8km satellite terrain download. Strong quake and laser effects are stylized approximations. Screenshots, frame rate, real map connectivity and actual input quality require post-release Windows testing. The EXE is not Authenticode signed, so Windows SmartScreen may warn. The release process must reuse the single original Windows CI-built EXE without rebuilding it.
 
 ## v0.2.2 — grounded world maps, ground strikes and scalable nuclear blasts
 

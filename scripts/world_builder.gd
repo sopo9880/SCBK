@@ -4,6 +4,7 @@ extends Node3D
 ## them; only impacted cells become rigid bodies. Terrain uses DEM where present.
 
 signal building_broken(building: Node3D)
+signal world_build_progress(phase: String, progress: float)
 
 const Building = preload("res://scripts/destructible_building.gd")
 const Terrain = preload("res://scripts/terrain_surface.gd")
@@ -54,6 +55,7 @@ func load_region(region: Dictionary, source: String) -> int:
 	region_bounds = region.get("bounds", {})
 	_terrain.reset_plane(region_bounds)
 	_dem_active = false
+	world_build_progress.emit("지형과 건물 준비", 0.04)
 	var entries: Array = region.get("buildings", [])
 	var landmark_count: int = 0
 	for entry in entries:
@@ -75,11 +77,16 @@ func load_region(region: Dictionary, source: String) -> int:
 			_add_landmark(obj, title)
 			landmark_count += 1
 		buildings.append(obj)
+		if buildings.size() % 12 == 0:
+			world_build_progress.emit("건물 생성 %d/%d" % [buildings.size(), mini(entries.size(), MAX_BUILDINGS)], 0.08 + 0.68 * float(buildings.size()) / float(maxi(1, mini(entries.size(), MAX_BUILDINGS))))
 		if buildings.size() >= MAX_BUILDINGS:
 			break
+	world_build_progress.emit("도로 생성", 0.79)
 	_road_data = region.get("roads", [])
 	_build_roads(_road_data)
+	world_build_progress.emit("식생과 충돌체 마무리", 0.91)
 	_build_vegetation(region)
+	world_build_progress.emit("3D 지역 생성 완료", 1.0)
 	return buildings.size()
 
 func _add_landmark(building: Node3D, name_text: String) -> void:
@@ -129,6 +136,9 @@ func apply_dem(samples: PackedFloat32Array, width: int, depth: int) -> void:
 
 func crater_at(point: Vector3, radius: float, depth: float) -> void:
 	_terrain.crater_at(point, radius, depth)
+
+func laser_cut(points: Array[Vector3], width: float, depth: float) -> void:
+	_terrain.laser_cut(points, width, depth)
 
 func reset_terrain() -> void:
 	_terrain.restore()
@@ -354,6 +364,65 @@ func strike_radius(point: Vector3, radius: float, impulse: float, direction: Vec
 			remaining -= count
 	_last_damaged = touched
 	return {"buildings": touched.size(), "pieces": fragments}
+
+func begin_massive_blast() -> void:
+	_last_damaged.clear()
+
+func massive_blast(point: Vector3, radius: float, impulse: float) -> Dictionary:
+	# An 8km blast affects every loaded building within the radius, without
+	# constructing unbounded numbers of rigid-body fragments.
+	var nearby: Array[Dictionary] = []
+	for building in buildings:
+		if not is_instance_valid(building) or building.broken:
+			continue
+		var d: float = Vector2(building.global_position.x - point.x, building.global_position.z - point.z).length()
+		if d <= radius + building.bounds.size.length() * 0.5:
+			nearby.append({"building": building, "distance": d})
+	nearby.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["distance"]) < float(b["distance"]))
+	var physical: int = 0
+	var fragments: int = 0
+	var affected: Array[Node3D] = []
+	var visual_sites := PackedVector3Array()
+	var visual_stride: int = maxi(1, int(ceil(float(nearby.size()) / 16.0)))
+	for item in nearby:
+		var building: Node3D = item["building"]
+		if physical < 7 and _budget() >= 8:
+			fragments += building.damage_at(point, maxf(40.0, radius * 0.12), impulse * 1.5, Vector3.UP, _budget(), 18)
+			physical += 1
+		if building.collapse_lightweight():
+			affected.append(building)
+			if affected.size() % visual_stride == 0:
+				visual_sites.append(building.global_position)
+	for building in affected:
+		if not _last_damaged.has(building):
+			_last_damaged.append(building)
+	return {"buildings": affected.size(), "pieces": fragments, "lightweight": affected.size(), "visual_sites": visual_sites}
+
+func quake_pulse(point: Vector3, magnitude: float, beat: int) -> Dictionary:
+	var strength: float = clampf((magnitude - 4.0) / 6.0, 0.0, 1.0)
+	var radius: float = lerpf(20.0, 820.0, pow(strength, 1.65))
+	var impulse: float = lerpf(2.2, 29.0, strength * strength)
+	var previously_damaged: Array[Node3D] = _last_damaged.duplicate()
+	var result: Dictionary = strike_radius(point, radius, impulse, Vector3.UP * 0.4, 2 + int(round(strength * 9.0)))
+	for existing in previously_damaged:
+		if is_instance_valid(existing) and not _last_damaged.has(existing):
+			_last_damaged.append(existing)
+	if magnitude >= 8.0 and beat >= 4:
+		var collapsed: int = 0
+		for building in buildings:
+			if not is_instance_valid(building) or building.broken:
+				continue
+			var d: float = Vector2(building.global_position.x - point.x, building.global_position.z - point.z).length()
+			if d > radius:
+				continue
+			var threshold: float = clampf((magnitude - 7.5) / 2.5 * (1.0 - d / maxf(radius, 1.0)), 0.0, 1.0)
+			var noise: float = float(posmod(hash(building.identity) + beat * 31, 1000)) / 1000.0
+			if noise <= threshold * 0.65 and building.collapse_lightweight():
+				collapsed += 1
+				if not _last_damaged.has(building):
+					_last_damaged.append(building)
+		result["buildings"] = int(result["buildings"]) + collapsed
+	return result
 
 func undo_last() -> int:
 	var total: int = 0
