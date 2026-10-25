@@ -111,7 +111,10 @@ func _on_region_loaded(region: Dictionary, source: String) -> void:
 	_hide_loader()
 
 func _load_training_block() -> void:
+	_cinematic_mode = ""
 	super._load_training_block()
+	if _camera != null:
+		_camera.far = 3200.0
 	_hide_loader()
 
 func _on_loader_stage(fraction: float, description: String, indeterminate: bool) -> void:
@@ -283,12 +286,6 @@ func _on_cinematic_end(weapon: int) -> void:
 		return
 	_cinematic_distance = _saved_distance
 	_cinematic_mode = "back"
-
-func _load_training_block() -> void:
-	_cinematic_mode = ""
-	super._load_training_block()
-	if _camera != null:
-		_camera.far = 3200.0
 
 func _reset() -> void:
 	_cinematic_mode = ""
