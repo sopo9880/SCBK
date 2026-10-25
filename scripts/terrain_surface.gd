@@ -193,7 +193,8 @@ func capture_checkpoint() -> Dictionary:
 func checkpoint_changed(checkpoint: Dictionary) -> bool:
 	if checkpoint.is_empty():
 		return false
-	if _crater_history.size() != Array(checkpoint.get("events", [])).size():
+	var old_events: Array = checkpoint.get("events", [])
+	if _crater_history.size() != old_events.size():
 		return true
 	if int(checkpoint.get("epoch", -1)) != _dem_epoch:
 		return true
