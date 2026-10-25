@@ -2,6 +2,28 @@
 
 SCBK v0.2.3 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
 
+## v0.2.4 — Original-feel native single-player parity (Windows)
+
+**Purpose:** Make SCBK feel more like an intuitive 3D building-destruction game rather than a collection of isolated effects, without loading the gameplay through a browser. The [SMASH CAU](https://github.com/Hong-Iron/SMASH-CAU) public README was consulted as a gameplay **reference only**. Its LICENSE reserves copyright over its code, artwork and screen design but expressly permits independent games using a similar idea. SCBK does **not** copy or bundle its copyrighted JavaScript, textures, code-based graphics or page design, and does not claim to be the same game or affiliated with its creator.
+
+### New native mechanics
+
+- **One-button building destruction, drag/orbit and laser control:** Left-click a building/ground to use the selected tool; left-drag rotates the camera, right-drag pans, wheel zooms. Selecting **Laser (3)** reserves left-drag to draw the beam path and releasing fires it; no separate website or browser is needed.
+- **Progressively deeper Earth excavation:** Impact damage makes a persistent collidable crater. As the same location is excavated further, exposed ground colors change through **surface/soil → crust → mantle → outer core → inner core**. A left-bottom depth bar reports the deepest excavated point, and **G** moves the camera into that hole. The center of the Earth is **6,371 game km** deep in this *condensed arcade coordinate model*: 1 metre of deformed 3D ground is mapped to 8 display km. This is intentionally **not a real-scale terrestrial physics simulation**.
+- **Atomic multi-step rewind (12 most recent attacks):** Each attack records damaged buildings, which building cells were intact, existing fragment positions/velocities, full crater shape, and local score/combo/rank state. **Ctrl+Z** visibly pulls up to 48 active fragments toward their source before restoring the true saved structural and terrain checkpoint. Multiple shock waves count as one attack. **R** resets the entire current area. An elevation download arriving between attack and undo is accommodated by replaying earlier ground modifications on the new base DEM.
+- **Procedurally differentiated architecture:** Independent shader families for brick, stone, glass and other building facade types (including night window lights) make OSM-based campus maps less repetitive. OSM source names and footprints are preserved; no proprietary campus textures or screenshots are used.
+- **Night environment:** **N** now reveals a low-overhead procedural field of 120 low-poly stars and a moon. Daytime restores the original daylight sky. This requires no external art assets.
+- **Arcade depth and score cues:** HUD keeps style rank, score and combo. Airborne fragments can be struck again for an **air-combo bonus**; rubble moving more than 70m from its original building can earn a **home-run bonus**. 3D object inspection is polled at most a few times a second and uses the existing 160-body cap.
+- **Camera and usability:** **Home** restores the first orbit, **V** changes to overhead, **G** focuses the deepest pit. Explicit on-screen buttons provide these options plus sound mute and rewind. **Esc** or a click during meteor/nuke falls accelerates the cinematic instead of cancelling the ensuing blast.
+
+### Current accuracy boundaries
+
+This is **not** a byte-identical, pixel-perfect port of SMASH CAU. Exact original building models, animations, underlying source, assets and screen design are **not** reproduced. The lightweight distant-collapse path remains stylized, and the 8km nuclear blast affects mapped geometry only within the loaded region (which remains up to approximately 1.6km per side). Reverse animation smoothly converges fragments to their source and restores checkpoint state, rather than recording and rewinding every rendered frame backward in time. The depth is an arcade compression of game-world metres, not a literal 6,371 km-deep mesh. Original school's leaderboard, sharing and visitor analytics are intentionally excluded from this offline personal-game priority.
+
+### Validation and release
+
+Godot PR CI retains all v0.2.0–v0.2.3 offline regressions and adds integration tests for local mouse input, alternate camera viewpoints, night sky, sound mute and native HUD, plus exact structure/fragment/terrain/score restoration, Earth-layer depth and delayed DEM loading. Windows EXE builds run **only after merging a successful PR**. Releasing must reuse that successful CI-built EXE without recompilation, verify SHA-256 checksums, and leave previous tags/binaries immutable. Visual and device-specific gameplay feel must be evaluated by the user after the official release.
+
 ## v0.2.3 — offline native cinematic weapons, 8km nuke, earthquakes and progress
 
 This Windows-only Godot update focuses on the feel of a standalone physics/destruction game rather than the speed and restrictions of a browser scene. It remains an **original independent implementation** that does not bundle source code, graphics, audio or other copyrighted materials from the reference browser game.

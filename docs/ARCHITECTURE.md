@@ -129,3 +129,29 @@ Future true smooth per-frame building construction would require asynchronous wo
 ### Regression / shipping
 
 PR checks add `tests/test_cinematic_v023.gd` (giant nuke hit-count vs physics cap, Undo, M4–M10 and bat controls, map loading panel) and `tests/test_progress_laser_v023.gd` (cache progress, actual OSM-entry counting, continuous terrain scar, delayed DEM and Reset). Existing v0.2.2 and older regression suites stay in place. The project remains Windows-only, and a future official release must reuse the successful post-merge Windows EXE with verified provenance rather than compiling a second binary.
+
+## v0.2.4 — Independent local-game fidelity and reversible destruction
+
+The initial browser reference for gameplay expectations is the publicly documented SMASH CAU game; its source and UI code are all-rights-reserved. SCBK uses independently implemented Godot systems and does not import reference-game JavaScript, markup, audio, visuals or screen design.
+
+### Atomic rewind records
+
+`world_builder.gd::begin_rewind_action` captures one terrain checkpoint and the pre-action score snapshot. Every building under attack is captured **lazily** on first attempted hit via `_remember_building`, and `destructible_building.gd::capture_damage_state` stores surviving section masks, fracture/broken flags and live rigid fragment position, rotation, velocity and size. `commit_rewind_action` maintains a hard cap of **12 actions**, not unbounded history. `undo_rewind_action` restores just those affected buildings and their pre-action fragments, plus an exact terrain checkpoint and score/rank/multiplier metadata. The v0.2.4 HUD plays a bounded, short fragment-convergence animation before applying that checkpoint. Craters and laser-cut events are preserved in the existing capped 96-event ledger.
+
+DEM elevation may arrive after an attack. Every terrain checkpoint stores an elevation epoch: if the current DEM epoch differs, Undo restores its event ledger and replays it onto the newest base DEM rather than incorrectly overwriting the fresh elevation with stale heights. `reset_all` and changing a loaded region invalidate history to prevent undo from resurrecting prior-map objects.
+
+### Procedural visual and input fidelity
+
+A single Godot shader (`building_facade.gdshader`) supports five physically small facade families with deterministically selected procedural UV patterns, individual material colors, glass, masonry and low-cost emitted window lights. `gameplay_v024.gd` instantiates the starfield in one **MultiMesh** draw path and uses one low-poly moon. These assets are generated in-engine and are not copies of any reference artwork.
+
+For mouse input, a short click fires the selected non-laser tool; a moved left-drag orbits, a right-drag pans, and laser mode reserves left-drag for tracing a 3D beam. Device UX adds home, overhead and deepest-hole camera presets plus a sound toggle and the ability to accelerate a cinematic without suppressing missile impact.
+
+### Depth interpretation
+
+`terrain_surface.gd::depth_info` computes the deepest **physical 3D crater** from the 49×49 collision grid and maps that depression into a **virtual game depth** at 8 displayed kilometres per scene metre. This preserves actual collidable deformation and terrain-mesh continuity while making deeper Earth layers reachable with repeated weapon hits. The color palette of exposed soil, crust, mantle, outer/inner core is procedural and stylized; Earth internals are not reproduced to scientific scale or as an infinitely long terrain mesh.
+
+### Performance and remaining fidelity gaps
+
+The 49² terrain grid and globally capped 160 active physics fragments remain intentionally bounded; undo replays only recorded affected buildings and the terrain checkpoint. Restoring numerous buildings is synchronous and may still cause a temporary frame hitch. Real 3D building floorplans, photogrammetric materials, GPU-perfected cinematic sequences, precise explosion impulse curves and depth-shaft sidewall extrusion remain areas for post-release on-device comparison. Leaderboard/online sharing are intentionally omitted from an offline-first personal Windows game.
+
+CI includes new tests of the mouse-camera/night/audio HUD, chunk/terrain/score multi-step reversibility, asynchronous DEM-compatible checkpoints and procedural layer depth.
