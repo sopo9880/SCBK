@@ -1,0 +1,125 @@
+name: Release SCBK v0.2.3 (reuse existing Windows artifact)
+
+# One-shot release branch: keeps the verified v0.2.3 source commit and binary
+# immutable and avoids triggering the main-branch Windows rebuild workflow.
+on:
+  push:
+    branches:
+      - release/v0.2.3
+    paths:
+      - .github/workflows/publish-v0.2.3.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-scbk-v0.2.3
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify existing Windows binary and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: "b6490ecb59ccf4bfbd5aa1085f3ed38d1d0048df"
+      SOURCE_RUN: "40186721197"
+      RELEASE_TAG: "v0.2.3"
+    steps:
+      - name: Verify original Windows CI success and source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq '.head_sha')"
+          actual_conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq '.conclusion')"
+          test "$actual_sha" = "$EXPECTED_SHA"
+          test "$actual_conclusion" = "success"
+          echo "Reusing verified CI run #$SOURCE_RUN for source $EXPECTED_SHA"
+
+      - name: Download the original Windows artifact (do not rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          repository: sopo9880/SCBK
+          run-id: 40186721197
+          name: scbk-windows-b6490ecb59ccf4bfbd5aa1085f3ed38d1d0048df
+          path: release-assets
+          github-token: ${{ github.token }}
+
+      - name: Verify binary, provenance and SHA-256 checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/SCBK.exe
+          test -s release-assets/COMMIT_SHA.txt
+          test -s release-assets/SHA256SUMS.txt
+          recorded_sha="$(tr -d '\r\n ' < release-assets/COMMIT_SHA.txt)"
+          if [ "$recorded_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Artifact commit does not match validated Windows build"
+            exit 1
+          fi
+          # PowerShell on Windows may emit CRLF. Preserve the published original,
+          # but normalize a temporary copy for GNU sha256sum on Ubuntu.
+          tr -d '\r' < release-assets/SHA256SUMS.txt > release-assets/.SHA256SUMS.unix
+          (cd release-assets && sha256sum --check .SHA256SUMS.unix)
+          echo "SCBK.exe verified against the CI checksum"
+
+      - name: Create immutable version tag pointing to original build commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists; do not replace an existing release binary"
+            exit 1
+          fi
+          if tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null)"; then
+            if [ "$tag_sha" != "$EXPECTED_SHA" ]; then
+              echo "::error::Existing tag points to a different source commit"
+              exit 1
+            fi
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" -f sha="$EXPECTED_SHA" >/dev/null
+          fi
+          actual_tag="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$actual_tag" = "$EXPECTED_SHA"
+          echo "Tag $RELEASE_TAG points to validated source commit $EXPECTED_SHA"
+
+      - name: Publish verified CI files on GitHub Releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # SCBK v0.2.3 — Cinematic Weapons & Map Loading (Windows)
+
+          This Windows-only, original Godot destruction-game preview significantly upgrades the feel of offline local gameplay.
+
+          ## New
+          - An optional **8km-radius nuclear blast** with multi-stage shock waves, larger clouds and dust, zoomed-out camera and visible destruction of all loaded buildings in range. Nearby buildings use high-detail fragments; distant ones use physics-budgeted lightweight collapse.
+          - A graphical **map-loading progress bar** with honest steps for cached maps, actual OSM element processing, buildings, roads and vegetation. Server waits are indeterminate, not fabricated percentage estimates; retry and cancellation remain.
+          - **Earthquake magnitude M4.0–M10.0**, adjustable by slider/presets, influencing camera shake, impact spread, strength and structural failures.
+          - A stronger **laser** with charge, three glowing beam layers, a drawn world-space trajectory, repeated hits, physical terrain trenches and glowing scorches.
+          - Stronger bomb and meteor blast impacts; adjustable bat size 0.5–3x with effects tied to size; cinematic pullback for large falling weapons.
+          - New Godot offline tests for 8km collapse, combined Undo, physics budgets, progress reporting and laser terrain damage.
+
+          ## Scope and known limitations
+          This remains a stylized independent sandbox, not a photorealistic reconstruction or a copy of proprietary browser game code and media. The 8km blast **radius** does not expand the existing OpenStreetMap 3D importer: a map selection still covers up to around 1.6km per side, and only **actually loaded** buildings/terrain have physical effects. Far-away unselected buildings are not automatically loaded. Real Windows rendering quality, FPS, input feel and online map availability need post-release user testing. The Windows EXE is not Authenticode-signed (SmartScreen warning possible). No Android APK is provided.
+
+          ## Original CI binary and provenance
+          Source commit and release tag: b6490ecb59ccf4bfbd5aa1085f3ed38d1d0048df
+          Windows CI: https://github.com/sopo9880/SCBK/actions/runs/40186721197
+
+          The original CI-built EXE is downloaded, checked against COMMIT_SHA.txt and SHA256SUMS.txt, and uploaded unchanged **without rebuilding or re-signing**. Both verification files are attached.
+
+          Map data © OpenStreetMap contributors (ODbL). Terrain: AWS/Mapzen Terrain Tiles where available.
+          NOTES
+          gh release create "$RELEASE_TAG" \
+            "release-assets/SCBK.exe" \
+            "release-assets/SHA256SUMS.txt" \
+            "release-assets/COMMIT_SHA.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "SCBK v0.2.3 — Windows Preview" \
+            --notes-file release-notes.md
+          echo "Published $RELEASE_TAG from validated original CI artifacts"
