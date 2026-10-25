@@ -1,0 +1,129 @@
+name: Release SCBK v0.2.4 (reuse existing Windows artifact)
+
+# One-shot release branch: keeps the verified v0.2.4 source commit and binary
+# immutable and avoids triggering the main-branch Windows rebuild workflow.
+on:
+  push:
+    branches:
+      - release/v0.2.4
+    paths:
+      - .github/workflows/publish-v0.2.4.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-scbk-v0.2.4
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify existing Windows binary and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: "a8fbca6825981a296def12feab9c5beb3a2e4ea2"
+      SOURCE_RUN: "40196190221"
+      RELEASE_TAG: "v0.2.4"
+    steps:
+      - name: Verify original Windows CI success and source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq '.head_sha')"
+          actual_conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" --jq '.conclusion')"
+          test "$actual_sha" = "$EXPECTED_SHA"
+          test "$actual_conclusion" = "success"
+          echo "Reusing verified CI run #$SOURCE_RUN for source $EXPECTED_SHA"
+
+      - name: Download the original Windows artifact (do not rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          repository: sopo9880/SCBK
+          run-id: 40196190221
+          name: scbk-windows-a8fbca6825981a296def12feab9c5beb3a2e4ea2
+          path: release-assets
+          github-token: ${{ github.token }}
+
+      - name: Verify binary, provenance and SHA-256 checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release-assets/SCBK.exe
+          test -s release-assets/COMMIT_SHA.txt
+          test -s release-assets/SHA256SUMS.txt
+          recorded_sha="$(tr -d '\r\n ' < release-assets/COMMIT_SHA.txt)"
+          if [ "$recorded_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Artifact commit does not match validated Windows build"
+            exit 1
+          fi
+          # PowerShell on Windows may emit CRLF. Preserve the published original,
+          # but normalize a temporary copy for GNU sha256sum on Ubuntu.
+          tr -d '\r' < release-assets/SHA256SUMS.txt > release-assets/.SHA256SUMS.unix
+          (cd release-assets && sha256sum --check .SHA256SUMS.unix)
+          echo "SCBK.exe verified against the CI checksum"
+
+      - name: Create immutable version tag pointing to original build commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists; do not replace an existing release binary"
+            exit 1
+          fi
+          if tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null)"; then
+            if [ "$tag_sha" != "$EXPECTED_SHA" ]; then
+              echo "::error::Existing tag points to a different source commit"
+              exit 1
+            fi
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" -f sha="$EXPECTED_SHA" >/dev/null
+          fi
+          actual_tag="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')"
+          test "$actual_tag" = "$EXPECTED_SHA"
+          echo "Tag $RELEASE_TAG points to validated source commit $EXPECTED_SHA"
+
+      - name: Publish verified CI files on GitHub Releases
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          # SCBK v0.2.4 — Deeper Earth, Rewind and Native Game Feel (Windows)
+
+          A native Windows Godot destruction sandbox update focused on local single-player gameplay and a closer, more intuitive destruction-game feel. All scene and gameplay systems are independently implemented, not copied from proprietary reference games.
+
+          ## What's new
+          - **Progressive Earth digging:** Repeated blasts deform the same collidable terrain, revealing generated soil, crust, mantle, outer core and inner core colors. Depth HUD shows the maximum excavated game depth. G focuses on the deepest crater. Full 6,371 game-km depth is a deliberate compressed arcade mapping (8 displayed km per 3D terrain metre), not a physically sized planet.
+          - **12-action rewind history:** Ctrl+Z restores previous damage masks of affected buildings, rigid-fragment positions/velocities, crater geometry and local score/combo/rank. The game shows a short reverse-fragment animation before applying the saved state; R fully resets the selected region. Delayed elevation imports do not silently erase the ground history.
+          - **More natural camera controls:** Left click to strike, left drag to orbit, right drag to pan, wheel to zoom. With Laser selected, left drag draws the laser cut. Home resets the view, V selects an overhead view, G focuses the deepest hole.
+          - **Procedurally diverse architecture:** New stone, brick, glass, ribbon and dormitory facade families driven by OpenStreetMap names, plus lit windows at night.
+          - **Stars and moon:** Native low-cost nighttime starfield and moon triggered with N; accessible sound mute toggle and on-screen navigation buttons.
+          - **Destruction scoring:** Airborne debris combo and home-run bonuses when rubble is launched more than 70 metres.
+          - **Skippable falling cinematics:** Esc/click speeds up meteor or nuclear falling sequences without cancelling the explosion.
+          - Existing enhanced 8km nuclear mode, earthquake presets, laser ground cuts, map progress and physics budgets are retained. Offline Godot regression tests passed.
+
+          ## Preview limitations
+          SCBK is a stylized, independently implemented Windows sandbox, **not** an exact code/art/UI replica of any proprietary browser game. The 8km nuclear radius impacts only buildings in the currently loaded OpenStreetMap region (at most about 1.6km per side). The crater-depth gauge uses virtual game scale, not a real 6,371km-deep physical mesh. Rewind animates a short fragment return before restoring game state, not every rendered frame backward. Practical FPS, appearance, map connectivity and controls still require testing on Windows after release.
+
+          Windows EXE only; no Android APK. No Windows Authenticode code signature (SmartScreen warning possible).
+
+          ## Verifiable build origin
+          Original Windows CI build: https://github.com/sopo9880/SCBK/actions/runs/40196190221
+          Source SHA / release tag commit: a8fbca6825981a296def12feab9c5beb3a2e4ea2
+
+          This release publishes the successful CI-built EXE **without any additional compilation**. The release workflow compares the original CI source SHA, embedded COMMIT_SHA.txt and SHA256SUMS.txt before publishing the exact EXE along with both provenance files.
+
+          Map data: © OpenStreetMap contributors (ODbL). Terrain: AWS/Mapzen Terrain Tiles where available.
+          NOTES
+          gh release create "$RELEASE_TAG" \
+            "release-assets/SCBK.exe" \
+            "release-assets/SHA256SUMS.txt" \
+            "release-assets/COMMIT_SHA.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "SCBK v0.2.4 — Windows Preview" \
+            --notes-file release-notes.md
+          echo "Published $RELEASE_TAG from validated original CI artifacts"
