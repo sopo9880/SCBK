@@ -1,9 +1,6 @@
-.godot/
-.import/
-build/
+node_modules/
 dist/
-*.tmp
+app/bundle.js
+test/.out*.mjs
 *.log
 .DS_Store
-__pycache__/
-*.pyc

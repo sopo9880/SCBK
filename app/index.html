@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: data: blob:; worker-src 'self' blob:">
+<title>WRECK EARTH — 지구 어디든 부숴 봐</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="favicon.png">
+</head>
+<body>
+<div id="stage"></div>
+<div id="flash"></div>
+
+<!-- 시작 메뉴 -->
+<section id="menu" class="screen">
+  <div class="menu-bg"></div>
+  <div class="menu-inner">
+    <header class="brand">
+      <div class="brand-mark">
+        <span class="w">WRECK</span><span class="e">EARTH</span>
+      </div>
+      <p class="tag">지도 위 어디든, 진짜 물리로 부숴 봐</p>
+    </header>
+
+    <div class="panel search-panel">
+      <label class="lbl" for="q">장소 검색</label>
+      <div class="search">
+        <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2.2" fill="none"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <input id="q" type="text" placeholder="학교, 동네, 랜드마크, 주소… (예: 부산대학교, 강남역, Times Square)" autocomplete="off" spellcheck="false">
+        <button id="qbtn" class="btn ghost">찾기</button>
+      </div>
+      <ul id="results" class="results" hidden></ul>
+      <div class="coords">또는 좌표 직접 입력 <input id="lat" placeholder="위도 35.2335"> <input id="lon" placeholder="경도 129.0805"> <button id="goCoord" class="btn small">이 좌표로</button></div>
+    </div>
+
+    <div class="cols">
+      <div class="panel">
+        <div class="lbl">추천 장소</div>
+        <div id="presets" class="chips"></div>
+      </div>
+      <div class="panel">
+        <div class="lbl">최근 플레이 · 최고 기록</div>
+        <ul id="recent" class="recent"><li class="muted">아직 기록이 없어요</li></ul>
+      </div>
+    </div>
+
+    <div class="panel opts">
+      <div class="opt">
+        <div class="lbl">범위 <b id="radiusVal">600 m</b></div>
+        <input id="radius" type="range" min="300" max="1400" step="100" value="600">
+        <div class="hint" id="radiusHint">반경이 클수록 건물이 많아지고 로딩이 길어져요</div>
+      </div>
+      <div class="opt">
+        <div class="lbl">그래픽</div>
+        <div class="seg" id="quality"></div>
+      </div>
+      <div class="opt">
+        <div class="lbl">시간대</div>
+        <div class="seg" id="timeSeg"></div>
+      </div>
+    </div>
+
+    <footer class="menu-foot">
+      <span>지도 © OpenStreetMap 기여자 · 지형 AWS Terrain Tiles · 비공식 팬 프로젝트</span>
+      <span class="kbd-hint">우클릭 드래그 회전 · 휠 확대 · WASD 이동 · 1~9 무기</span>
+      <span class="foot-actions" id="footActions" hidden><button class="link" id="shotDir">스크린샷 폴더</button><button class="link" id="cacheBtn">지도 캐시 비우기</button></span>
+    </footer>
+  </div>
+</section>
+
+<!-- 로딩 -->
+<section id="loading" class="screen" hidden>
+  <div class="load-box">
+    <div class="load-title" id="loadTitle">불러오는 중</div>
+    <ol id="steps" class="steps"></ol>
+    <div class="bar"><i id="bar"></i></div>
+    <div id="loadErr" class="err" hidden></div>
+    <div class="load-actions" id="loadActions" hidden>
+      <button class="btn" id="retry">다시 시도</button>
+      <button class="btn ghost" id="toDemo">오프라인 데모로</button>
+      <button class="btn ghost" id="toMenu">메뉴로</button>
+    </div>
+  </div>
+</section>
+
+<!-- 게임 HUD -->
+<section id="hud" hidden>
+  <div class="top-left">
+    <button id="back" class="icon-btn" title="메뉴 (Esc)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="place">
+      <div id="placeName" class="pname">—</div>
+      <div id="placeSub" class="psub"></div>
+    </div>
+  </div>
+
+  <div class="top-right">
+    <div class="score-card">
+      <div class="score-lbl">파괴 점수</div>
+      <div id="score" class="score">0</div>
+      <div class="meter"><i id="pctBar"></i></div>
+      <div class="score-row"><span id="destroyed">0 / 0동 붕괴</span><span id="pct">0%</span></div>
+      <div id="best" class="best"></div>
+    </div>
+    <div id="perf" class="perf"></div>
+  </div>
+
+  <div class="tools">
+    <button class="icon-btn" id="tSlow" title="슬로모션 (T)"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="13" r="8" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 13V9M9 2h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    <button class="icon-btn" id="tTime" title="시간대 바꾸기 (N)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/></svg></button>
+    <button class="icon-btn" id="tShot" title="스크린샷 (P)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 8h3l2-3h6l2 3h3v11H4z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="2" fill="none"/></svg></button>
+    <button class="icon-btn" id="tReset" title="도시 다시 세우기 (Ctrl+R)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 12a8 8 0 1 0 2.5-5.8M4 4v5h5" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="icon-btn" id="tMute" title="소리 (M)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path id="muteWave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
+    <button class="icon-btn" id="tHelp" title="조작법 (H)"><span style="font-weight:800">?</span></button>
+  </div>
+
+  <div class="dock">
+    <div class="power">
+      <span class="lbl">위력</span>
+      <input id="power" type="range" min="0.5" max="3" step="0.1" value="1">
+      <b id="powerVal">×1.0</b>
+    </div>
+    <div id="weapons" class="weapons"></div>
+    <div id="wdesc" class="wdesc"></div>
+  </div>
+
+  <div id="tip" class="tip" hidden></div>
+  <div id="toasts" class="toasts"></div>
+  <div id="slowBadge" class="slow-badge" hidden>SLOW MOTION</div>
+
+  <div id="help" class="help" hidden>
+    <div class="help-card">
+      <h3>조작법</h3>
+      <dl>
+        <dt>왼쪽 클릭</dt><dd>무기 사용 (레이저는 누른 채 드래그)</dd>
+        <dt>오른쪽 드래그 · Q/E</dt><dd>카메라 회전</dd>
+        <dt>휠 · R/F</dt><dd>확대 / 축소</dd>
+        <dt>가운데 드래그 · WASD</dt><dd>이동 (Shift = 빠르게)</dd>
+        <dt>1 ~ 9</dt><dd>무기 선택</dd>
+        <dt>[ / ]</dt><dd>위력 조절</dd>
+        <dt>T</dt><dd>슬로모션</dd>
+        <dt>N</dt><dd>시간대 바꾸기</dd>
+        <dt>P</dt><dd>스크린샷 저장</dd>
+        <dt>U</dt><dd>UI 숨기기 (사진 찍기 좋게)</dd>
+        <dt>H</dt><dd>이 도움말</dd>
+        <dt>Esc</dt><dd>메뉴로</dd>
+        <dt>F11</dt><dd>전체 화면</dd>
+      </dl>
+      <button class="btn" id="helpClose">닫기</button>
+    </div>
+  </div>
+</section>
+
+<script src="bundle.js"></script>
+</body>
+</html>

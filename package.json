@@ -1,0 +1,62 @@
+{
+  "name": "wreck-earth",
+  "version": "1.0.0",
+  "description": "지도 위 어디든 진짜 물리로 부수는 게임",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "bundle": "esbuild src/app.js --bundle --format=iife --minify --outfile=app/bundle.js",
+    "start": "npm run bundle && electron .",
+    "dist": "npm run bundle && electron-builder --win --x64",
+    "test": "esbuild test/fracture.test.mjs --bundle --platform=node --format=esm --outfile=test/.out1.mjs --log-level=warning && node test/.out1.mjs && esbuild test/real.test.mjs --bundle --platform=node --format=esm --outfile=test/.out2.mjs --log-level=warning && node test/.out2.mjs && node test/rapier.test.mjs"
+  },
+  "author": "WreckEarth",
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "earcut": "^3.2.4",
+    "three": "^0.186.1"
+  },
+  "productName": "WreckEarth",
+  "build": {
+    "appId": "com.wreckearth.desktop",
+    "productName": "WreckEarth",
+    "copyright": "Map data © OpenStreetMap contributors",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "WreckEarth-${version}-portable.exe"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sopo9880/SCBK"
+  }
+}

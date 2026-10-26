@@ -1,146 +1,74 @@
-# SCBK — World Smash for Windows
+# WRECK EARTH — 지도 위 어디든 진짜 물리로 부숴 봐
 
-SCBK v0.2.3 development: **native Godot 4.5.1 Windows 3D destruction sandbox** based on freely selectable real-world places. Windows-only; there is **no Android build or Android source release**.
+실제 지도(OpenStreetMap)와 실제 지형 높이로 지구 어느 곳이든 3D 도시를 만들고, 물리 엔진으로 건물을 부수는 Windows 데스크톱 게임입니다. 설치 없이 실행되는 exe 하나로 동작합니다.
 
-## v0.2.4 — Original-feel native single-player parity (Windows)
+## 다운로드
 
-**Purpose:** Make SCBK feel more like an intuitive 3D building-destruction game rather than a collection of isolated effects, without loading the gameplay through a browser. The [SMASH CAU](https://github.com/Hong-Iron/SMASH-CAU) public README was consulted as a gameplay **reference only**. Its LICENSE reserves copyright over its code, artwork and screen design but expressly permits independent games using a similar idea. SCBK does **not** copy or bundle its copyrighted JavaScript, textures, code-based graphics or page design, and does not claim to be the same game or affiliated with its creator.
+[Releases](../../releases/latest)에서 받으세요.
 
-### New native mechanics
+- `WreckEarth-x.y.z-portable.exe` — 더블클릭으로 바로 실행 (설치 없음)
+- `WreckEarth-x.y.z-win.zip` — 압축을 풀고 `WreckEarth.exe` 실행
 
-- **One-button building destruction, drag/orbit and laser control:** Left-click a building/ground to use the selected tool; left-drag rotates the camera, right-drag pans, wheel zooms. Selecting **Laser (3)** reserves left-drag to draw the beam path and releasing fires it; no separate website or browser is needed.
-- **Progressively deeper Earth excavation:** Impact damage makes a persistent collidable crater. As the same location is excavated further, exposed ground colors change through **surface/soil → crust → mantle → outer core → inner core**. A left-bottom depth bar reports the deepest excavated point, and **G** moves the camera into that hole. The center of the Earth is **6,371 game km** deep in this *condensed arcade coordinate model*: 1 metre of deformed 3D ground is mapped to 8 display km. This is intentionally **not a real-scale terrestrial physics simulation**.
-- **Atomic multi-step rewind (12 most recent attacks):** Each attack records damaged buildings, which building cells were intact, existing fragment positions/velocities, full crater shape, and local score/combo/rank state. **Ctrl+Z** visibly pulls up to 48 active fragments toward their source before restoring the true saved structural and terrain checkpoint. Multiple shock waves count as one attack. **R** resets the entire current area. An elevation download arriving between attack and undo is accommodated by replaying earlier ground modifications on the new base DEM.
-- **Procedurally differentiated architecture:** Independent shader families for brick, stone, glass and other building facade types (including night window lights) make OSM-based campus maps less repetitive. OSM source names and footprints are preserved; no proprietary campus textures or screenshots are used.
-- **Night environment:** **N** now reveals a low-overhead procedural field of 120 low-poly stars and a moon. Daytime restores the original daylight sky. This requires no external art assets.
-- **Arcade depth and score cues:** HUD keeps style rank, score and combo. Airborne fragments can be struck again for an **air-combo bonus**; rubble moving more than 70m from its original building can earn a **home-run bonus**. 3D object inspection is polled at most a few times a second and uses the existing 160-body cap.
-- **Camera and usability:** **Home** restores the first orbit, **V** changes to overhead, **G** focuses the deepest pit. Explicit on-screen buttons provide these options plus sound mute and rewind. **Esc** or a click during meteor/nuke falls accelerates the cinematic instead of cancelling the ensuing blast.
+Windows 10/11 64비트용입니다. 코드 서명이 없어서 처음 실행할 때 "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**을 누르세요.
 
-### Current accuracy boundaries
+## 특징
 
-This is **not** a byte-identical, pixel-perfect port of SMASH CAU. Exact original building models, animations, underlying source, assets and screen design are **not** reproduced. The lightweight distant-collapse path remains stylized, and the 8km nuclear blast affects mapped geometry only within the loaded region (which remains up to approximately 1.6km per side). Reverse animation smoothly converges fragments to their source and restores checkpoint state, rather than recording and rewinding every rendered frame backward in time. The depth is an arcade compression of game-world metres, not a literal 6,371 km-deep mesh. Original school's leaderboard, sharing and visitor analytics are intentionally excluded from this offline personal-game priority.
+- **어디든 불러오기** — 지명·주소·좌표로 검색하면 그 자리의 건물, 도로, 공원, 숲, 강, 지형 높낮이를 받아 3D로 만듭니다. 한 번 받은 지역은 PC에 저장돼 다음부터 바로 열립니다.
+- **진짜 물리 파괴** — 건물을 수십~수백 개 조각으로 나눠 [Rapier](https://rapier.rs) 물리 엔진으로 시뮬레이션합니다. 기둥이 끊긴 층 위는 기울며 넘어지고, 무너지는 무게가 아래층을 연달아 짓눌러 바닥까지 내려앉습니다.
+- **무기 9종** — 폭탄, 미사일, 궤도 레이저, 운석우, 지진, 토네이도, 블랙홀, 철거 철구, 핵폭탄. 위력은 ×0.5~×3.
+- **그래픽** — 실시간 그림자, 셰이더로 그린 창문(밤에는 불이 켜짐), 하늘과 구름, 불꽃 빛번짐, 크레이터와 그을음. 시간대 4가지(아침·한낮·노을·밤), 품질 4단계.
+- **오프라인 데모 시티** — 인터넷 없이도 절차 생성 도시에서 바로 플레이.
+- 슬로모션, 스크린샷(사진 폴더 `WreckEarth`에 저장), 장소별 최고 기록.
 
-### Validation and release
+## 조작
 
-Godot PR CI retains all v0.2.0–v0.2.3 offline regressions and adds integration tests for local mouse input, alternate camera viewpoints, night sky, sound mute and native HUD, plus exact structure/fragment/terrain/score restoration, Earth-layer depth and delayed DEM loading. Windows EXE builds run **only after merging a successful PR**. Releasing must reuse that successful CI-built EXE without recompilation, verify SHA-256 checksums, and leave previous tags/binaries immutable. Visual and device-specific gameplay feel must be evaluated by the user after the official release.
+| 입력 | 동작 |
+|---|---|
+| 왼쪽 클릭 | 무기 사용 (레이저는 누른 채 드래그) |
+| 오른쪽 드래그 · Q/E | 카메라 회전 |
+| 휠 · R/F | 확대 / 축소 |
+| 가운데 드래그 · WASD | 이동 (Shift = 빠르게) |
+| 1 ~ 9 | 무기 선택 |
+| [ / ] | 위력 조절 |
+| T | 슬로모션 |
+| N | 시간대 바꾸기 |
+| P | 스크린샷 |
+| U | UI 숨기기 |
+| H | 도움말 |
+| Ctrl+R | 도시 다시 세우기 |
+| Esc | 메뉴로 |
+| F11 | 전체 화면 |
 
-## v0.2.3 — offline native cinematic weapons, 8km nuke, earthquakes and progress
+## 직접 빌드
 
-This Windows-only Godot update focuses on the feel of a standalone physics/destruction game rather than the speed and restrictions of a browser scene. It remains an **original independent implementation** that does not bundle source code, graphics, audio or other copyrighted materials from the reference browser game.
+```bash
+npm ci
+npm start          # 개발 실행 (Electron)
+npm test           # 조각화·물리 테스트
+npm run dist       # Windows exe/zip 빌드 → dist/
+```
 
-### Major changes
+### 릴리스 방법
 
-- **Dedicated 8km nuclear preset:** Select weapon 6 then **8 km**. Regular fine adjustment stays at 40–360m. The 8km blast has a world-space radius of 8,000 metres, bigger camera far plane, cinematic pullback and staged fireball/pressure-ring propagation. Within the **currently loaded OSM region** every mapped building in the blast range can collapse; nearby ones receive detailed physical chunks, distant ones use lightweight graphical collapse rather than exhausting the 160-rigid-body cap. Reset or Undo restores the collapsed buildings.
-- **Explicit 3D map coverage:** The 8km effect extends geographically beyond the visible region, but 3D map selection still loads up to ~1.6km per side. **Buildings outside the actual loaded region are not secretly generated or damaged.** The controls state this openly; the 8km mode provides spectacular impact on the loaded neighbourhood without asserting unrealistic full-city simulation.
-- **Truthful map progress bar:** Top-centre panel appears for live map requests, cache hits and world generation. Network requests have an **animated indeterminate bar** and server number, never a made-up network percentage. After receiving data it switches to measurable stages (JSON parse, actual count of OSM elements processed, building creation, roads, vegetation, ready). On cancel/failure it disappears and preserves Retry/Cancel behavior.
-- **Adjustable earthquake intensity:** Weapon 5 exposes magnitude **M4.0–M10.0** in 0.1 increments with 4/6/8/10 presets. About three seconds of pulses change shake, epicentral radius, damage, surface deformation and secondary collapse. High intensity is deliberately heavy on *loaded* structures but uses bounded physics.
-- **Reference-inspired laser:** Weapon 3 traces a user-drawn world-space path (up to 96 points) after a visible charge; three concentric cyan/white beams sweep across it, repeatedly fracture nearby structures, and carve/scorch one continuous real terrain collision groove. A single mesh rebuild avoids a frame hitch per sample.
-- **Weapon improvements:** Bomb and meteor base damage and craters are stronger; the bat gets a 0.5–3.0x size/strength slider with presets. Meteor and nuclear drops trigger an aerial camera pullback and restore the previous viewpoint when the action finishes.
-- **Performance design:** no Android build; the number of *simulated* flying pieces is still capped at 160, visible small areas get high-fidelity destruction, and wide-area collapses reuse existing mapped buildings rather than spawning millions of fragments. Transient FX expire automatically. Existing cached regions, user data, controls and the v0.2.2 installed application identity are preserved.
+`package.json`의 `version`을 올리고, 커밋 메시지에 `[release]`를 넣어 `main`에 푸시하면 GitHub Actions가 Windows에서 exe를 빌드해 릴리스를 만듭니다. **이 워크플로는 기존 릴리스와 태그를 모두 지우고 새 릴리스 하나로 교체합니다.** Actions 탭의 *Release* 워크플로에서 직접 실행할 수도 있습니다.
 
-### Updated controls
+## 구조
 
-| Action | How |
-| --- | --- |
-| Choose nuclear blast | Weapon 6, 40–360m slider or **8 km** preset |
-| Nuclear aiming | Move cursor for a ground-following radius ring; click ground/building |
-| Earthquake magnitude | Weapon 5, M4.0–M10.0 slider or M4/M6/M8/M10 preset |
-| Bat size | Weapon 2, 0.5–3.0x size slider and quick presets |
-| Charged laser | Weapon 3, hold left click and draw across terrain/buildings, release |
-| Map loading status | Top centre when fetching/assembling map; Cancel/Retry in map card |
-| Reset collapsed buildings, rubble and terrain | R; existing undo remains Ctrl+Z |
+| 경로 | 내용 |
+|---|---|
+| `electron/` | 메인 프로세스(창, 지도·지형·검색 요청, 디스크 캐시, 스크린샷), 프리로드 |
+| `src/geo.js` | 좌표 변환, Overpass 쿼리, OSM 파싱(멀티폴리곤 포함), 건물 높이 추정 |
+| `src/terrain.js` | AWS Terrarium 지형 타일 → 높이맵, 크레이터, 강바닥 파기 |
+| `src/fracture.js` | 건물 외피와 조각(정육면체에 가깝게 자른 각기둥) 생성 |
+| `src/destruction.js` | Rapier 물리, 구조 지지·연쇄 붕괴, 폭발·회오리·중력장, 파편 예산 |
+| `src/weapons.js` | 무기와 투사체 |
+| `src/fx.js` · `src/audio.js` | 파티클 연출, 실시간 합성 효과음 |
+| `src/world.js` · `src/materials.js` | 지면 텍스처, 물, 나무, 창문 셰이더 |
+| `src/game.js` · `src/app.js` | 렌더링 루프, 후처리, 카메라, 메뉴·HUD |
 
-**Preview notes:** The 8km blast is a game effect scale, **not a licensed nuclear weapons simulator** or an 8km satellite terrain download. Strong quake and laser effects are stylized approximations. Screenshots, frame rate, real map connectivity and actual input quality require post-release Windows testing. The EXE is not Authenticode signed, so Windows SmartScreen may warn. The release process must reuse the single original Windows CI-built EXE without rebuilding it.
+## 데이터와 고지
 
-## v0.2.2 — grounded world maps, ground strikes and scalable nuclear blasts
-
-**This update follows real Windows v0.2.1 testing.** Real Dong-A campus OSM geometry and elevation loaded successfully, but the plain terrain did not communicate which place was being viewed, bombs were too geometric, and destructible building chunks were overly regular.
-
-- **Live 3D terrain map projection:** selected OSM roads, footprints and terrain are drawn into a geographically aligned 512x512 land texture. The app may reuse **only OpenStreetMap map-picker tiles already cached through normal interactive viewing** for an accurate road/label image. It does not scrape/bulk-download or prefetch raster imagery when generating the 3D scene. An always-visible OSM attribution appears at the bottom left. Press **T** or click **지형 지도** to toggle the overlay. Actual OSM building names (if available) appear as a limited number of billboard markers.
-- **Ground targeting:** bomb, laser, meteor, quake and nuke can now target terrain even when the mouse is not over a building. The bat is intentionally limited to buildings and fragments. The hit ray can fall back to heightmap intersection within the actual visible ground. Explosion centres are projected to ground level; crater geometry and collision match.
-- **Real terrain damage:** a bowl-shaped crater with raised rim and scorching is written into the heightmap and collision surface. Impact effects also work with textured terrain. If high-resolution elevation data arrives after an explosion, the crater remains. Reset clears craters and scorch.
-- **Custom nuke blast radius:** select weapon **6** to expose a slider (40–360 m), three quick presets (60/160/320 m), an actual ground-following target circle, and Shift+mouse wheel adjustments. The effective damage range, pressure-wave visuals, crater radius, dust and shake are tied to the selected radius.
-- **Weapon differentiation:** bombs descend before detonation; meteor and nuclear strikes display impact warnings, pressure waves and bounded CPU particle dust/sparks. A nucleus-like stem and smoke lobes replace the single opaque nuke circle. Nuclear damage unfolds in multiple radial phases.
-- **Improved fragmentation:** chunk meshes have chipped, irregular concrete surfaces rather than window-textured boxes. Unsupported upper pieces can fall after lower sections fail (budgeted to avoid mass physics growth), and surviving walls gain modest wear shading.
-- **Tests:** offline 3D map raster projection, ground crater/late DEM/scorch/reset, bat-only restrictions and nuke slider-to-weapon synchronization are included in PR checks along with existing fracture tests.
-
-### What this does not do
-
-The 3D projection uses **OSM cartographic/vector mapping**, not satellite or photographic imagery. Third-party satellite photography cannot be bundled or downloaded without an appropriate license/API. OSM map data and the cached, previously viewed map tiles still depend on the user's available coverage. Physics and effects are stylized prototypes rather than engineering-accurate structural simulation; a 160 active-debris-body cap remains. Larger nuclear ranges can hit many buildings while physics limits constrain simultaneously simulated rubble. Profiling FPS, input hit accuracy and visual acceptance on Windows is still necessary after the official release.
-
-### New controls
-
-| Function | Key / interaction |
-| --- | --- |
-| Toggle projected cartographic ground | T / 지형 지도 |
-| Bomb, meteor, quake or nuke | Ground or building left click |
-| Bat | Building/fragment left click only |
-| Nuke range | Weapon 6 slider, presets, or Shift+wheel |
-| Inspect nuclear target radius | Select tool 6 and move mouse over terrain |
-| Clear craters, damaged buildings and fragments | R |
-
-## v0.2.1 — changes after the first real Windows screenshot
-
-- **Compact in-game HUD:** the old screen-height diagnostic sidebar is replaced by a small collapsible world/map card in the upper-left corner and a six-weapon dock at the bottom. Score and style remain in the upper right. The world-map picker remains fully accessible.
-- **Honest map status:** duplicate region clicks no longer falsely display a download failure. While data is loading, a visible Cancel button is available; after a real Overpass failure, Retry and per-server HTTP/timeout details are shown. Selecting a different region cancels the previous request.
-- **Offline behavior:** already downloaded regions continue to load from cache, and failures do not erase the active 3D scene. The first scene is explicitly identified as *fictional training data* until the real campus has successfully loaded. Real campus data is **not bundled**, so Windows still needs access to public OpenStreetMap/Overpass servers to show it.
-- **Less artificial appearance:** the default camera starts closer to the training buildings; masonry/window materials, cornices, roof colors, trees and terrain size were adjusted to reduce a blue-checkered-box-on-empty-grass impression.
-- **More accurate collisions after destruction:** on first fracture, the coarse full-building collision is disabled and replaced by individual still-intact cell colliders; destroyed cells no longer leave invisible solid walls.
-- **Reliable craters on small maps:** the crater radius adapts to the grid resolution instead of disappearing between sparse vertices.
-- **Tests:** added offline cache / cancellation / retry coverage, scene-tree HUD smoke checks and fracture-collider regression.
-
-**Important:** This is still a stylized sandbox under active development, not a faithful graphical or mechanical reproduction of SMASH. Only Godot headless tests run in PR CI. Windows visual quality and actual map connectivity must be tested on the officially released EXE by the user.
-
-## What changed for v0.2.0
-
-- Detailed procedural facades: generated walls, windows and roofing, with lit windows in night mode.
-- Partial building fractures: buildings initially render as a single static geometry. On the first hit they switch to up to 80 static cells; only the cells actually struck become physical fragments. Remaining floors stay in place and are breakable by later attacks. Dynamic fragments can be struck again.
-- More varied weapon behavior:
-  - Bomb: localized explosion and terrain crater.
-  - Bat: short-range directional impact with a visible swing.
-  - Laser: click-drag a path through buildings; charged sequential strikes along the stroke.
-  - Meteor: projectile falls from the sky, with a larger blast and crater.
-  - Quake: repeated impacts and camera shake over several seconds.
-  - Nuke: falling projectile, large stylized mushroom cloud, timed slow motion and huge blast.
-- Local score, combos, style ranks D–SSS, camera shake, generated sound effects and day/night mode.
-- Real terrain elevation: asynchronous AWS Terrain Tiles (Terrarium, Mapzen) decoder with tile caching. DEM drives collidable terrain height and helps place roads and buildings; temporary network failure retains flat ground.
-- 3D roads and light procedural vegetation generated using GPU MultiMesh.
-- Strict render/physics ceilings: maximum 280 loaded OSM buildings, ~160 tree instances and 160 simultaneously simulated debris bodies.
-
-## Map workflow preserved
-
-Select **지도 [M]** to search a place, pan/zoom the world map, then click or draw a rectangle and press **BUILD SELECTED 3D REGION**. Limited to 50–1600 metres on each side to protect memory and public APIs. Initial Dong-A Seunghak campus preset, direct coordinates and synthetic offline training scene also remain available.
-
-Initial map downloads need network access (OpenStreetMap tiles, Nominatim geocoding, Overpass building/road geometry, AWS Terrain Tiles elevation). These map/DEM downloads are locally cached when successful.
-
-## Windows controls
-
-| Action | Input |
-| --- | --- |
-| Attack / launch selected weapon | Left mouse |
-| Laser swipe | Choose tool 3, left-drag across the scene, release |
-| Orbit camera | Right mouse drag |
-| Pan camera | Middle mouse drag |
-| Zoom | Mouse wheel |
-| Tools bomb/bat/laser/meteor/quake/nuke | Number keys 1–6 |
-| Toggle night lights | N |
-| World map search/selection | M |
-| Undo last building group (not score) | Ctrl+Z |
-| Reset buildings, debris and terrain | R |
-
-## Accuracy and performance limitations
-
-This remains a stylized **game preview**, not a photographic reconstruction of the real place. OpenStreetMap building footprints and available floor heights are approximate. DEM is bare-earth, low-resolution SRTM-based elevation (not surveyed building foundations), and isn't always available. Replacing a whole building mesh with cells approximates the remaining building silhouette; true structural engineering/collision simulation, full-fidelity cracks, buried foundations and animated reverse-reconstruction are **not** claimed. Roads may visually bridge fresh craters. The six effects are independently implemented and are not direct copies of the original SMASH game's proprietary code or artwork.
-
-Windows CI will only compile and export a release executable after PR approval and merge. Real Windows gameplay/visual quality must be verified with the resulting officially published release, not inferred from headless tests. Keep v0.1.0 binaries unchanged.
-
-Map data: © OpenStreetMap contributors (ODbL), AWS Terrain Tiles / Mapzen (see their attribution requirements). Third-party imagery is not bundled with the game. Please respect public API usage policies.
-
-## Developer workflow
-
-- PR: Godot headless import/parse, map projections, destructible-world/score regression, startup smoke test and source/data assertions.
-- After user command **확인해** and successful checks: merge PR; Windows Build CI exports one Windows executable with checksum and commit SHA.
-- Separate release stage publishes that *same* verified binary without re-compilation.
-- No Android features or export preset in this scope.
-
-This is an independently developed Godot implementation. No code was copied from Hong-Iron/SMASH repositories.
+- 지도 데이터 © [OpenStreetMap](https://www.openstreetmap.org/copyright) 기여자 (ODbL). Overpass API로 받습니다.
+- 지형 높이: [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) (Terrarium 형식, SRTM 등 기반).
+- 장소 검색: [Nominatim](https://nominatim.org) (이용 정책에 맞춰 초당 1회 이하로 요청).
+- 웹 게임 [SMASH 대학교](https://hong-iron.github.io/SMASH/)에서 아이디어를 얻은 **독립 구현**입니다. 원작의 코드·그래픽·화면 디자인을 가져오지 않았고, 원작이나 각 학교·기관과 관계없는 비공식 팬 프로젝트입니다. 학교 로고와 교표는 쓰지 않습니다.
