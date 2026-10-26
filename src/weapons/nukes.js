@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { makeNukeBomb, makeBomber, makeICBM, makeSilo, makeWarhead } from './models.js';
 import { makeTsarBomb, makeParachute, makeAntimatter } from './models2.js';
+import { worldEnd } from './apocalypse.js';
 import { ease } from '../cinematic.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -157,7 +158,9 @@ export function detonate(A, q, { scale = 1, light = false, kt = null, kind = 'nu
   const Rv = N.cloud * (kind === 'anti' ? 0.8 : 1);
   if (game) {
     game.ensureView(Rv * 8, Rv * 3.2);
-    if (Y >= 4000) { const lv = Math.min(1, 0.35 + 0.65 * Math.log10(Y / 4000) / 1.1); A.addActive({ t: 0, update(dt) { this.t += dt; if (this.t > 4) { game.setDoom(lv, kind); return false; } return true; } }); }
+    // 지평선 너머 마을까지 쓸어버리는 충격파 + 큰 폭발은 핵겨울과 행성 시점 마무리
+    const lv = Math.max(0, Math.min(1, Math.log10(Y / 2000) / 1.3));
+    worldEnd(A, q, kind, { level: lv, delay: 0.3, doom: Y >= 4000, waveMax: Math.min(N.r5, 40000), waveSpeed: Math.max(500, N.r5 / 9), finale: lv >= 1, finaleDelay: 16, crust: Y >= 20000 });
   }
   // 충격파 고리 (지도 너머 지평선까지)
   fx.ring(q, Math.min(N.r1, 90000), dur * 1.6, kind === 'anti' ? 0xd8c8ff : 0xffe2b0, 0.55);
@@ -463,8 +466,8 @@ export const NUKES = {
       const camF = v3().subVectors(tgt, camera.position); camF.y = 0; camF.normalize();
       const ang = Math.atan2(camF.z, camF.x) + (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.5);
       const Dist = Math.max(half * 2.2, 9000 + Math.random() * 3000);
-      const outerY = world && world.outer ? world.outer.position.y + 1.5 : grid.sample(half, half);
-      const siloPos = v3(tgt.x + Math.cos(ang) * Dist, outerY, tgt.z + Math.sin(ang) * Dist);
+      const sxz = [tgt.x + Math.cos(ang) * Dist, tgt.z + Math.sin(ang) * Dist];
+      const siloPos = v3(sxz[0], (world && world.outerHeight ? world.outerHeight(sxz[0], sxz[1]) : grid.sample(half, half)) + 1.5, sxz[1]);
       const toT = v3(tgt.x - siloPos.x, 0, tgt.z - siloPos.z).normalize();
       const side = v3(-toT.z, 0, toT.x);
       const silo = A.spawn(makeSilo(), 1.6); silo.position.copy(siloPos);

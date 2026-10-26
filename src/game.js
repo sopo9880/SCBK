@@ -16,6 +16,7 @@ import { HueSaturationShader } from 'three/examples/jsm/shaders/HueSaturationSha
 import { BrightnessContrastShader } from 'three/examples/jsm/shaders/BrightnessContrastShader.js';
 import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
 import { defaultCfg } from './settings.js';
+import { PlanetFinale } from './planet.js';
 import { World } from './world.js';
 import { Destruction } from './destruction.js';
 import { FX } from './fx.js';
@@ -29,6 +30,19 @@ export const QUALITY = {
   medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxLoose: 16000, maxDynamic: 2200, maxLight: 12000, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
   high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxLoose: 26000, maxDynamic: 3500, maxLight: 20000, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
   ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxLoose: 38000, maxDynamic: 5000, maxLight: 30000, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
+};
+
+// 종말 날씨 종류: 하늘(지평선/위쪽) 색, 안개 색, 떨어지는 재 색, 불씨 비율, 지평선 불길
+export const DOOM_KINDS = {
+  nuke: { low: [1.0, 0.36, 0.08], high: [0.2, 0.075, 0.045], fog: 0x5a3422, ash: [0.25, 0.45], ember: 0.15, fires: true },
+  impact: { low: [0.9, 0.45, 0.2], high: [0.22, 0.13, 0.08], fog: 0x5c4630, ash: [0.3, 0.45], ember: 0.1, fires: true },
+  fire: { low: [1.0, 0.45, 0.1], high: [0.45, 0.12, 0.04], fog: 0x7a3a18, ash: [0.2, 0.35], ember: 0.55, fires: true },
+  ash: { low: [0.55, 0.45, 0.35], high: [0.12, 0.11, 0.1], fog: 0x4a4540, ash: [0.35, 0.55], ember: 0.04, fires: false },
+  ice: { low: [0.8, 0.9, 1.0], high: [0.35, 0.45, 0.6], fog: 0xc8d8e8, ash: [0.9, 1.0], ember: 0, fires: false, snow: true },
+  void: { low: [0.55, 0.3, 0.9], high: [0.03, 0.0, 0.06], fog: 0x1a1028, ash: [0.4, 0.6], ember: 0.2, emberCol: [0.7, 0.4, 1.0], fires: false },
+  anti: { low: [0.7, 0.4, 1.0], high: [0.12, 0.06, 0.2], fog: 0x241c34, ash: [0.5, 0.7], ember: 0.2, emberCol: [0.8, 0.6, 1.0], fires: true },
+  dust: { low: [0.85, 0.6, 0.35], high: [0.35, 0.25, 0.15], fog: 0x8a6a48, ash: [0.5, 0.6], ember: 0, fires: false },
+  water: { low: [0.4, 0.55, 0.65], high: [0.15, 0.2, 0.28], fog: 0x506070, ash: [0.6, 0.7], ember: 0, fires: false, rain: true },
 };
 
 export const TIMES = {
@@ -315,13 +329,13 @@ export class Game {
       this._dome.material.uniforms.uK.value = Math.min(1, d * 1.05);
       if (this.world && this.world.outer) { const oc = this.world.outer.material.color; if (!this._outer0) this._outer0 = oc.clone(); oc.copy(this._outer0).lerp(this._ashGround || (this._ashGround = new THREE.Color(0x3a2e26)), d * 0.8); }
       // 지평선 곳곳에서 타오르는 불길
-      if (d > 0.4 && this.fx) {
+      if (d > 0.4 && this.fx && (!this._dk || this._dk.fires)) {
         this._hzAcc = (this._hzAcc || 0) + dt * d * 6;
         const p = this.camera.position;
         while (this._hzAcc > 1) {
           this._hzAcc -= 1;
           const a = Math.random() * 6.28, r = 1500 + Math.random() * 9000;
-          const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = this.world.outer ? this.world.outer.position.y : 0;
+          const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = this.world.outerHeight ? this.world.outerHeight(x, z) : 0;
           this.fx.fire.emit(x, y + 40, z, 0, 30, 0, 4, 160, 260, [1, 0.45, 0.1, 0.9], [0.6, 0.1, 0.02, 0], 0.2, 2);
           this.fx.smoke.emit(x, y + 200, z, 0, 40, 0, 14, 300, 900, [0.12, 0.1, 0.09, 0.8], [0.15, 0.13, 0.12, 0], 0.05, 3);
         }
@@ -334,8 +348,9 @@ export class Game {
       while (this._ashAcc > 1) {
         this._ashAcc -= 1;
         const x = p.x + (Math.random() - 0.5) * 260, z = p.z + (Math.random() - 0.5) * 260, y = p.y + 20 + Math.random() * 80;
-        if (Math.random() < 0.15) this.fx.fire.emit(x, y, z, 0, -2, 0, 5, 0.35, 0.2, [1, 0.45, 0.1, 1], [0.6, 0.1, 0.02, 0], 0.2, 0, 0);
-        else { const g = 0.25 + Math.random() * 0.2; this.fx.smoke.emit(x, y, z, (Math.random() - 0.5) * 2, -3 - Math.random() * 2, (Math.random() - 0.5) * 2, 7, 0.5, 0.6, [g, g, g, 0.85], [g, g, g, 0], 0, 0, 0); }
+        const P = this._dk || DOOM_KINDS.nuke;
+        if (Math.random() < P.ember) { const ec = P.emberCol || [1, 0.45, 0.1]; this.fx.fire.emit(x, y, z, 0, -2, 0, 5, 0.35, 0.2, [ec[0], ec[1], ec[2], 1], [ec[0] * 0.6, ec[1] * 0.2, ec[2] * 0.2, 0], 0.2, 0, 0); }
+        else if (!P.snow) { const g = P.ash[0] + Math.random() * (P.ash[1] - P.ash[0]); this.fx.smoke.emit(x, y, z, (Math.random() - 0.5) * 2, -3 - Math.random() * 2, (Math.random() - 0.5) * 2, 7, 0.5, 0.6, [g, g * 0.97, g * 0.94, 0.85], [g, g, g, 0], 0, 0, 0); }
       }
     }
   }
@@ -357,13 +372,23 @@ export class Game {
     return m;
   }
 
+  // 지도 안은 지형, 밖은 바깥 세계 높이
+  groundAt(x, z) {
+    const h = this.grid.span / 2;
+    if (Math.abs(x) < h && Math.abs(z) < h) return this.grid.sample(x, z);
+    return this.world && this.world.outerHeight ? Math.max(this.world.outerHeight(x, z), this.grid.sample(x, z) - 400) : this.grid.sample(x, z);
+  }
+
   // 핵겨울 (0~1)
   setDoom(level, kind = 'nuke') {
+    const P = DOOM_KINDS[kind] || DOOM_KINDS.nuke;
     this.doom = Math.max(this.doom || 0, level);
+    this._dk = P;
     const u = this._doomDome().material.uniforms;
-    if (kind === 'anti') { u.uLow.value.setRGB(0.7, 0.4, 1.0); u.uHigh.value.setRGB(0.12, 0.06, 0.2); } else { u.uLow.value.setRGB(1.0, 0.36, 0.08); u.uHigh.value.setRGB(0.2, 0.075, 0.045); }
-    if (this._doomFog) this._doomFog.set(kind === 'anti' ? 0x241c34 : 0x5a3422);
-    else this._doomFog = new THREE.Color(kind === 'anti' ? 0x241c34 : 0x5a3422);
+    u.uLow.value.setRGB(...P.low); u.uHigh.value.setRGB(...P.high);
+    if (this._doomFog) this._doomFog.set(P.fog); else this._doomFog = new THREE.Color(P.fog);
+    if (P.snow) this.frost = Math.max(this.frost || 0, level);
+    if (P.rain) this.storm = Math.max(this.storm || 0, level * 0.8);
   }
 
   // 거대 폭발을 볼 수 있게 시야·줌 거리 넓히기
@@ -417,6 +442,7 @@ export class Game {
       this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h, false);
       this.composer.setSize(w, h);
+      if (this.planetFX) this.planetFX.resize(w, h);
     };
     window.addEventListener('resize', this._onResize);
     this._mouse = new THREE.Vector2(); this._ray = new THREE.Raycaster();
@@ -429,6 +455,7 @@ export class Game {
     this._onDown = (e) => {
       if (e.button !== 0) return;
       this._onMove(e);
+      if (this.planetFX) { this.endPlanet(); return; }
       if (this.cine.active) { this.cine.skip(); return; }
       const hit = this.pick();
       if (!hit) return;
@@ -499,8 +526,38 @@ export class Game {
     }
   }
 
+  // 행성 시점 마무리 시작 / 끝
+  playPlanet(kind, opts = {}) {
+    if (this.planetFX || this.cfg.planet === false) return false;
+    const now = performance.now();
+    if (this._planetAt && now - this._planetAt < 45000) return false;
+    this._planetAt = now;
+    if (this.cine.active) this.cine.stop(true);
+    const lat = this.place && isFinite(this.place.lat) ? this.place.lat : 37.5, lon = this.place && isFinite(this.place.lon) ? this.place.lon : 127;
+    this.planetFX = new PlanetFinale(this.renderer, kind, { lat, lon, dur: opts.dur || 10 });
+    this.planetFX.resize(window.innerWidth, window.innerHeight);
+    document.body.classList.add('cine');
+    this.fx.flash = 0; if (this.fx.flashEl) this.fx.flashEl.style.opacity = '0';
+    return true;
+  }
+  endPlanet() {
+    if (!this.planetFX) return;
+    this.planetFX.dispose(); this.planetFX = null;
+    document.body.classList.remove('cine');
+    this.fx.flash = Math.max(this.fx.flash, 0.5);
+    this.camera.fov = this.cfg.fov || 50; this.camera.updateProjectionMatrix();
+  }
+
   _loop() {
     if (!this.running) return;
+    if (this.planetFX) {
+      const dtp = Math.min(0.05, this.clock.getDelta());
+      this.planetFX.update(dtp);
+      this.fx.update(dtp, this.camera);
+      this.planetFX.render();
+      if (this.planetFX.done) this.endPlanet();
+      return;
+    }
     // 프레임 제한
     if (this.cfg.fpsCap > 0) { const now = performance.now(); if (this._lastF && now - this._lastF < 1000 / this.cfg.fpsCap - 1) return; this._lastF = now; }
     const dt = Math.min(0.05, this.clock.getDelta());
@@ -525,7 +582,7 @@ export class Game {
     t.x = Math.max(-lim, Math.min(lim, t.x)); t.z = Math.max(-lim, Math.min(lim, t.z));
     const gy = this.grid.sample(t.x, t.z);
     t.y += (gy - t.y) * Math.min(1, dt * 4);
-    const cg = this.grid.sample(this.camera.position.x, this.camera.position.z);
+    const cg = this.groundAt(this.camera.position.x, this.camera.position.z);
     if (this.camera.position.y < cg + 4) this.camera.position.y = cg + 4;
 
     // 조준

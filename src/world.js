@@ -4,6 +4,9 @@ import earcut from 'earcut';
 import { makeTerrainMaterial } from './materials.js';
 import { pointInPoly } from './geo.js';
 
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function edge0(g) { let e = Infinity; for (let i = 0; i < g.n; i++) e = Math.min(e, g.h[i], g.h[(g.n - 1) * g.n + i], g.h[i * g.n], g.h[i * g.n + g.n - 1]); return e; }
+
 const AREA_COLORS = {
   residential: '#9c968b', commercial: '#a39892', industrial: '#97949b', campus: '#a59e8b', construction: '#94856a',
   farm: '#8d8c5f', grass: '#5f8040', park: '#557e3b', forest: '#3a5a2c', pitch: '#4b7a37', track: '#8f4d3c',
@@ -148,12 +151,114 @@ export class World {
     this.terrain = new THREE.Mesh(geo, mat);
     this.terrain.receiveShadow = true;
     this.group.add(this.terrain);
-    // 지도 바깥 지평선까지 이어지는 바닥 (멀리서 볼 때 지도가 떠 보이지 않게)
-    let edge = Infinity;
-    for (let i = 0; i < g.n; i++) edge = Math.min(edge, g.h[i], g.h[(g.n - 1) * g.n + i], g.h[i * g.n], g.h[i * g.n + g.n - 1]);
-    const outer = new THREE.Mesh(new THREE.RingGeometry(g.span * 0.5, 120000, 96, 1), new THREE.MeshStandardMaterial({ color: 0x4f5a3d, roughness: 1, metalness: 0 }));
-    outer.rotation.x = -Math.PI / 2; outer.position.y = edge - 1.5; outer.receiveShadow = false;
+    this._buildOuter(edge0(g));
+  }
+
+  // ---------- 지도 바깥 세계: 지평선까지 이어지는 산과 먼 도시들 ----------
+  // 높이: 지도 가장자리 높이에서 시작해 멀어질수록 산이 높아짐
+  outerHeight(x, z) {
+    const r = Math.hypot(x, z), r0 = this._outerR0 || 0;
+    const k = Math.max(0, Math.min(1, (r - r0 * 1.5) / 6000));
+    const n = Math.sin(x * 0.00031 + 1.7) * Math.cos(z * 0.00027 - 0.6) * 0.6 + Math.sin(x * 0.0011 + z * 0.0009) * 0.25 + Math.sin(x * 0.0041 - z * 0.0033) * 0.08;
+    const far = Math.max(0, Math.min(1, (r - 9000) / 30000));
+    const mount = (this._outerBase || 0) - 2 + k * (120 + 260 * Math.max(0, n)) * (0.35 + 0.65 * k) + far * 900 * Math.max(0, n + 0.3);
+    // 지도 가장자리 근처는 지도 끝 높이를 이어받아 절벽 없이
+    const b = Math.max(0, Math.min(1, (r - r0 * 1.02) / (r0 * 0.9)));
+    const edgeH = this.grid.sample(x, z) - 1.5;
+    return edgeH + (mount - edgeH) * b * b * (3 - 2 * b);
+  }
+  _buildOuter(edge) {
+    const g = this.grid;
+    const r0 = g.span * 0.5, r1 = 90000;
+    this._outerR0 = r0; this._outerBase = edge;
+    const NR = 56, NS = 192;
+    const pos = [], col = [], idx = [];
+    const c = new THREE.Color(), cGreen = new THREE.Color(0x4f5a3d), cDry = new THREE.Color(0x6b6248), cRock = new THREE.Color(0x5d5852), cSnow = new THREE.Color(0xe8ecf0);
+    for (let i = 0; i < NR; i++) {
+      const r = r0 * Math.pow(r1 / r0, i / (NR - 1));
+      for (let j = 0; j < NS; j++) {
+        const a = j / NS * Math.PI * 2, x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const h = this.outerHeight(x, z);
+        pos.push(x, h - edge, z);
+        const up = h - edge;
+        c.copy(cGreen).lerp(cDry, Math.min(1, Math.max(0, Math.sin(x * 0.0007) * 0.5 + 0.3)));
+        if (up > 200) c.lerp(cRock, Math.min(1, (up - 200) / 300));
+        if (up > 650) c.lerp(cSnow, Math.min(1, (up - 650) / 300));
+        col.push(c.r, c.g, c.b);
+      }
+    }
+    for (let i = 0; i < NR - 1; i++) for (let j = 0; j < NS; j++) {
+      const a = i * NS + j, b = i * NS + (j + 1) % NS, d = (i + 1) * NS + j, e = (i + 1) * NS + (j + 1) % NS;
+      idx.push(a, b, d, b, e, d);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    const outer = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 }));
+    outer.position.y = edge; outer.receiveShadow = false; outer.frustumCulled = false;
     this.outer = outer; this.group.add(outer);
+    // 먼 도시들: 지도 밖 곳곳에 단순한 건물 덩어리
+    const rnd = mulberry(1234);
+    const boxes = [];
+    const nTown = 34;
+    for (let t = 0; t < nTown; t++) {
+      const a = rnd() * Math.PI * 2, d = r0 + 600 + Math.pow(rnd(), 0.7) * 16000;
+      const tx = Math.cos(a) * d, tz = Math.sin(a) * d;
+      const big = rnd() < 0.3, tr = big ? 900 + rnd() * 900 : 300 + rnd() * 500;
+      const n = Math.round((big ? 260 : 90) * (0.6 + rnd() * 0.6));
+      for (let k = 0; k < n; k++) {
+        const u = Math.sqrt(rnd()) * tr, v = rnd() * Math.PI * 2;
+        const x = tx + Math.cos(v) * u, z = tz + Math.sin(v) * u;
+        if (Math.abs(x) < r0 + 60 && Math.abs(z) < r0 + 60) continue;
+        const core = 1 - u / tr;
+        const h = 8 + rnd() * 25 + (big ? core * core * (60 + rnd() * 140) : core * 20);
+        const w = 14 + rnd() * 26;
+        boxes.push([x, z, w, h, w * (0.6 + rnd() * 0.8), rnd() * 3.14]);
+      }
+    }
+    const box = new THREE.BoxGeometry(1, 1, 1); box.translate(0, 0.5, 0);
+    const im = new THREE.InstancedMesh(box, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.05 }), boxes.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    this._towns = boxes.map((b, i) => {
+      const [x, z, w, h, dd, rot] = b;
+      const y = this.outerHeight(x, z) - 1;
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
+      m.compose(p.set(x, y, z), q, sc.set(w, h, dd));
+      im.setMatrixAt(i, m);
+      const g0 = 0.32 + rnd() * 0.2; c.setRGB(g0, g0 * 0.98, g0 * 0.95); im.setColorAt(i, c);
+      return { x, z, y, w, h, d: dd, rot, hit: 0, col: g0 };
+    });
+    im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
+    im.frustumCulled = false; im.castShadow = false; im.receiveShadow = false;
+    this.townMesh = im; this.group.add(im);
+  }
+  // 바깥 도시 파괴: 중심에서 r0~r1 띠 안의 건물을 무너뜨림 (sev 0~1)
+  ravageOuter(cx, cz, r0, r1, sev = 1) {
+    if (!this._towns) return 0;
+    const im = this.townMesh, m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
+    let n = 0;
+    this._towns.forEach((t, i) => {
+      const d = Math.hypot(t.x - cx, t.z - cz);
+      if (d < r0 || d > r1 || t.hit >= sev) return;
+      t.hit = sev;
+      const ang = Math.atan2(t.z - cz, t.x - cx);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot);
+      const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(Math.sin(ang), 0, -Math.cos(ang)), -0.5 * sev * Math.random());
+      q.premultiply(tilt);
+      const hs = Math.max(0.04, 1 - sev * (0.75 + Math.random() * 0.2));
+      im.setMatrixAt(i, m.compose(p.set(t.x, t.y, t.z), q, sc.set(t.w, t.h * hs, t.d)));
+      const g = t.col * (1 - 0.8 * sev); im.setColorAt(i, c.setRGB(g, g * 0.9, g * 0.85));
+      n++;
+    });
+    if (n) { im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; }
+    return n;
+  }
+  restoreOuter() {
+    if (!this._towns) return;
+    const im = this.townMesh, m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
+    this._towns.forEach((t, i) => { t.hit = 0; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot); im.setMatrixAt(i, m.compose(p.set(t.x, t.y, t.z), q, sc.set(t.w, t.h, t.d))); im.setColorAt(i, c.setRGB(t.col, t.col * 0.98, t.col * 0.95)); });
+    im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
   }
 
   // 바뀐 격자 범위만 위치·법선 갱신

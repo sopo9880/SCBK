@@ -143,7 +143,7 @@ export class Cinematic {
     this._smoothLook.lerp(out.look, k);
     if (k === 1) { this._smoothPos.copy(out.pos); this._smoothLook.copy(out.look); }
     // 지면 아래로 들어가지 않게
-    const gy = this.game.grid.sample(this._smoothPos.x, this._smoothPos.z);
+    const gy = this.game.groundAt ? this.game.groundAt(this._smoothPos.x, this._smoothPos.z) : this.game.grid.sample(this._smoothPos.x, this._smoothPos.z);
     if (this._smoothPos.y < gy + 2) this._smoothPos.y = gy + 2;
     // 건물에 가려지면 가린 건물 앞으로 당겨옴 (부드럽게)
     const fix = this._fixTarget(this._smoothPos, this._smoothLook);

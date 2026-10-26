@@ -504,6 +504,7 @@ function initHud() {
     if (e.code === 'F11') { e.preventDefault(); api.toggleFullscreen(); return; }
     { const st = document.getElementById('settings'); if (st && !st.hidden) { if (e.code === 'Escape') document.getElementById('setClose')?.click(); return; } }
     if (!game || $('#hud').hidden) return;
+    if (game.planetFX) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.endPlanet(); } return; }
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
     if (/^Digit[1-9]$/.test(e.code)) {
       const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[+e.code.slice(5) - 1];
