@@ -71,6 +71,19 @@ const I = {
   moonfall: '<circle cx="12" cy="9" r="7" fill="currentColor"/><circle cx="9" cy="7" r="1.6" fill="#0004"/><circle cx="14" cy="11" r="1.2" fill="#0004"/><path d="M2 21c4-2 8-2 10 0s6 2 10 0" stroke="currentColor" stroke-width="2" fill="none"/>',
   planetcrash: '<circle cx="8" cy="15" r="6" fill="currentColor"/><circle cx="18" cy="6" r="4" fill="currentColor" opacity="0.7"/><ellipse cx="18" cy="6" rx="6" ry="1.5" fill="none" stroke="currentColor" stroke-width="1"/><path d="M13 10l2-2" stroke="currentColor" stroke-width="2"/>',
   sunfall: '<circle cx="12" cy="10" r="6" fill="currentColor"/><path d="M12 1v2M3 10H1M23 10h-2M5 3l1.5 1.5M19 3l-1.5 1.5" stroke="currentColor" stroke-width="1.8"/><path d="M2 21c3-2 5-1 7-2s5 1 7 0 4-2 6 0" stroke="currentColor" stroke-width="2" fill="none"/>',
+  terraform: '<path d="M12 2l4 4v6l-4 3-4-3V6z" fill="currentColor"/><path d="M9 13l-6 9M15 13l6 9M12 15v7" stroke="currentColor" stroke-width="1.6"/><path d="M12 15v7" stroke="currentColor" stroke-width="3" opacity="0.4"/>',
+  tripod: '<ellipse cx="12" cy="6" rx="7" ry="3.5" fill="currentColor"/><path d="M7 8l-5 14M17 8l5 14M12 9v13" stroke="currentColor" stroke-width="1.6"/><path d="M14 7l6 3" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1 1"/>',
+  crustshift: '<path d="M2 10l9-2 2 6 9-2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M2 16l9-2 2 6 9-2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 8l2 6" stroke="currentColor" stroke-width="1.4"/>',
+  flashfreeze: '<path d="M6 2h12l-3 8h-6z" fill="currentColor" opacity="0.6"/><path d="M12 10v12M7 15l10 4M17 15l-10 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  megatsunami: '<path d="M2 21V11c3-8 13-10 17-5-4-1-7 1-6 5 2 1 5 0 6-2v12z" fill="currentColor"/>',
+  cityfold: '<path d="M2 20h10V10" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 10c0-5 4-8 10-8" stroke="currentColor" stroke-width="2" fill="none"/><rect x="4" y="14" width="3" height="6" fill="currentColor"/><rect x="15" y="4" width="3" height="5" fill="currentColor" transform="rotate(30 16 6)"/>',
+  robokaiju: '<rect x="2" y="6" width="7" height="9" fill="currentColor"/><rect x="3.5" y="2" width="4" height="4" fill="currentColor"/><path d="M3 15v7M8 15v7" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="12" r="5" fill="currentColor" opacity="0.7"/><path d="M15 17l-1 5M19 17l1 5" stroke="currentColor" stroke-width="2"/>',
+  halfvanish: '<rect x="3" y="6" width="5" height="15" fill="currentColor"/><rect x="10" y="9" width="5" height="12" fill="currentColor" opacity="0.35"/><circle cx="18" cy="8" r="1" fill="currentColor"/><circle cx="20" cy="12" r="0.8" fill="currentColor"/><circle cx="17" cy="14" r="0.7" fill="currentColor"/>',
+  corestop: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke="currentColor" stroke-width="1.6"/>',
+  drillrock: '<circle cx="12" cy="11" r="8" fill="currentColor"/><path d="M12 1v9" stroke="#0006" stroke-width="2"/><path d="M9 21l3-4 3 4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  sharknado: '<path d="M3 4h18M5 8h14M7 12h10M9 16h6M11 20h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 9l3-3 1 4z" fill="currentColor"/>',
+  megaquake: '<path d="M2 12h6l2-5 2 10 2-7 2 4h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><path d="M9 21l3-4 3 4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  giantape: '<rect x="15" y="3" width="6" height="19" fill="currentColor" opacity="0.5"/><circle cx="10" cy="6" r="3" fill="currentColor"/><path d="M5 10h9l1 7H5z" fill="currentColor"/><path d="M14 11l3-4M6 17l-1 5M12 17l1 5" stroke="currentColor" stroke-width="2"/>',
 };
 
 export const CATEGORIES = [
@@ -82,6 +95,7 @@ export const CATEGORIES = [
   { id: 'fun', name: '놀이·괴수' },
   { id: 'nuke', name: '핵' },
   { id: 'end', name: '종말' },
+  { id: 'movie', name: '영화 오마주' },
 ];
 
 const CINE = { key: 'cinematic', label: '연출 카메라', global: true };
@@ -160,10 +174,23 @@ export const WEAPONS = [
   { id: 'antimatter', cat: 'nuke', name: '반물질 폭탄', desc: '격납이 풀리며 물질이 소멸, 핵의 25배', opts: [REAL, CINE] },
   { id: 'moonfall', cat: 'end', name: '달 낙하', desc: '달이 다가와 물이 차오르고 떠오르다 충돌 (×1 작은 위성 ~ ×100 진짜 달)', opts: [REAL, CINE] },
   { id: 'planetcrash', cat: 'end', name: '행성 충돌', desc: '떠돌이 행성이 하늘을 가득 채우며 다가옴', opts: [REAL, CINE] },
+  { id: 'terraform', cat: 'movie', name: '테라포밍 엔진', desc: '하늘에서 내려온 기계가 중력 빔으로 도시를 짓누르고, 마지막에 수호자가 막아냄', opts: [CINE] },
+  { id: 'tripod', cat: 'movie', name: '세 다리 침략자', desc: '땅속에서 솟은 전투기계가 열선을 휘두르며 걸어감', opts: [CINE] },
+  { id: 'crustshift', cat: 'movie', name: '지각 대이동', desc: '땅이 통째로 갈라져 기울고, 지평선에서 해일이 밀려옴', opts: [CINE] },
+  { id: 'flashfreeze', cat: 'movie', name: '순간 결빙', desc: '극저온 소용돌이가 내려와 모든 게 얼어붙고 산산조각', opts: [CINE] },
+  { id: 'megatsunami', cat: 'movie', name: '메가 해일', desc: '먼바다 충돌로 생긴 수백 m 물벽이 빌딩을 넘어옴', opts: [CINE] },
+  { id: 'cityfold', cat: 'movie', name: '도시 접기', desc: '지면이 종이처럼 접혀 반대편 도시를 덮쳐 짓누름', opts: [CINE] },
+  { id: 'robokaiju', cat: 'movie', name: '거대 로봇 대 괴수', desc: '도시 한복판에서 맞붙어 주먹을 주고받다 던져버림', opts: [CINE] },
+  { id: 'halfvanish', cat: 'movie', name: '절반 소멸', desc: '손가락 소리와 함께 건물 절반이 먼지가 되어 흩날림' },
+  { id: 'corestop', cat: 'movie', name: '지구 핵 정지', desc: '자기장이 무너져 오로라와 전자기 폭풍, 사방에 번개' },
+  { id: 'drillrock', cat: 'movie', name: '소행성 시추', desc: '다가오는 소행성 속 핵폭발 — 성공하면 갈라져 비껴감', opts: [{ key: 'drillok', label: '시추 성공' }, CINE] },
+  { id: 'sharknado', cat: 'movie', name: '상어 회오리', desc: '상어가 섞인 토네이도, 상어가 건물에 떨어짐' },
+  { id: 'megaquake', cat: 'movie', name: '지진 대협곡', desc: '단층이 열리며 도시를 가로지르는 거대 협곡' },
+  { id: 'giantape', cat: 'movie', name: '거대 유인원', desc: '가장 높은 빌딩을 기어올라 가슴을 치고 뛰어내림', opts: [CINE] },
   { id: 'sunfall', cat: 'end', name: '태양 낙하', desc: '해가 커지며 하늘이 불타고 도시가 녹아내림', opts: [CINE] },
 ];
 
-export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false, giant: true, enlarge: false };
+export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false, giant: true, enlarge: false, drillok: true };
 
 export function weaponIcon(id) { return `<svg viewBox="0 0 24 24" width="26" height="26">${I[id]}</svg>`; }
 
