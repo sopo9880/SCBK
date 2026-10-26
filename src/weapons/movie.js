@@ -489,7 +489,7 @@ export const MOVIE = {
   drillrock: {
     fire(A, hit) {
       const S = A.S, p = hit.point, { scene, fx, grid, audio, camera, game } = A.ctx;
-      const ok = A.opts.drillok !== false;
+      const ok = A.opts.drillok !== false && A.S.P < 75; // ×100(세계 멸망)에서는 늘 실패
       const tgt = v3(p.x, grid.sample(p.x, p.z), p.z);
       const f = camDir(camera, tgt), side = v3(-f.z, 0, f.x);
       const dirIn = f.clone().multiplyScalar(0.5).add(v3(0, -0.6, 0)).normalize();
@@ -662,7 +662,7 @@ export const MOVIE_ENDINGS = {
   robokaiju: (A, c) => { crustCollapse(A, c, { level: 1 }); worldEnd(A, c, 'fire', { delay: 14 }); },
   halfvanish: (A, c) => { worldEnd(A, c, 'dust', { delay: 7, planetKind: 'ash', wave: true }); },
   corestop: (A, c) => { wipeMap(A, c, 'nuke', { dur: 14 }); worldEnd(A, c, 'fire', { delay: 4, planetKind: 'crack' }); },
-  drillrock: (A, c) => { if (A.opts.drillok === false) worldEnd(A, c, 'impact', { delay: 10 }); },
+  drillrock: (A, c) => { worldEnd(A, c, 'impact', { delay: 10 }); },
   sharknado: (A, c) => { over(A, 4, 6, () => fireOther(A, 'sharknado', mapPoint(A))); wipeMap(A, c, 'nuke', { dur: 16 }); worldEnd(A, c, 'water', { delay: 6, planetKind: 'water' }); },
   megaquake: (A, c) => { crustCollapse(A, c, { level: 1, cracks: 16 }); wipeMap(A, c, 'nuke', { dur: 10 }); worldEnd(A, c, 'crack', { delay: 3 }); },
   giantape: (A, c) => { wipeMap(A, c, 'nuke', { dur: 12 }); worldEnd(A, c, 'dust', { delay: 15, planetKind: 'crack' }); },

@@ -43,6 +43,9 @@ export const DOOM_KINDS = {
   anti: { low: [0.7, 0.4, 1.0], high: [0.12, 0.06, 0.2], fog: 0x241c34, ash: [0.5, 0.7], ember: 0.2, emberCol: [0.8, 0.6, 1.0], fires: true },
   dust: { low: [0.85, 0.6, 0.35], high: [0.35, 0.25, 0.15], fog: 0x8a6a48, ash: [0.5, 0.6], ember: 0, fires: false },
   water: { low: [0.4, 0.55, 0.65], high: [0.15, 0.2, 0.28], fog: 0x506070, ash: [0.6, 0.7], ember: 0, fires: false, rain: true },
+  fallout: { low: [0.62, 0.7, 0.3], high: [0.12, 0.15, 0.06], fog: 0x4e5a30, ash: [0.45, 0.6], ember: 0.08, emberCol: [0.6, 1.0, 0.4], fires: false },
+  space: { low: [0.08, 0.08, 0.12], high: [0.0, 0.0, 0.01], fog: 0x0a0a12, ash: [0.3, 0.4], ember: 0.02, emberCol: [0.8, 0.85, 1.0], fires: false },
+  data: { low: [0.1, 0.55, 0.3], high: [0.0, 0.03, 0.02], fog: 0x08241a, ash: [0.3, 0.5], ember: 0.35, emberCol: [0.45, 1.0, 0.6], fires: false },
 };
 
 export const TIMES = {
@@ -56,6 +59,7 @@ export class Game {
   constructor({ canvas, phys, grid, data, radius, place, quality, time, audio, hud, cfg }) {
     this.canvas = canvas; this.phys = phys; this.grid = grid; this.data = data; this.radius = radius;
     this.cfg = Object.assign(defaultCfg(), cfg || {});
+    sharedUniforms.uPower.value = 1;
     this.place = place; this.qualityKey = quality; this.Q = { ...QUALITY[quality] }; this.timeKey = time;
     this.Q0 = QUALITY[quality];
     // 도시를 만들 때 정해지는 설정 (나무·파티클 양)

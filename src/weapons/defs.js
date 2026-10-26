@@ -183,7 +183,7 @@ export const WEAPONS = [
   { id: 'robokaiju', cat: 'movie', name: '거대 로봇 대 괴수', desc: '도시 한복판에서 맞붙어 주먹을 주고받다 던져버림', opts: [CINE] },
   { id: 'halfvanish', cat: 'movie', name: '절반 소멸', desc: '손가락 소리와 함께 건물 절반이 먼지가 되어 흩날림' },
   { id: 'corestop', cat: 'movie', name: '지구 핵 정지', desc: '자기장이 무너져 오로라와 전자기 폭풍, 사방에 번개' },
-  { id: 'drillrock', cat: 'movie', name: '소행성 시추', desc: '다가오는 소행성 속 핵폭발 — 성공하면 갈라져 비껴감', opts: [{ key: 'drillok', label: '시추 성공' }, CINE] },
+  { id: 'drillrock', cat: 'movie', name: '소행성 시추', desc: '다가오는 소행성 속 핵폭발 — 성공하면 갈라져 비껴감 (×100에서는 실패)', opts: [{ key: 'drillok', label: '시추 성공' }, CINE] },
   { id: 'sharknado', cat: 'movie', name: '상어 회오리', desc: '상어가 섞인 토네이도, 상어가 건물에 떨어짐' },
   { id: 'megaquake', cat: 'movie', name: '지진 대협곡', desc: '단층이 열리며 도시를 가로지르는 거대 협곡' },
   { id: 'giantape', cat: 'movie', name: '거대 유인원', desc: '가장 높은 빌딩을 기어올라 가슴을 치고 뛰어내림', opts: [CINE] },

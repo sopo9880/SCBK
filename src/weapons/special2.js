@@ -1,5 +1,6 @@
 // 특수 무기: 반중력(재설계), 화이트홀, 중력 반전, 시간 역행
 import * as THREE from 'three';
+import { sharedUniforms } from '../materials.js';
 import { glowMat } from './models2.js';
 import { cineGame, watch, orbit, camDir } from './cam.js';
 import { ease } from '../cinematic.js';
@@ -219,6 +220,7 @@ export const SPECIAL2 = {
       // 진행 중인 다른 무기 효과는 모두 멈춤
       A.clear();
       if (game) { game.storm = 0; game.doom = 0; game.frost = 0; }
+      sharedUniforms.uPower.value = 1;
       D.phys.setGravity(0, -9.81, 0);
       const moving = D.beginRestore();
       const T = 3.6;
