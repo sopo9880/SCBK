@@ -10,6 +10,7 @@ import { SKY2 } from './sky2.js';
 import { NATURE2 } from './nature2.js';
 import { FUN } from './fun.js';
 import { SPECIAL2 } from './special2.js';
+import { runEnding } from './endings.js';
 
 const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2 };
 export const HANDLER_IDS = Object.keys(HANDLERS);
@@ -37,6 +38,12 @@ export class Arsenal {
     this.ctx.audio.resume();
     const h = HANDLERS[this.current];
     if (h && h.fire) h.fire(this, hit, cameraPos.clone());
+    if (hit) runEnding(this, this.current, hit.point);
+  }
+  // 다른 무기를 지금 위력으로 한 번 쏘기 (세계 멸망 결말에서 여러 번 쓸 때)
+  fireAs(id, hit) {
+    const h = HANDLERS[id];
+    if (h && h.fire) h.fire(this, hit, this.ctx.camera.position.clone());
   }
   holdStart(hit) {
     const h = HANDLERS[this.current];
@@ -47,7 +54,8 @@ export class Arsenal {
     if (!this._hold) return;
     const h = HANDLERS[this._hold.id];
     if (h && h.holdEnd) h.holdEnd(this, this._hold.state);
-    this._hold = null;
+    if (this._holdAim) runEnding(this, this._hold.id, this._holdAim);
+    this._hold = null; this._holdAim = null;
   }
 
   spawn(obj, scale = 1) { obj.scale.setScalar(scale); this.ctx.scene.add(obj); return obj; }
@@ -114,6 +122,7 @@ export class Arsenal {
     if (this._hold) {
       const h = HANDLERS[this._hold.id];
       if (h && h.holdUpdate) h.holdUpdate(this, this._hold.state, dt, aim);
+      if (aim) this._holdAim = { x: aim.x, y: aim.y, z: aim.z };
     }
     // 지속 효과
     for (let i = this.active.length - 1; i >= 0; i--) {

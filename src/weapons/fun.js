@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { makeBowlingBall, makeFinger, makeGolem, makeTrain } from './models2.js';
 import { cineGame, chase, watch, orbit, camDir } from './cam.js';
 import { ease } from '../cinematic.js';
+import { funScale } from './defs.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
@@ -13,16 +14,30 @@ export const FUN = {
   bowling: {
     fire(A, hit) {
       const S = A.S, p = hit.point, { D, grid, camera, audio, hud } = A.ctx;
-      const r = 13 * S.r ** 0.5;
+      const G = funScale(A);
+      const r = 13 * G.size;
       const f = camDir(camera, v3(p.x, p.y, p.z));
       const start = v3(p.x, 0, p.z).addScaledVector(f, -Math.min(420, grid.span * 0.4));
       start.y = grid.sample(start.x, start.z) + r + 1;
       const m = A.spawn(makeBowlingBall(), r);
-      const sp = 52 * S.v ** 0.6;
+      const sp = 52 * G.pw ** 0.6 * (G.giant ? 1 : 1.3);
       let hits = 0;
       const ball = D.addBall(start, f.clone().multiplyScalar(sp).add(v3(0, -2, 0)), r, m, { life: 30, onHit: () => { hits++; } });
       ball.body.setAngvel({ x: f.z * sp / r, y: 0, z: -f.x * sp / r });
       audio.rumble(6);
+      // 충격만 모드이거나 큰 공: 굴러가는 자리마다 충격 (공 크기보다 넓게)
+      A.addActive({ t: 0, acc: 0, update(dt) {
+        this.t += dt; this.acc += dt;
+        if (!ball.body.alive) return false;
+        const bp = ball.body.translation(), bv = ball.body.linvel();
+        if (this.acc > 0.12 && Math.hypot(bv.x, bv.z) > 6) {
+          this.acc = 0;
+          const rr = r * 1.15 + (G.giant ? 0 : 7 * G.hit);
+          A.ctx.D.explode({ x: bp.x, y: bp.y, z: bp.z, r: rr, power: 22 * G.pw, lift: 0.35, scorch: 0.05, lod: 2, lodBudget: 2 });
+          if (r > 30 || !G.giant) { A.crater(bp.x, bp.z, rr * 0.5, rr * 0.08); A.ctx.fx.dust({ x: bp.x, y: bp.y - r, z: bp.z }, Math.min(30, rr * 0.3)); }
+        }
+        return this.t < 12;
+      } });
       A.addActive({ t: 0, update(dt) {
         this.t += dt;
         if (this.t > 9 || !ball.body.alive) { if (hud) hud.toast(hits >= 8 ? `스트라이크! 건물 ${hits}채` : `건물 ${hits}채 쓰러뜨림`, 'info'); return false; }
@@ -45,14 +60,15 @@ export const FUN = {
       const dir = camDir(camera, v3(p.x, p.y, p.z));
       const first = (hit.info && hit.info.b) || D.buildingsNear(p.x, p.z, 40).filter(b => b.state === 'intact').sort((a, b) => Math.hypot(a.cx - p.x, a.cz - p.z) - Math.hypot(b.cx - p.x, b.cz - p.z))[0];
       if (!first) { if (hud) hud.toast('건물을 겨눠 주세요', 'info'); return; }
-      const maxN = Math.round(25 + 15 * S.n);
+      const G = funScale(A);
+      const maxN = Math.round((25 + 15 * S.n) * (G.giant ? 1 : 1.5));
       const topple = new Map(); // b → {dir, t, done}
       const queue = [{ b: first, d: dir.clone(), at: 0 }];
       let count = 0;
       const push = (b, d) => {
         // 건물 하나를 바닥 모서리 기준으로 통째로 넘어뜨림
         const axis = v3(d.z, 0, -d.x);
-        const w = 0.35 + 0.25 * S.v ** 0.5;
+        const w = 0.35 + 0.25 * G.pw ** 0.5;
         let n = 0;
         for (const c of b.chunks) {
           if (c.state !== FIXED) continue;
@@ -112,7 +128,8 @@ export const FUN = {
   finger: {
     holdStart(A, hit) {
       const { audio } = A.ctx;
-      const m = A.spawn(makeFinger(), 0.6 * A.S.r ** 0.4);
+      const G = funScale(A);
+      const m = A.spawn(makeFinger(), 0.6 * G.size);
       const p = hit ? hit.point : { x: 0, y: 0, z: 0 };
       m.position.set(p.x, p.y + 400, p.z);
       audio.whoosh(1);
@@ -122,7 +139,8 @@ export const FUN = {
       const S = A.S, { D, fx, grid, audio } = A.ctx;
       L.t += dt;
       if (aim) L.aim.set(aim.x, aim.y, aim.z);
-      const sc = 0.6 * S.r ** 0.4;
+      const G = funScale(A);
+      const sc = 0.6 * G.size;
       // 손가락 끝 목표: 처음엔 내려와 짚고, 그다음엔 집은 것을 들어 올림
       const ground = grid.sample(L.aim.x, L.aim.z);
       const lift = L.touched ? Math.min(90, (L.t - L.touchT) * 60) : 0;
@@ -133,10 +151,10 @@ export const FUN = {
       L.m.position.copy(L.pos);
       L.m.rotation.z = Math.max(-0.4, Math.min(0.4, -L.vel.x * 0.004)); L.m.rotation.x = Math.max(-0.4, Math.min(0.4, L.vel.z * 0.004));
       const tip = L.pos;
-      const r = 26 * S.r ** 0.6;
+      const r = 26 * G.hit;
       if (!L.touched && tip.y - ground < 12 * sc) {
         L.touched = true; L.touchT = L.t;
-        D.explode({ x: tip.x, y: ground + 2, z: tip.z, r: r * 0.7, power: 26 * S.v, lift: -0.4, scorch: 0, lod: 0 });
+        D.explode({ x: tip.x, y: ground + 2, z: tip.z, r: r * 0.7, power: 26 * G.pw, lift: -0.4, scorch: 0, lod: 0 });
         A.crater(tip.x, tip.z, r * 0.4, 3 * sc);
         fx.dust({ x: tip.x, y: ground, z: tip.z }, 12); fx.addShake(1.2); audio.thud();
       }
@@ -172,7 +190,9 @@ export const FUN = {
   kaiju: {
     fire(A, hit) {
       const S = A.S, p = hit.point, { D, fx, grid, audio, camera, world } = A.ctx;
-      const sc = 0.75 * S.r ** 0.45;
+      const G = funScale(A);
+      const sc = 0.75 * G.size;
+      const hm = G.giant ? sc : 0.75 * G.hit; // 짓밟는 범위 배율
       const tgt = v3(p.x, grid.sample(p.x, p.z), p.z);
       const f = camDir(camera, tgt);
       const side = v3(-f.z, 0, f.x);
@@ -187,9 +207,9 @@ export const FUN = {
       const T_STEP = 1.25;
       audio.roar(3);
       const stomp = (q, big) => {
-        const r = (big ? 30 : 22) * sc;
-        D.explode({ x: q.x, y: q.y + 4, z: q.z, r, power: (big ? 42 : 30) * S.v, lift: big ? 0.3 : -0.5, scorch: 0.15, lod: 0 });
-        A.crater(q.x, q.z, r * 0.55, (big ? 5 : 2.5) * sc);
+        const r = (big ? 30 : 22) * hm;
+        D.explode({ x: q.x, y: q.y + 4, z: q.z, r, power: (big ? 42 : 30) * G.pw, lift: big ? 0.3 : -0.5, scorch: 0.15, lod: 0 });
+        A.crater(q.x, q.z, r * 0.55, (big ? 5 : 2.5) * hm);
         world.blastTrees(q.x, q.z, r, r * 0.5);
         fx.dust(q, 14); fx.ring(q, r * 2.2, 1, 0xb09070, 0.3);
         fx.addShake(big ? 2.4 : 1.1); audio.boom(big ? 2.6 : 1.4, camera.position.distanceTo(q));
@@ -218,7 +238,7 @@ export const FUN = {
               // 손 닿는 높은 건물은 주먹으로 후려침
               for (const b of D.buildingsNear(st.pos.x, st.pos.z, 70 * sc)) {
                 if (b.state !== 'intact' || b.height < 30 * sc || R() > 0.5) continue;
-                D.blastFrom(b, st.pos, 40 * S.v, { lift: 0.2, dy: 120 * sc, scorch: 0, lod: 0 });
+                D.blastFrom(b, st.pos, 40 * G.pw, { lift: 0.2, dy: 120 * sc, scorch: 0, lod: 0 });
                 break;
               }
             }
@@ -237,7 +257,7 @@ export const FUN = {
             st.smashed = true;
             const q = st.pos.clone().addScaledVector(walkDir, 55 * sc); q.y = grid.sample(q.x, q.z);
             stomp(q, true);
-            D.explode({ x: q.x, y: q.y + 5, z: q.z, r: 90 * sc, inner: 30 * sc, power: 24 * S.v, lift: 0.35, lod: 1 });
+            D.explode({ x: q.x, y: q.y + 5, z: q.z, r: 90 * hm, inner: 30 * hm, power: 24 * G.pw, lift: 0.35, lod: 1 });
             fx.ring(q, 160 * sc, 1.6, 0xffa060, 0.5);
           }
           // 떠남: 땅속으로 가라앉음
@@ -264,7 +284,8 @@ export const FUN = {
       const f = camDir(camera, tgt);
       const side = v3(-f.z, 0, f.x);
       const dir = side.clone().multiplyScalar(R() < 0.5 ? 1 : -1).addScaledVector(f, 0.25).normalize();
-      const sc = 1.6;
+      const G = funScale(A);
+      const sc = 1.6 * (G.giant ? G.size ** 0.8 : 1);
       const nCars = Math.round(5 + 2 * S.n ** 0.4);
       const tr = makeTrain(nCars); A.spawn(tr, sc);
       tr.scale.setScalar(1);
@@ -278,7 +299,7 @@ export const FUN = {
         acc: 0, hornT: 3,
         update(dt) {
           if (st.done) return false;
-          st.v = Math.min(55 * S.v ** 0.4, st.v + dt * 9);
+          st.v = Math.min(55 * G.pw ** 0.4 * (G.giant ? Math.sqrt(sc / 1.6) : 1.3), st.v + dt * 9 * Math.sqrt(sc / 1.6));
           st.s += st.v * dt;
           // 차량 배치 (지형 기울기 따라)
           let off = 0;
@@ -312,7 +333,7 @@ export const FUN = {
             st.done = true;
             // 탱크차마다 연쇄 폭발
             const cars = tr.userData.cars.map(c => c.position.clone());
-            cars.forEach((q, i) => A.addActive({ t: 0, update(d) { this.t += d; if (this.t < i * 0.18) return true; A.blast(q, (i === 0 ? 30 : 20) * S.r, 40 * S.v, { vap: 3 * S.r, crater: [7 * S.r, 2.4 * S.r], smokeColumn: i % 2 === 0, silent: i > 0 && i % 2 }); fx.addShake(1); return false; } }));
+            cars.forEach((q, i) => A.addActive({ t: 0, update(d) { this.t += d; if (this.t < i * 0.18) return true; A.blast(q, (i === 0 ? 30 : 20) * G.hit, 40 * G.pw, { vap: 3 * G.hit, crater: [7 * G.hit, 2.4 * G.hit], smokeColumn: i % 2 === 0, silent: i > 0 && i % 2 }); fx.addShake(1); return false; } }));
             fx.light(st.head.x, st.head.y + 30, st.head.z, 8e4, 1200, 1.5, 0xffa040);
           }
           return true;

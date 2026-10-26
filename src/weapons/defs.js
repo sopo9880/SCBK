@@ -55,6 +55,7 @@ export const CATEGORIES = [
 ];
 
 const CINE = { key: 'cinematic', label: '연출 카메라', global: true };
+const GIANT = { key: 'giant', label: '거대화 (끄면 충격만)', global: true };
 const REAL = { key: 'realNuke', label: '실감 핵 연출', global: true };
 
 // opt: 무기별 켜고 끄는 옵션 (전역 공유 옵션은 global: true)
@@ -89,13 +90,13 @@ export const WEAPONS = [
   { id: 'antigrav', cat: 'special', name: '반중력', desc: '일대가 통째로 떠올랐다가 한꺼번에 내리꽂힘', opts: [CINE] },
   { id: 'gravflip', cat: 'special', name: '중력 반전', desc: '건물이 하늘로 떨어졌다가 중력이 돌아오면 쏟아짐', opts: [CINE] },
   { id: 'rewind', cat: 'special', name: '시간 역행', desc: '부서진 모든 것을 원래대로 되돌림' },
-  { id: 'ball', cat: 'fun', name: '철거 철구', desc: '물리로 굴러가며 들이받음' },
-  { id: 'bowling', cat: 'fun', name: '거대 볼링공', desc: '건물을 핀처럼 쓰러뜨리기', opts: [CINE] },
-  { id: 'domino', cat: 'fun', name: '도미노', desc: '건물을 겨누면 쓰러지며 다음 건물을 연쇄로 넘어뜨림', opts: [CINE] },
-  { id: 'finger', cat: 'fun', name: '신의 손가락', desc: '누르면 집어 들고, 끌다가 놓으면 던짐', hold: true },
-  { id: 'stomp', cat: 'fun', name: '괴수 발', desc: '거대한 발이 쿵쿵 걸으며 짓밟음' },
-  { id: 'kaiju', cat: 'fun', name: '바위 거인', desc: '지평선에서 걸어와 짓밟고 주먹으로 내려침', opts: [CINE] },
-  { id: 'train', cat: 'fun', name: '폭주 기차', desc: '위험물 열차가 도시를 관통하다 연쇄 폭발', opts: [CINE] },
+  { id: 'ball', cat: 'fun', name: '철거 철구', desc: '물리로 굴러가며 들이받음', opts: [GIANT] },
+  { id: 'bowling', cat: 'fun', name: '거대 볼링공', desc: '건물을 핀처럼 쓰러뜨리기', opts: [GIANT, CINE] },
+  { id: 'domino', cat: 'fun', name: '도미노', desc: '건물을 겨누면 쓰러지며 다음 건물을 연쇄로 넘어뜨림', opts: [GIANT, CINE] },
+  { id: 'finger', cat: 'fun', name: '신의 손가락', desc: '누르면 집어 들고, 끌다가 놓으면 던짐', hold: true, opts: [GIANT] },
+  { id: 'stomp', cat: 'fun', name: '괴수 발', desc: '거대한 발이 쿵쿵 걸으며 짓밟음', opts: [GIANT] },
+  { id: 'kaiju', cat: 'fun', name: '바위 거인', desc: '지평선에서 걸어와 짓밟고 주먹으로 내려침', opts: [GIANT, CINE] },
+  { id: 'train', cat: 'fun', name: '폭주 기차', desc: '위험물 열차가 도시를 관통하다 연쇄 폭발', opts: [GIANT, CINE] },
   { id: 'nuke', cat: 'nuke', name: '핵폭탄', desc: '바로 떨어지는 핵폭탄 (×1 ≈ 15kt, ×100 ≈ 47Mt)', opts: [REAL, CINE] },
   { id: 'bomber', cat: 'nuke', name: '폭격기 투하', desc: '폭격기가 날아와 투하, 카메라 연출', opts: [REAL, CINE] },
   { id: 'icbm', cat: 'nuke', name: 'ICBM', desc: '사일로에서 발사되는 대륙간 탄도미사일', opts: [{ key: 'mirv', label: '다탄두(MIRV)' }, REAL, CINE] },
@@ -103,7 +104,7 @@ export const WEAPONS = [
   { id: 'antimatter', cat: 'nuke', name: '반물질 폭탄', desc: '격납이 풀리며 물질이 소멸, 핵의 25배', opts: [REAL, CINE] },
 ];
 
-export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false };
+export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false, giant: true };
 
 export function weaponIcon(id) { return `<svg viewBox="0 0 24 24" width="26" height="26">${I[id]}</svg>`; }
 
@@ -121,3 +122,11 @@ export function powerScale(P) {
 // 슬라이더(0~1) ↔ 위력(1~100) 로그 스케일
 export const sliderToPower = (s) => Math.round(10 ** (s * 2) * 10) / 10;
 export const powerToSlider = (p) => Math.log10(Math.max(1, p)) / 2;
+
+// 놀이·괴수 무기 크기/파괴력: 거대화(물체가 커짐) 또는 충격만(크기는 그대로, 파괴 범위만 커짐)
+export function funScale(A) {
+  const P = Math.max(0.5, Math.min(100, A.power || 3)), giant = A.opts.giant !== false;
+  return giant
+    ? { giant, size: 0.75 * P ** 0.45, hit: 0.75 * P ** 0.45, pw: 0.85 * P ** 0.22 }
+    : { giant, size: 1.2, hit: 0.75 * P ** 0.62, pw: 0.85 * P ** 0.3 };
+}

@@ -543,6 +543,7 @@ export class Game {
   endPlanet() {
     if (!this.planetFX) return;
     this.planetFX.dispose(); this.planetFX = null;
+    const cap = document.getElementById('cineCap'); if (cap) { cap.classList.remove('show'); cap.textContent = ''; }
     document.body.classList.remove('cine');
     this.fx.flash = Math.max(this.fx.flash, 0.5);
     this.camera.fov = this.cfg.fov || 50; this.camera.updateProjectionMatrix();

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { makeBomb, makeRod, makeBomber, makeFoot } from './models.js';
 import { ease } from '../cinematic.js';
+import { funScale } from './defs.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
@@ -369,11 +370,12 @@ export const EXTRA = {
     fire(A, hit) {
       const S = A.S, p = hit.point, { D, fx, audio, grid, camera, scene } = A.ctx;
       const dir = camForward(camera, p);
-      const foot = A.spawn(makeFoot(), 0.9 * S.r);
+      const G = funScale(A), fs = G.giant ? G.size : 1.2, hm = G.hit;
+      const foot = A.spawn(makeFoot(), 0.9 * fs);
       foot.quaternion.setFromUnitVectors(v3(0, 0, 1), dir);
-      const steps = 4, gap = 55 * S.r, up = 130 * S.r;
+      const steps = 4, gap = 55 * fs, up = 130 * fs;
       const pts = [];
-      for (let i = 0; i < steps; i++) { const q = v3(p.x, 0, p.z).addScaledVector(dir, i * gap).addScaledVector(v3(-dir.z, 0, dir.x), (i % 2 ? 1 : -1) * 14 * S.r); q.y = grid.sample(q.x, q.z); pts.push(q); }
+      for (let i = 0; i < steps; i++) { const q = v3(p.x, 0, p.z).addScaledVector(dir, i * gap).addScaledVector(v3(-dir.z, 0, dir.x), (i % 2 ? 1 : -1) * 14 * fs); q.y = grid.sample(q.x, q.z); pts.push(q); }
       const T_DOWN = 0.55, T_REST = 0.35, T_UP = 0.8;
       const per = T_DOWN + T_REST + T_UP;
       foot.position.copy(pts[0]).add(v3(0, up, 0));
@@ -391,11 +393,11 @@ export const EXTRA = {
           } else {
             if (this.hitStep !== i) {
               this.hitStep = i;
-              const r = 26 * S.r;
-              D.explode({ x: q.x, y: q.y + 6, z: q.z, r, power: 30 * S.v, lift: -0.7, scorch: 0.2, lod: 0 });
-              A.crater(q.x, q.z, 14 * S.r, 2.2 * S.r);
+              const r = 26 * hm;
+              D.explode({ x: q.x, y: q.y + 6, z: q.z, r, power: 30 * G.pw, lift: -0.7, scorch: 0.2, lod: 0 });
+              A.crater(q.x, q.z, 14 * hm, 2.2 * hm);
               A.ctx.world.blastTrees(q.x, q.z, r, r * 0.6);
-              for (let k2 = 0; k2 < 40 * A.ctx.quality.fxScale; k2++) { const a = R() * 6.28; fx.dust({ x: q.x + Math.cos(a) * r * 0.8, y: q.y + 1, z: q.z + Math.sin(a) * r * 0.8 }, 6 * Math.sqrt(S.r)); }
+              for (let k2 = 0; k2 < 40 * A.ctx.quality.fxScale; k2++) { const a = R() * 6.28; fx.dust({ x: q.x + Math.cos(a) * r * 0.8, y: q.y + 1, z: q.z + Math.sin(a) * r * 0.8 }, 6 * Math.sqrt(hm)); }
               fx.ring(q, r * 3.5, 0.9, 0xc9a27a, 0.45);
               fx.addShake(2.4);
               audio.thud(); audio.boom(1.4, camera.position.distanceTo(q));

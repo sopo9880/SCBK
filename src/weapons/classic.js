@@ -1,6 +1,7 @@
 // 기본 무기: 폭탄, 미사일, 궤도 레이저, 운석우, 지진, 철거 철구
 import * as THREE from 'three';
 import { makeBomb, makeMissile, makeMeteor, makeBall } from './models.js';
+import { funScale } from './defs.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const beamMat = new THREE.MeshBasicMaterial({ color: 0xff3b1f, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -136,8 +137,8 @@ export const CLASSIC = {
 
   ball: {
     fire(A, hit, cam) {
-      const S = A.S, p = hit.point;
-      const r = 5 * Math.sqrt(S.r);
+      const S = A.S, p = hit.point, G = funScale(A);
+      const r = 5 * (G.giant ? G.size : 1.1);
       const m = A.spawn(makeBall(), r);
       const from = cam.add(v3(0, -4, 0));
       const dir = v3(p.x, p.y + r, p.z).sub(from);
@@ -145,7 +146,7 @@ export const CLASSIC = {
       const sp = Math.min(160, (60 + dist * 0.12) * Math.sqrt(S.v));
       const tFlight = dist / sp;
       const vel = dir.multiplyScalar(sp); vel.y += 0.5 * 9.81 * tFlight;
-      A.ctx.D.addBall(from, vel, r, m);
+      A.ctx.D.addBall(from, vel, r, m, { onHit: G.giant && G.size < 3 ? null : (b) => { const t = b && { x: b.cx, y: b.baseY + b.height * 0.4, z: b.cz }; if (t) A.blast(t, 6 * G.hit, 30 * G.pw, { vap: G.hit, silent: true, smokeColumn: false }); } });
       A.ctx.audio.whoosh(0.6);
     },
   },

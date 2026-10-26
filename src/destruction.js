@@ -1188,6 +1188,18 @@ export class Destruction {
       if (b.state === 'gone' || b.state === 'fractured') { this._anim.splice(i, 1); continue; }
       a.t += dt;
       const u = Math.min(1, a.t / a.dur), e = u * u * (3 - 2 * u);
+      if (a.lift) {
+        // 통째로 하늘로 떠올라 사라짐 (반중력·중력 반전 세계 멸망)
+        const k = Math.max(0, (a.t - a.wait) / a.dur);
+        const h = a.lift * k * k, ang = a.spin * k;
+        q.setFromAxisAngle(axis.set(a.ax, 0.3, a.az).normalize(), ang);
+        m.makeTranslation(b.cx, b.baseY + b.height * 0.5 + h, b.cz);
+        m.multiply(M2.makeRotationFromQuaternion(q));
+        m.multiply(M2.makeTranslation(-b.cx, -b.baseY - b.height * 0.5, -b.cz));
+        this.intact.setMatrixAt(b.inst, m);
+        if (k >= 1) { this.intact.setVisibleAt(b.inst, false); b.state = 'gone'; this._anim.splice(i, 1); }
+        continue;
+      }
       const minS = a.keep ? 1 : Math.max(0.06, Math.min(0.5, 6 / b.height)) + (1 - a.sev) * 0.25;
       const sy = 1 - (1 - minS) * e;
       const tilt = (a.keep ? a.sev * 0.12 : a.sev * 0.28) * e;
@@ -1205,6 +1217,15 @@ export class Destruction {
         this._anim.splice(i, 1);
       }
     }
+  }
+  // 건물 통째로 하늘로 (물리 없이)
+  levitate(b, height = 3000, dur = 8, wait = 0) {
+    if (b.state !== 'intact') return;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._scoreBuilding(b, 1);
+    this._anim.push({ b, t: 0, dur, wait, lift: height * (0.7 + Math.random() * 0.6), spin: (Math.random() - 0.5) * 3, ax: Math.random() - 0.5, az: Math.random() - 0.5 });
+    this._wakeArea(b);
   }
   // 특정 건물에 외부 폭원(q)에서 오는 충격 적용 (조각화 + 날림)
   blastFrom(b, q, power, opts = {}) {

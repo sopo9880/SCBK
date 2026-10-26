@@ -100,7 +100,7 @@ export function crustCollapse(A, c, { level = 1, cracks = 0, dur = 9 } = {}) {
       }
       // 지도 전체가 서서히 가라앉음 (몇 번에 나눠)
       this.sink += dt;
-      if (this.sink > 1.2 && u < 1) { this.sink = 0; A.crater(c.x, c.z, half * 1.3, 2.5 * level); }
+      if (!this.sunk && u > 0.6) { this.sunk = true; A.crater(c.x, c.z, half * 1.3, 6 * level); } // 지도 전체가 한 번 크게 가라앉음
       D.quake(c.x, c.z, half * 1.2, 0.8 + level, dt);
       fx.addShake(dt * 1.6);
       return this.t < dur + 6;
