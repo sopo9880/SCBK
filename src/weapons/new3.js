@@ -448,6 +448,21 @@ export const NEW3 = {
 };
 
 export const NEW3_ENDINGS = {
+  // 멈춘 시간에 금이 가고, 시간이 다시 흐르는 순간 세계가 한꺼번에 부서짐
+  timestop: (A, c) => {
+    const { D } = A.ctx; const dur = 6 + A.S.t * 3;
+    A.addActive({
+      real: 0,
+      update(dt) {
+        this.real += dt / Math.max(0.001, D.timeScale);
+        if (this.real < dur + 0.3) return true;
+        crustCollapse(A, c, { level: 1, cracks: 10 });
+        wipeMap(A, c, 'void', { dur: 5 });
+        worldEnd(A, c, 'void', { delay: 1, planetKind: 'shatter' });
+        return false;
+      },
+    });
+  },
   portal: (A, c) => { liftAll(A, c, 6); worldEnd(A, c, 'void', { delay: 2, planetKind: 'void' }); },
   shrink: (A, c) => { wipeMap(A, c, A.opts.enlarge ? 'nuke' : 'void', { dur: 8 }); worldEnd(A, c, 'void', { delay: 3, planetKind: A.opts.enlarge ? 'shatter' : 'void' }); },
   nano: (A, c) => { wipeMap(A, c, 'nuke', { dur: 16 }); worldEnd(A, c, 'ash', { delay: 5, planetKind: 'ash' }); },
