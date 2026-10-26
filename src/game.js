@@ -30,8 +30,8 @@ export const TIMES = {
 };
 
 export class Game {
-  constructor({ canvas, RAPIER, grid, data, radius, place, quality, time, audio, hud }) {
-    this.canvas = canvas; this.RAPIER = RAPIER; this.grid = grid; this.data = data; this.radius = radius;
+  constructor({ canvas, phys, grid, data, radius, place, quality, time, audio, hud }) {
+    this.canvas = canvas; this.phys = phys; this.grid = grid; this.data = data; this.radius = radius;
     this.place = place; this.qualityKey = quality; this.Q = QUALITY[quality]; this.timeKey = time;
     this.audio = audio; this.hud = hud;
     this.clock = new THREE.Clock();
@@ -162,23 +162,101 @@ export class Game {
     this._stormK = -1;
   }
 
-  // 폭풍(토네이도) 중 하늘·조명 어둡게
+  // 폭풍(토네이도)·핵겨울 중 하늘·조명 어둡게 + 멀리서 볼 때 안개 옅게
   _applyWeather(dt) {
-    const want = this.storm || 0;
-    const k0 = this._stormK < 0 ? 0 : this._stormK;
-    const k = k0 + (want - k0) * Math.min(1, dt * 1.2);
-    if (Math.abs(k - this._stormK) < 1e-4) return;
-    this._stormK = k;
     const B = this._base, u = this.sky.material.uniforms;
-    this.sun.intensity = B.sunI * (1 - 0.82 * k);
-    this.hemi.intensity = B.hemi * (1 - 0.5 * k);
-    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k);
-    this.scene.environmentIntensity = B.env * (1 - 0.6 * k);
-    this.scene.fog.density = B.fogD * (1 + 2.6 * k);
-    this.scene.fog.color.copy(B.fog).lerp(this._stormFog || (this._stormFog = new THREE.Color(0x30353b)), k);
-    if (u.cloudCoverage) u.cloudCoverage.value = B.cloud + (0.95 - B.cloud) * k;
-    u.turbidity.value = B.turb + 8 * k;
-    sharedUniforms.uNight.value = Math.max(B.night, 0.55 * k);
+    if (this._stormK < 0) { this._stormK = 0; this._doomK = this._doomK || 0; }
+    this._stormK += ((this.storm || 0) - this._stormK) * Math.min(1, dt * 1.2);
+    this.doom = Math.max(0, (this.doom || 0) - dt / 300);
+    this._doomK = (this._doomK || 0) + (this.doom - (this._doomK || 0)) * Math.min(1, dt * 0.25);
+    const k = this._stormK, d = this._doomK;
+    const dc = this.camera.position.length(), near = this.grid.span * 0.8;
+    const far = dc > near ? (near / dc) ** 1.6 : 1;
+    this.sun.intensity = B.sunI * (1 - 0.82 * k) * (1 - 0.55 * d);
+    this.hemi.intensity = B.hemi * (1 - 0.5 * k) * (1 - 0.4 * d);
+    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k) * (1 + 0.15 * d);
+    this.scene.environmentIntensity = B.env * (1 - 0.6 * k) * (1 - 0.5 * d);
+    this.scene.fog.density = B.fogD * (1 + 2.6 * k) * (1 + 0.7 * d) * far;
+    const fc = this.scene.fog.color.copy(B.fog).lerp(this._stormFog || (this._stormFog = new THREE.Color(0x30353b)), k);
+    if (d > 0) fc.lerp(this._doomFog || (this._doomFog = new THREE.Color(0x5a3422)), d);
+    this._frostK = (this._frostK || 0) + ((this.frost || 0) - (this._frostK || 0)) * Math.min(1, dt * 0.8);
+    const fr = this._frostK;
+    if (fr > 0.001) { fc.lerp(this._frostFog || (this._frostFog = new THREE.Color(0xdde7f0)), fr * 0.8); this.scene.fog.density *= 1 + 1.2 * fr; this.hemi.intensity *= 1 + 0.4 * fr; }
+    if (u.cloudCoverage) u.cloudCoverage.value = B.cloud + (0.95 - B.cloud) * Math.max(k, d);
+    u.turbidity.value = B.turb + 8 * k + 14 * d;
+    if (u.rayleigh) { if (this._ray0 === undefined) this._ray0 = u.rayleigh.value; u.rayleigh.value = this._ray0 * (1 - 0.8 * d); }
+    sharedUniforms.uNight.value = Math.max(B.night, 0.55 * k, 0.3 * d);
+    // 눈
+    if (fr > 0.1 && this.fx) {
+      this._snowAcc = (this._snowAcc || 0) + dt * fr * 140 * this.Q.fxScale;
+      const p = this.camera.position;
+      while (this._snowAcc > 1) {
+        this._snowAcc -= 1;
+        this.fx.smoke.emit(p.x + (Math.random() - 0.5) * 220, p.y + 10 + Math.random() * 70, p.z + (Math.random() - 0.5) * 220, (Math.random() - 0.5) * 3, -4 - Math.random() * 2, (Math.random() - 0.5) * 3, 6, 0.45, 0.45, [0.95, 0.97, 1, 0.9], [0.95, 0.97, 1, 0], 0, 0, 0);
+      }
+    }
+    if (this._dome) {
+      this._dome.visible = d > 0.01;
+      this._dome.position.copy(this.camera.position);
+      this._dome.material.uniforms.uK.value = Math.min(1, d * 1.05);
+      if (this.world && this.world.outer) { const oc = this.world.outer.material.color; if (!this._outer0) this._outer0 = oc.clone(); oc.copy(this._outer0).lerp(this._ashGround || (this._ashGround = new THREE.Color(0x3a2e26)), d * 0.8); }
+      // 지평선 곳곳에서 타오르는 불길
+      if (d > 0.4 && this.fx) {
+        this._hzAcc = (this._hzAcc || 0) + dt * d * 6;
+        const p = this.camera.position;
+        while (this._hzAcc > 1) {
+          this._hzAcc -= 1;
+          const a = Math.random() * 6.28, r = 1500 + Math.random() * 9000;
+          const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = this.world.outer ? this.world.outer.position.y : 0;
+          this.fx.fire.emit(x, y + 40, z, 0, 30, 0, 4, 160, 260, [1, 0.45, 0.1, 0.9], [0.6, 0.1, 0.02, 0], 0.2, 2);
+          this.fx.smoke.emit(x, y + 200, z, 0, 40, 0, 14, 300, 900, [0.12, 0.1, 0.09, 0.8], [0.15, 0.13, 0.12, 0], 0.05, 3);
+        }
+      }
+    }
+    // 재(낙진)와 불씨가 카메라 주변에 떨어짐
+    if (d > 0.15 && this.fx) {
+      this._ashAcc = (this._ashAcc || 0) + dt * d * 90 * this.Q.fxScale;
+      const p = this.camera.position;
+      while (this._ashAcc > 1) {
+        this._ashAcc -= 1;
+        const x = p.x + (Math.random() - 0.5) * 260, z = p.z + (Math.random() - 0.5) * 260, y = p.y + 20 + Math.random() * 80;
+        if (Math.random() < 0.15) this.fx.fire.emit(x, y, z, 0, -2, 0, 5, 0.35, 0.2, [1, 0.45, 0.1, 1], [0.6, 0.1, 0.02, 0], 0.2, 0, 0);
+        else { const g = 0.25 + Math.random() * 0.2; this.fx.smoke.emit(x, y, z, (Math.random() - 0.5) * 2, -3 - Math.random() * 2, (Math.random() - 0.5) * 2, 7, 0.5, 0.6, [g, g, g, 0.85], [g, g, g, 0], 0, 0, 0); }
+      }
+    }
+  }
+
+  // 종말의 하늘: 하늘 위에 덧씌우는 붉고 어두운 돔
+  _doomDome() {
+    if (this._dome) return this._dome;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { uK: { value: 0 }, uLow: { value: new THREE.Color(1.0, 0.36, 0.08) }, uHigh: { value: new THREE.Color(0.2, 0.075, 0.045) } },
+      vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform float uK; uniform vec3 uLow, uHigh; varying vec3 vD;
+        void main(){ float h = vD.y; vec3 c = mix(uLow, uHigh, smoothstep(-0.02, 0.2, h)); float a = uK * (0.72 + 0.16 * smoothstep(0.0, 0.3, h)); gl_FragColor = vec4(c * a, a); }`,
+      transparent: false, depthTest: false, depthWrite: false, side: THREE.BackSide, fog: false,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 16), mat);
+    m.renderOrder = -99; m.frustumCulled = false; m.visible = false;
+    this.scene.add(m); this._dome = m;
+    return m;
+  }
+
+  // 핵겨울 (0~1)
+  setDoom(level, kind = 'nuke') {
+    this.doom = Math.max(this.doom || 0, level);
+    const u = this._doomDome().material.uniforms;
+    if (kind === 'anti') { u.uLow.value.setRGB(0.7, 0.4, 1.0); u.uHigh.value.setRGB(0.12, 0.06, 0.2); } else { u.uLow.value.setRGB(1.0, 0.36, 0.08); u.uHigh.value.setRGB(0.2, 0.075, 0.045); }
+    if (this._doomFog) this._doomFog.set(kind === 'anti' ? 0x241c34 : 0x5a3422);
+    else this._doomFog = new THREE.Color(kind === 'anti' ? 0x241c34 : 0x5a3422);
+  }
+
+  // 거대 폭발을 볼 수 있게 시야·줌 거리 넓히기
+  ensureView(far, maxDist) {
+    const f = Math.min(250000, Math.max(this.camera.far, far));
+    if (f > this.camera.far) { this.camera.far = f; this.camera.updateProjectionMatrix(); }
+    this.controls.maxDistance = Math.max(this.controls.maxDistance, Math.min(60000, maxDist));
   }
 
   _initContent() {
@@ -191,11 +269,11 @@ export class Game {
       onImpact: (p, sp) => { this.audio.thud(); this.fx.dust(p, 6); },
     };
     this.world = new World({ scene: this.scene, grid: this.grid, data: this.data, radius: this.radius, quality: this.Q });
-    this.D = new Destruction({ scene: this.scene, RAPIER: this.RAPIER, grid: this.grid, buildings: this.data.buildings, quality: this.Q, hooks });
+    this.D = new Destruction({ scene: this.scene, phys: this.phys, grid: this.grid, buildings: this.data.buildings, quality: this.Q, hooks });
     this.fx = new FX(this.scene, this.camera, this.Q);
     this.arsenal = new Arsenal({
       scene: this.scene, D: this.D, fx: this.fx, audio: this.audio, world: this.world, grid: this.grid, camera: this.camera, quality: this.Q, game: this, hud: this.hud,
-      onCrater: (ranges, deep) => { for (const r of ranges) this.world.updateTerrainMesh(r); if (deep >= 1.5) this.D.scheduleTerrainRebuild(); },
+      onCrater: (ranges, deep, list) => { for (const r of ranges) this.world.updateTerrainMesh(r); if (deep >= 1.5) this.D.scheduleTerrainRebuild(); for (const [x, z, r] of list || []) this.D.onTerrainChanged(x, z, r * 1.3); },
     });
     // 마커 (조준점)
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48), new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
@@ -312,6 +390,7 @@ export class Game {
     sharedUniforms.uTime.value += dt;
     if (this.sky.material.uniforms.time) this.sky.material.uniforms.time.value += dt;
     if (this.stars && this.stars.visible) this.stars.position.copy(this.camera.position);
+    this.sky.position.copy(this.camera.position);
     // 흔들림 제거 후 컨트롤(또는 시네마틱) 업데이트
     this.camera.position.sub(this._shakeOff);
     const cine = this.cine.active;
@@ -400,6 +479,7 @@ export class Game {
     this.controls.dispose();
     this.arsenal.clear(); this.audio.laserStop();
     this.fx.dispose(); this.D.dispose(); this.world.dispose();
+    this.phys.dispose();
     this.composer.dispose?.();
     if (this.envRT) this.envRT.dispose();
     this.pmrem.dispose();

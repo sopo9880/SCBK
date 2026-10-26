@@ -1,0 +1,234 @@
+// 공습·폭발 추가 무기: 열압력탄, 순항미사일, 자폭 드론 떼, 함포 사격
+import * as THREE from 'three';
+import { makeBomb } from './models.js';
+import { makeDrone, makeCruise, makeShell } from './models2.js';
+import { cineGame, chase, watch, orbit, camDir } from './cam.js';
+
+const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const R = Math.random;
+
+// 지면·지붕 중 높은 쪽
+export function skyline(D, grid, x, z, r = 20) {
+  let h = grid.sample(x, z);
+  for (const b of D.buildingsNear(x, z, r)) if (b.state === 'intact') h = Math.max(h, b.baseY + b.height);
+  return h;
+}
+
+export const AIR = {
+  // ---- 열압력탄: 연료 구름이 퍼진 뒤 점화, 긴 압력파 + 역흡입 ----
+  thermobaric: {
+    fire(A, hit) {
+      const S = A.S, p = hit.point, { D, fx, audio, grid, world } = A.ctx;
+      let done = false;
+      const burst = (q) => {
+        if (done) return; done = true;
+        const gy = grid.sample(q.x, q.z);
+        const c = v3(q.x, Math.max(q.y, gy + 6), q.z);
+        const rc = 34 * S.r, r = 48 * S.r;
+        audio.whoosh(1.2);
+        A.addActive({
+          t: 0, acc: 0, lit: false, vac: false,
+          update(dt) {
+            this.t += dt;
+            const t = this.t;
+            if (t < 1.0) {
+              // 연료 에어로졸 구름 퍼짐
+              this.acc += dt;
+              while (this.acc > 0.012) {
+                this.acc -= 0.012;
+                const a = R() * 6.28, e = R() * 1.2 - 0.2, s = rc * (0.3 + 0.9 * t) * Math.sqrt(R());
+                fx.smoke.emit(c.x + Math.cos(a) * s, c.y + e * s * 0.4, c.z + Math.sin(a) * s, Math.cos(a) * 18, 1, Math.sin(a) * 18, 1.4, rc * 0.2, rc * 0.45, [0.85, 0.82, 0.62, 0.22], [0.8, 0.78, 0.6, 0.0], 1.2, 0, 0.1);
+              }
+              return true;
+            }
+            if (!this.lit) {
+              this.lit = true;
+              fx.flash = Math.max(fx.flash, 0.35);
+              fx.explosion(c, r * 1.05, { ring: true, smokeColumn: true });
+              fx.light(c.x, c.y + 20, c.z, 9e4, r * 7, 1.6, 0xffb060);
+              for (let i = 0; i < Math.round(160 * A.ctx.quality.fxScale); i++) {
+                const a = R() * 6.28, e = R() * 0.9, s = rc * (0.3 + R() * 1.0);
+                fx.fire.emit(c.x + Math.cos(a) * s, c.y + e * s * 0.5, c.z + Math.sin(a) * s, Math.cos(a) * 25, 8 + R() * 14, Math.sin(a) * 25, 0.9 + R() * 0.9, rc * 0.18, rc * 0.5, [1, 0.85, 0.5, 1], [0.9, 0.2, 0.02, 0], 1.5, 3);
+              }
+              D.explode({ x: c.x, y: c.y, z: c.z, r, power: 34 * S.v, vaporize: 4 * S.r, lift: 0.12, scorch: 0.9, lod: 1 });
+              world.paintScorch(c.x, c.z, r * 1.1, 0.95); world.blastTrees(c.x, c.z, r * 1.3, r * 0.6);
+              A.crater(c.x, c.z, 9 * S.r, 2.2 * S.r);
+              fx.addShake(2.4); audio.boom(3, A.ctx.camera.position.distanceTo(c));
+              return true;
+            }
+            // 길게 이어지는 압력파
+            if (t < 1.35) D.explode({ x: c.x, y: c.y, z: c.z, r: r * 1.35, inner: r * 0.55, power: 16 * S.v, lift: 0.05, lod: 2, lodBudget: 0 });
+            // 역흡입: 타고 남은 공기가 안쪽으로 빨려 듦
+            if (t > 1.7 && t < 2.5) D.field({ x: c.x, y: c.y, z: c.z, r: r * 1.3, mode: 'gravity', core: 0, grab: 0, strength: 14 }, dt);
+            return t < 2.6;
+          },
+        });
+      };
+      A.addProjectile({
+        mesh: A.spawn(makeBomb(), 1.7 * Math.sqrt(S.r)), pos: v3(p.x + 6, p.y + 200, p.z), vel: v3(-3, -50, 0), g: 30, align: 'down', trail: { size: 0.7 },
+        onUpdate: (pr) => { if (pr.pos.y < grid.sample(pr.pos.x, pr.pos.z) + 16) { burst(pr.pos.clone()); return false; } return true; },
+        onHit: (q) => burst(q),
+      });
+      audio.whoosh(2.5);
+    },
+  },
+
+  // ---- 순항미사일: 지형을 따라 낮게 날다 표적 직전 솟구쳐 내리꽂음 ----
+  cruise: {
+    fire(A, hit) {
+      const S = A.S, p = hit.point, { D, grid, audio, camera, fx } = A.ctx;
+      const tgt = v3(p.x, p.y, p.z);
+      const f = camDir(camera, tgt);
+      const half = grid.span / 2 * 0.95;
+      const L = Math.min(900, half * 1.3);
+      const start = tgt.clone().addScaledVector(f, -L);
+      start.x = Math.max(-half, Math.min(half, start.x)); start.z = Math.max(-half, Math.min(half, start.z));
+      start.y = skyline(D, grid, start.x, start.z, 30) + 40;
+      const SPD = 150;
+      const st = { phase: 'cruise', pos: start.clone(), vel: v3(tgt.x - start.x, 0, tgt.z - start.z).normalize().multiplyScalar(SPD), hit: false };
+      const m = A.spawn(makeCruise(), 2.2);
+      audio.rocket(5);
+      A.addProjectile({
+        mesh: m, pos: st.pos, vel: st.vel, align: 'fwd', trail: { size: 1.4, fire: true, every: 0.01 },
+        onUpdate: (pr, dt) => {
+          const to = v3(tgt.x - pr.pos.x, 0, tgt.z - pr.pos.z);
+          const dist = to.length();
+          if (st.phase === 'cruise') {
+            // 앞쪽 지붕 높이를 미리 보고 고도 유지
+            const look = pr.pos.clone().addScaledVector(to.clone().normalize(), 70);
+            const want = Math.max(skyline(D, grid, pr.pos.x, pr.pos.z, 25), skyline(D, grid, look.x, look.z, 25)) + 32;
+            const d = to.normalize().multiplyScalar(SPD);
+            d.y = Math.max(-25, Math.min(40, (want - pr.pos.y) * 2.5));
+            pr.vel.lerp(d, Math.min(1, dt * 3));
+            if (dist < 230) { st.phase = 'pop'; audio.whoosh(1); }
+          } else if (st.phase === 'pop') {
+            pr.vel.y += 120 * dt; pr.vel.setLength(SPD);
+            if (pr.pos.y > tgt.y + 110 || dist < 80) st.phase = 'dive';
+          } else {
+            const d = v3().subVectors(tgt, pr.pos).normalize().multiplyScalar(200);
+            pr.vel.lerp(d, Math.min(1, dt * 5));
+          }
+          st.pos.copy(pr.pos); st.vel.copy(pr.vel);
+          return true;
+        },
+        onHit: (q) => {
+          st.hit = true;
+          A.blast(q, 24 * S.r, 46 * S.v, { vap: 2.5 * S.r, crater: [6 * S.r, 2.2 * S.r] });
+          fx.addShake(1.2);
+        },
+      });
+      const g = cineGame(A); if (!g) return;
+      const T = L / SPD;
+      const side = v3(-f.z, 0, f.x);
+      const ground = tgt.clone().addScaledVector(f, -170).addScaledVector(side, 60); ground.y = grid.sample(ground.x, ground.z) + 4;
+      g.cine.play([
+        chase(() => st.pos, () => st.vel, { back: 22, up: 6, ahead: 60, dur: Math.max(1.5, T - 2.4), caption: '순항미사일', fov: 62 }),
+        watch(ground, () => (st.hit ? tgt : st.pos), { dur: 1.6, fov: 48, ts: 0.45, smooth: 0.05 }),
+        watch(() => tgt.clone().addScaledVector(side, 280).addScaledVector(f, -80).add(v3(0, 130, 0)), () => tgt, { dur: 3.2, fov: 46, ts: (u) => 0.5 + 0.5 * u }),
+      ]);
+    },
+  },
+
+  // ---- 자폭 드론 떼: 수십 대가 흩어져 높은 건물부터 들이받음 ----
+  drones: {
+    fire(A, hit) {
+      const S = A.S, p = hit.point, { D, grid, audio, camera } = A.ctx;
+      const n = Math.min(60, Math.round(8 + 7 * S.n ** 0.75));
+      const area = 90 * S.r;
+      const blds = D.buildingsNear(p.x, p.z, area).filter(b => b.state === 'intact').sort((a, b) => b.height - a.height);
+      const f = camDir(camera, v3(p.x, p.y, p.z));
+      const origin = camera.position.clone().addScaledVector(f, 40); origin.y = Math.max(origin.y - 20, skyline(D, grid, origin.x, origin.z) + 30);
+      const swarm = { c: origin.clone(), v: f.clone().multiplyScalar(45), alive: n };
+      audio.buzz(9);
+      for (let i = 0; i < n; i++) {
+        const b = blds.length ? blds[i % Math.max(1, Math.min(blds.length, Math.ceil(n * 0.6)))] : null;
+        const tp = b ? v3(b.cx + (R() - 0.5) * 8, b.baseY + b.height * (0.35 + R() * 0.6), b.cz + (R() - 0.5) * 8)
+          : v3(p.x + (R() - 0.5) * area, 0, p.z + (R() - 0.5) * area);
+        if (!b) tp.y = grid.sample(tp.x, tp.z);
+        const m = A.spawn(makeDrone(), 1.6);
+        const off = v3((R() - 0.5) * 40, (R() - 0.5) * 20, (R() - 0.5) * 40);
+        const d = { pos: origin.clone().add(off), vel: f.clone().multiplyScalar(40), ph: R() * 6.28, delay: R() * 1.5, dive: false };
+        A.addProjectile({
+          mesh: m, pos: d.pos, vel: d.vel, align: 'fwd', ignoreHits: true,
+          onUpdate: (pr, dt) => {
+            d.delay -= dt; d.ph += dt * 6;
+            for (const r of m.userData.rotors) r.rotation.y += dt * 60;
+            const to = v3().subVectors(tp, pr.pos), dist = to.length();
+            if (!d.dive && dist < 70 && d.delay < 0) { d.dive = true; pr.ignoreHits = false; }
+            const sp = d.dive ? 75 : 46;
+            const want = to.normalize().multiplyScalar(sp);
+            if (!d.dive) { want.y += Math.sin(d.ph) * 6 + Math.max(0, skyline(D, grid, pr.pos.x, pr.pos.z, 12) + 25 - pr.pos.y) * 1.5; want.x += Math.cos(d.ph * 0.7) * 6; }
+            pr.vel.lerp(want, Math.min(1, dt * (d.dive ? 4 : 1.6)));
+            if (d.dive && dist < 2) { pr.onHit(pr.pos.clone()); return false; }
+            return true;
+          },
+          onHit: (q) => {
+            if (d.boom) return; d.boom = true; swarm.alive--;
+            A.blast(q, 8 * S.r, 22 * S.v, { vap: 1.2 * S.r, crater: [2.5 * S.r, 0.8 * S.r], smokeColumn: false, silent: R() > 0.4 });
+          },
+        });
+        if (i === 0) swarm.lead = d;
+      }
+      const g = cineGame(A); if (!g || !swarm.lead) return;
+      const ld = swarm.lead;
+      g.cine.play([
+        chase(() => ld.pos, () => ld.vel, { back: 14, up: 4, side: 6, ahead: 50, dur: 3.2, caption: `자폭 드론 ${n}대`, fov: 64 }),
+        orbit(v3(p.x, p.y, p.z), { dist: 260, h: 120, a0: Math.atan2(-f.z, -f.x) - 0.5, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 4.5, look: 20 }),
+      ]);
+    },
+  },
+
+  // ---- 함포 사격: 먼바다 전함의 일제 사격, 포탄이 줄지어 떨어짐 ----
+  naval: {
+    fire(A, hit) {
+      const S = A.S, p = hit.point, { D, grid, audio, camera, fx } = A.ctx;
+      const tgt = v3(p.x, p.y, p.z);
+      const f = camDir(camera, tgt);
+      // 함대는 표적 너머 수평선 쪽 (카메라 반대편이 아니라 옆쪽에서 날아오게)
+      const side = v3(-f.z, 0, f.x);
+      const fromDir = side.clone().multiplyScalar(R() < 0.5 ? 1 : -1).addScaledVector(f, 0.6).normalize();
+      const ship = tgt.clone().addScaledVector(fromDir, 2600); ship.y = 20;
+      const salvos = 3, per = Math.min(16, Math.round(6 + 3 * S.n ** 0.6));
+      const spread = 40 * S.r;
+      const T = 5.5, g = 30;
+      let fired = 0;
+      const shellsAir = [];
+      A.addActive({
+        t: 0, k: 0,
+        update(dt) {
+          this.t += dt;
+          while (this.k < salvos && this.t > this.k * 1.8) {
+            const k = this.k++;
+            // 포구 섬광(멀리서 번쩍)과 지연된 포성
+            for (let j = 0; j < 3; j++) fx.light(ship.x + (j - 1) * 60, ship.y + 15, ship.z, 2e4, 900, 0.25, 0xffd090);
+            A.addActive({ t: 0, update(d) { this.t += d; if (this.t > 2.4) { audio.boom(2.2, 1600); return false; } return true; } });
+            for (let i = 0; i < per; i++) {
+              const a = R() * 6.28, rr = Math.sqrt(R()) * spread;
+              const q = v3(tgt.x + Math.cos(a) * rr + fromDir.x * (R() - 0.5) * spread, 0, tgt.z + Math.sin(a) * rr + fromDir.z * (R() - 0.5) * spread);
+              q.y = grid.sample(q.x, q.z);
+              const tt = T + (R() - 0.5) * 0.6 + k * 0.05;
+              const from = ship.clone().add(v3((R() - 0.5) * 120, 0, (R() - 0.5) * 120));
+              const vel = v3((q.x - from.x) / tt, (q.y - from.y + 0.5 * g * tt * tt) / tt, (q.z - from.z) / tt);
+              const sh = { pos: from.clone(), vel };
+              shellsAir.push(sh);
+              A.addProjectile({
+                mesh: A.spawn(makeShell(), 2), pos: sh.pos, vel: sh.vel, g, align: 'down', trail: { size: 0.9, fire: true, every: 0.02 },
+                onUpdate: (pr) => { if (!sh.wh && pr.vel.y < 0 && pr.pos.y - q.y < 260) { sh.wh = true; if (R() < 0.35) audio.whoosh(1.1); } return true; },
+                onHit: (qq) => { sh.done = true; A.blast(qq, 15 * S.r, 34 * S.v, { vap: 2 * S.r, crater: [4.5 * S.r, 1.8 * S.r], silent: R() > 0.35 }); fx.addShake(0.5); },
+              });
+              fired++;
+            }
+          }
+          return this.k < salvos;
+        },
+      });
+      const gm = cineGame(A); if (!gm) return;
+      const cam1 = tgt.clone().addScaledVector(fromDir, -240).addScaledVector(v3(-fromDir.z, 0, fromDir.x), 90); cam1.y = skyline(D, grid, cam1.x, cam1.z, 30) + 14;
+      gm.cine.play([
+        watch(cam1, () => tgt.clone().addScaledVector(fromDir, 900).add(v3(0, 500, 0)), { dur: 4.2, fov: 40, caption: '함포 사격 — 탄착까지 5초', smooth: 0.3 }),
+        watch(cam1, () => tgt.clone().add(v3(0, 10, 0)), { dur: 1.2, fov: 46, smooth: 0.25 }),
+        orbit(tgt, { dist: 320, h: 90, a0: Math.atan2(-fromDir.z, -fromDir.x) - 0.6, a1: Math.atan2(-fromDir.z, -fromDir.x) + 0.2, dur: 6, look: 15, ts: 0.8 }),
+      ]);
+    },
+  },
+};

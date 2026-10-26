@@ -204,3 +204,6 @@ body.cine .cine-skip { opacity: 1; }
 .power .lbl, .wopt, .ptag { white-space: nowrap; }
 .power { flex: none; }
 .dock-row { flex-wrap: nowrap; }
+
+/* 시간 역행 화면 효과 */
+body.rewind canvas { filter: sepia(0.55) hue-rotate(170deg) saturate(1.4) contrast(1.08); transition: filter 0.3s; }

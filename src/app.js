@@ -1,10 +1,18 @@
 // 앱 진입점: 메뉴 → 로딩 → 게임
-import RAPIER from '@dimforge/rapier3d-compat';
+import { Physics } from './physics/physics.js';
 import { makeProjection, bboxFor, overpassQuery, parseOSM } from './geo.js';
 import { buildTerrainFromTiles, buildProceduralTerrain, buildFlatTerrain, carveWater } from './terrain.js';
 import { generateDemoCity, demoTerrainFn } from './demo.js';
 import { Game, QUALITY, TIMES } from './game.js';
-import { WEAPONS, CATEGORIES, DEFAULT_OPTS, weaponIcon, sliderToPower, powerToSlider } from './weapons.js';
+import { WEAPONS, CATEGORIES, DEFAULT_OPTS, weaponIcon, sliderToPower, powerToSlider, nukeYield, fmtYield } from './weapons.js';
+
+// 핵·충돌 계열은 설명 옆에 TNT 환산 위력 표시
+const YIELD_MUL = { nuke: 1, bomber: 1, icbm: 1, asteroid: 3, antimatter: 25 };
+function descFor(wp, P) {
+  if (wp.id === 'tsar') return `${wp.desc} · 지금 TNT ${fmtYield(50000 * Math.max(0.1, P / 10))}`;
+  if (YIELD_MUL[wp.id]) return `${wp.desc} · 지금 TNT ${fmtYield(nukeYield(P) * YIELD_MUL[wp.id])}`;
+  return wp.desc;
+}
 import { Audio } from './audio.js';
 import { PROF } from './prof.js';
 window.__PROF = PROF;
@@ -93,7 +101,7 @@ export function formatScore(n) {
 const settings = Object.assign({ radius: 600, quality: 'high', time: 'noon', volume: 0.7, power: 3, wopts: {} }, store.get('settings', {}));
 settings.wopts = Object.assign({}, DEFAULT_OPTS, settings.wopts);
 const audio = new Audio(); audio.setVolume(settings.volume);
-let game = null, current = null, rapierReady = null, cachedData = null;
+let game = null, current = null, cachedData = null;
 
 // ---------- 메뉴 ----------
 function initMenu() {
@@ -230,9 +238,8 @@ async function loadAndRun(place, reuse) {
   let i = 0;
   try {
     setStep(i, 'run');
-    if (!rapierReady) rapierReady = RAPIER.init();
-    await rapierReady;
-    setStep(i++, 'done');
+    const phys = await Physics.create({ useWorker: settings.physWorker !== false });
+    setStep(i++, 'done', phys.mode === 'worker' ? '별도 스레드' : '같은 스레드');
 
     let data, grid, proj;
     if (reuse && cachedData) {
@@ -283,7 +290,7 @@ async function loadAndRun(place, reuse) {
     }
     const host = $('#stage'); host.innerHTML = '';
     const canvas = document.createElement('canvas'); host.appendChild(canvas);
-    game = new Game({ canvas, RAPIER, grid, data, radius, place, quality: settings.quality, time: settings.time, audio, hud });
+    game = new Game({ canvas, phys, grid, data, radius, place, quality: settings.quality, time: settings.time, audio, hud });
     setStep(i++, 'done', `건물 ${data.buildings.length.toLocaleString()}동`);
     setStep(i, 'run'); await tick();
     setStep(i++, 'done');
@@ -354,7 +361,7 @@ const hud = {
     const wp = WEAPONS.find(w => w.id === id);
     if (wp.cat !== this.cat) this.showCat(wp.cat);
     for (const b of document.querySelectorAll('.wbtn')) b.classList.toggle('on', b.dataset.id === id);
-    $('#wdesc').textContent = wp.desc;
+    $('#wdesc').textContent = descFor(wp, settings.power);
     // 옵션 칩
     const box = $('#wopts'); box.innerHTML = '';
     for (const o of wp.opts || []) {
@@ -427,7 +434,8 @@ function initHud() {
     const v = sliderToPower(+$('#power').value);
     settings.power = v; store.set('settings', settings);
     $('#powerVal').textContent = '×' + (v >= 10 ? Math.round(v) : v.toFixed(1));
-    $('#powerTag').textContent = v < 3 ? '약함' : v < 10 ? '보통' : v < 35 ? '강함' : v < 75 ? '매우 강함' : '극강';
+    $('#powerTag').textContent = v < 3 ? '약함' : v < 10 ? '보통' : v < 35 ? '강함' : v < 75 ? '매우 강함' : '세계 멸망';
+    if (game) { const wp = WEAPONS.find(w => w.id === game.arsenal.current); if (wp) $('#wdesc').textContent = descFor(wp, v); }
     $('#powerTag').dataset.lv = v < 3 ? 0 : v < 10 ? 1 : v < 35 ? 2 : v < 75 ? 3 : 4;
     if (game) game.arsenal.power = v;
   };

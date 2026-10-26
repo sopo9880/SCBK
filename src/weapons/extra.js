@@ -364,37 +364,6 @@ export const EXTRA = {
     },
   },
 
-  // ---- 반중력 ----
-  antigrav: {
-    fire(A, hit) {
-      const S = A.S, p = hit.point, { D, fx, audio, scene } = A.ctx;
-      const r = 90 * S.r, lift = 5 * S.t, dur = lift + 3;
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 0.35, 1.6), transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-      dome.position.set(p.x, p.y, p.z); scene.add(dome);
-      audio.hum(lift);
-      A.addActive({
-        t: 0, slam: false,
-        update(dt) {
-          this.t += dt;
-          const k = Math.min(1, this.t / 0.8);
-          dome.scale.set(r * k, r * 0.8 * k, r * k);
-          dome.material.opacity = this.t < lift ? 0.12 + 0.05 * Math.sin(this.t * 8) : Math.max(0, 0.12 - (this.t - lift));
-          if (this.t < lift) {
-            D.field({ x: p.x, y: p.y, z: p.z, r, mode: 'lift', grab: r, strength: 1 }, dt);
-            if (R() < dt * 40) { const a = R() * 6.28, d = R() * r; fx.fire.emit(p.x + Math.cos(a) * d, p.y + R() * 10, p.z + Math.sin(a) * d, 0, 8 + R() * 10, 0, 2, 1.2, 0.2, [0.7, 0.4, 1, 0.8], [0.4, 0.2, 1, 0], 0, 0); }
-          } else if (!this.slam) {
-            // 중력 복귀: 위에서 내리꽂힘
-            this.slam = true;
-            D.field({ x: p.x, y: p.y, z: p.z, r: r * 1.3, mode: 'slam', grab: 0, strength: 1 }, 1);
-            audio.whoosh(1.2);
-          }
-          return this.t < dur;
-        },
-        dispose() { if (!this.slam) D.field({ x: p.x, y: p.y, z: p.z, r: r * 1.5, mode: 'slam' }, 1); scene.remove(dome); dome.geometry.dispose(); dome.material.dispose(); },
-      });
-    },
-  },
-
   // ---- 괴수 발 ----
   stomp: {
     fire(A, hit) {

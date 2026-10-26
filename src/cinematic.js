@@ -65,6 +65,22 @@ export class Cinematic {
     if (cb) cb(skipped);
   }
 
+  _fixTarget(pos, look) {
+    const D = this.game.D;
+    const out = this._tmpFix || (this._tmpFix = new THREE.Vector3());
+    out.copy(pos);
+    if (!D || !D.raycast) return out;
+    const dir = this._tmpDir || (this._tmpDir = new THREE.Vector3());
+    dir.subVectors(pos, look);
+    const len = dir.length();
+    if (len < 12) return out;
+    dir.divideScalar(len);
+    const h = D.raycast(look, dir, len);
+    // 표적 바로 옆(보려는 건물 자체)은 무시, 중간을 가리는 건물만
+    if (h && h.info && h.info.b && h.dist > len * 0.3 && h.dist < len - 2) out.copy(look).addScaledVector(dir, h.dist - 4);
+    return out;
+  }
+
   update(dt) {
     if (!this.shots) return;
     let s = this.shots[this.i];
@@ -80,6 +96,7 @@ export class Cinematic {
     this.timeScale = out.timeScale; this.fade = out.fade;
     const cam = this.game.camera;
     const k = this._snap ? 1 : out.smooth > 0 ? 1 - Math.exp(-dt * (1 / out.smooth)) : 1;
+    const cut = this._snap;
     this._snap = false;
     this._smoothPos.lerp(out.pos, k);
     this._smoothLook.lerp(out.look, k);
@@ -87,7 +104,11 @@ export class Cinematic {
     // 지면 아래로 들어가지 않게
     const gy = this.game.grid.sample(this._smoothPos.x, this._smoothPos.z);
     if (this._smoothPos.y < gy + 2) this._smoothPos.y = gy + 2;
-    cam.position.copy(this._smoothPos);
+    // 건물에 가려지면 가린 건물 앞으로 당겨옴 (부드럽게)
+    const fix = this._fixTarget(this._smoothPos, this._smoothLook);
+    if (cut || !this._fix) this._fix = fix.clone();
+    else this._fix.lerp(fix, 1 - Math.exp(-dt * 5));
+    cam.position.copy(this._fix);
     cam.lookAt(this._smoothLook);
     if (out.fov && Math.abs(cam.fov - out.fov) > 0.01) { cam.fov = out.fov; cam.updateProjectionMatrix(); }
   }

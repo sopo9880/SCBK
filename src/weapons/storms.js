@@ -4,7 +4,7 @@ import * as THREE from 'three';
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
 
-function funnelMat(color = [0.3, 0.28, 0.26], alpha = 0.8, speed = 2.4) {
+export function funnelMat(color = [0.3, 0.28, 0.26], alpha = 0.8, speed = 2.4) {
   return new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uSpeed: { value: speed }, uAlpha: { value: alpha }, uFade: { value: 1 }, uCol: { value: new THREE.Color(...color) } },
     vertexShader: `uniform float uTime; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
@@ -29,7 +29,7 @@ function funnelMat(color = [0.3, 0.28, 0.26], alpha = 0.8, speed = 2.4) {
   });
 }
 
-function boltMesh(from, to) {
+export function boltMesh(from, to) {
   const pts = [];
   const n = 18;
   for (let i = 0; i <= n; i++) {
@@ -52,7 +52,7 @@ function boltMesh(from, to) {
   return g;
 }
 
-class Rain {
+export class Rain {
   constructor(scene) {
     const N = 4000;
     this.pos = new Float32Array(N * 6);

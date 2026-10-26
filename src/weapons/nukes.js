@@ -1,6 +1,7 @@
 // 핵무기 3종 + 핵폭발 연출 (아케이드 / 실감)
 import * as THREE from 'three';
 import { makeNukeBomb, makeBomber, makeICBM, makeSilo, makeWarhead } from './models.js';
+import { makeTsarBomb, makeParachute, makeAntimatter } from './models2.js';
 import { ease } from '../cinematic.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
@@ -56,57 +57,136 @@ function heatColor(T, c) {
   return c.setRGB(0.55 + 0.45 * T / 0.25, 0.08 + 0.27 * T / 0.25, 0.02 + 0.06 * T / 0.25);
 }
 
-// ---------- 핵폭발 (물리 + 연출) ----------
-export function detonate(A, q, { scale = 1, light = false } = {}) {
-  const { D, fx, audio, world, camera, grid } = A.ctx;
-  const S = A.S;
-  const R = 380 * S.r * scale;
-  const real = A.opts.realNuke;
-  q = { x: q.x, y: grid.sample(q.x, q.z), z: q.z };
-  // 물리: 중심부 증발 + 퍼져나가는 충격파
-  D.explode({ x: q.x, y: q.y + 20, z: q.z, r: 70 * S.r * scale, power: 70 * S.v, vaporize: 55 * S.r * scale, lift: 0.5, lod: 1, scorch: 0.8 });
-  world.paintScorch(q.x, q.z, R * 0.55, 0.95);
-  world.paintScorch(q.x, q.z, R * 0.95, 0.45);
-  world.blastTrees(q.x, q.z, R, R * 0.45);
-  A.crater(q.x, q.z, 34 * S.r * scale, 10 * S.r * scale);
-  const camDist = camera.position.distanceTo(v3(q.x, q.y, q.z));
-  let shook = false;
-  A.addActive({
-    t: 0, prev: 60 * S.r * scale, dur: 3.4 * Math.sqrt(S.t * scale),
-    update(dt) {
-      this.t += dt;
-      const t = Math.min(1, this.t / this.dur);
-      const cur = R * (1 - (1 - t) ** 2.2);
-      if (cur > this.prev) {
-        const f = 1 - cur / R;
-        D.explode({ x: q.x, y: q.y + 10, z: q.z, r: cur, inner: this.prev, power: (18 + 55 * f) * S.v, lift: 0.18, lod: cur < 160 ? 1 : 2, scorch: 0.5 * f + 0.1, lodBudget: 0 });
-        fx.addShake(dt * 2 * f);
-        const n = Math.round((real ? 6 : 10) * A.ctx.quality.fxScale);
-        for (let k = 0; k < n; k++) {
-          const u = Math.random() * 6.28, x = q.x + Math.cos(u) * cur, z = q.z + Math.sin(u) * cur;
-          fx.smoke.emit(x, grid.sample(x, z) + 2, z, Math.cos(u) * 30 * f, 4, Math.sin(u) * 30 * f, 4 + Math.random() * 4, 12, 40, [0.55, 0.5, 0.45, 0.6 * f + 0.1], [0.5, 0.48, 0.46, 0], 0.8, 0.5);
-        }
-        if (!shook && cur >= camDist) { shook = true; fx.addShake(real ? 3.2 : 2); }
-        this.prev = cur;
-      }
-      return t < 1;
-    },
-  });
-  if (!real) {
-    fx.nuke(q, R);
-    audio.nuke();
-    fx.ring(q, R * 1.15, 3.2, 0xffe2b0, 0.7);
-    return;
-  }
-  A.addActive(new RealNukeFX(A, q, R, light));
-  // 소리는 거리만큼 늦게 도착 (음속 343m/s, 최대 6초)
-  const delay = Math.min(6, camDist / 343);
-  A.addActive({ t: 0, update(dt) { this.t += dt; if (this.t >= delay) { audio.nuke(); return false; } return true; } });
+// ---------- 핵폭발 규모 (실제 핵무기 효과 상사법칙) ----------
+// 위력 ×1 ≈ 15kt(히로시마), ×10 ≈ 0.84Mt, ×100 ≈ 47Mt(차르 봄바급)
+export const nukeYield = (P) => 15 * Math.max(0.5, P) ** 1.75;
+export function nukeRadii(kt) {
+  const s = Math.cbrt(kt / 15);
+  const fire = 170 * (kt / 15) ** 0.4;          // 화구 반경
+  return {
+    kt, s, fire,
+    vap: fire * 0.85,                            // 증발
+    r20: Math.max(fire * 1.15, 560 * s),         // 20psi: 철근콘크리트까지 붕괴 → 물리 파괴
+    r5: 1650 * s,                                // 5psi: 대부분 건물 붕괴
+    r1: 4600 * s,                                // 1psi: 유리창·가벼운 피해
+    crater: 38 * s, craterD: 11 * s,
+    cloud: 520 * (kt / 15) ** 0.38,              // 버섯구름 크기 기준
+  };
+}
+export function fmtYield(kt) {
+  if (kt >= 1e6) return (kt / 1e6).toFixed(kt >= 1e7 ? 0 : 1) + 'Gt';
+  if (kt >= 1000) return (kt / 1000).toFixed(kt >= 1e4 ? 0 : 1) + 'Mt';
+  return Math.round(kt) + 'kt';
 }
 
-class RealNukeFX {
-  constructor(A, q, R, light) {
-    this.A = A; this.q = q; this.R = R; this.t = 0; this.light = light;
+// ---------- 핵폭발 (물리 + 연출) ----------
+// opts: scale(위력 배수), kt(직접 지정), light(가벼운 연출), kind: 'nuke'|'anti'
+export function detonate(A, q, { scale = 1, light = false, kt = null, kind = 'nuke', pullback = true } = {}) {
+  const { D, fx, audio, world, camera, grid, game } = A.ctx;
+  const S = A.S;
+  const Y = kt || nukeYield(S.P) * scale ** 3;
+  const N = nukeRadii(Y);
+  const real = A.opts.realNuke;
+  q = { x: q.x, y: grid.sample(q.x, q.z), z: q.z };
+  const half = grid.span / 2, mapR = half * 1.42;
+  const clampR = (r) => Math.min(r, mapR);
+  // 지형·나무·그을음
+  world.paintScorch(q.x, q.z, clampR(N.r20), 0.95);
+  world.paintScorch(q.x, q.z, clampR(N.r5), 0.55);
+  world.blastTrees(q.x, q.z, clampR(N.r5), clampR(N.r20));
+  A.crater(q.x, q.z, Math.min(N.crater, half * 0.9), Math.min(N.craterD, 260));
+  // 화구 안 파편 즉시 증발
+  for (const c of [...D.loose]) if ((c.x - q.x) ** 2 + (c.z - q.z) ** 2 < N.vap * N.vap) D.removeChunk(c);
+  // 건물마다 거리순 처리 (충격파가 지나갈 때)
+  const list = [];
+  for (const b of D.buildings) {
+    if (b.state === 'gone') continue;
+    const d = Math.hypot(b.cx - q.x, b.cz - q.z);
+    if (d < N.r1) list.push([d, b]);
+  }
+  list.sort((a, b) => a[0] - b[0]);
+  const Q = A.ctx.quality;
+  let fracLeft = Math.round((Q.shockFracture || 18) * 4 * (light ? 0.5 : 1));
+  let dustLeft = Math.round(40 * Q.fxScale);
+  const camDist = camera.position.distanceTo(v3(q.x, q.y, q.z));
+  const Rmax = Math.min(N.r1, mapR);
+  const dur = Math.max(2.5, Math.min(9, 1.6 + Rmax / 520)) * (light ? 0.8 : 1);
+  let k = 0, shook = false;
+  A.addActive({
+    t: 0, prev: 0,
+    update(dt) {
+      this.t += dt;
+      const u = Math.min(1, this.t / dur);
+      const cur = Math.max(N.fire * Math.min(1, this.t / 0.25), Rmax * (1 - (1 - u) ** 2));
+      while (k < list.length && list[k][0] <= cur) {
+        const [d, b] = list[k++];
+        if (d < N.vap) { D.vaporizeBuilding(b); continue; }
+        const dirx = (b.cx - q.x) / (d || 1), dirz = (b.cz - q.z) / (d || 1);
+        if (d < N.r20 && fracLeft > 0 && b.state === 'intact' || b.state === 'fractured' && d < N.r5) {
+          if (b.state === 'intact') fracLeft--;
+          const f = 1 - d / N.r5;
+          D.blastFrom(b, q, (25 + 60 * f) * S.v, { lift: 0.2, scorch: 0.3 + 0.5 * f, lod: d < N.r20 * 0.6 ? 1 : 2 });
+        } else if (d < N.r20) {
+          D.flatten(b, 1, dirx, dirz, 1.2);
+          if (dustLeft > 0 && Math.random() < 0.3) { dustLeft--; fx.collapseDust(b); }
+        } else if (d < N.r5) {
+          const sev = 1 - 0.7 * (d - N.r20) / (N.r5 - N.r20);
+          D.flatten(b, sev, dirx, dirz, 1.6);
+          if (dustLeft > 0 && Math.random() < 0.15) { dustLeft--; fx.collapseDust(b); }
+        } else D.flatten(b, 0.29 * (1 - (d - N.r5) / (N.r1 - N.r5)), dirx, dirz);
+      }
+      if (cur > this.prev) {
+        const f = 1 - cur / Rmax;
+        D.ringPush(q, this.prev, cur, (10 + 40 * f) * S.v, 0.2);
+        fx.addShake(dt * 2.5 * f);
+        // 지면을 따라 퍼지는 먼지벽
+        const n = Math.round((real ? 8 : 12) * Q.fxScale);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * 6.28, x = q.x + Math.cos(a) * cur, z = q.z + Math.sin(a) * cur;
+          if (Math.abs(x) > half * 1.3 || Math.abs(z) > half * 1.3) continue;
+          const sz = Math.min(80, 6 + cur * 0.02);
+          fx.smoke.emit(x, grid.sample(x, z) + 2, z, Math.cos(a) * 40 * f, 5, Math.sin(a) * 40 * f, 4 + Math.random() * 4, sz, sz * 3.5, [0.55, 0.5, 0.45, 0.6 * f + 0.15], [0.5, 0.48, 0.46, 0], 0.8, 0.5);
+        }
+        if (!shook && cur >= camDist) { shook = true; fx.addShake(real ? 3.4 : 2.2); }
+        this.prev = cur;
+      }
+      return u < 1 || k < list.length;
+    },
+  });
+  // 너무 큰 폭발: 카메라 시야 넓히기 + 멀리 물러나기
+  const Rv = N.cloud * (kind === 'anti' ? 0.8 : 1);
+  if (game) {
+    game.ensureView(Rv * 8, Rv * 3.2);
+    if (Y >= 4000) { const lv = Math.min(1, 0.35 + 0.65 * Math.log10(Y / 4000) / 1.1); A.addActive({ t: 0, update(dt) { this.t += dt; if (this.t > 4) { game.setDoom(lv, kind); return false; } return true; } }); }
+  }
+  // 충격파 고리 (지도 너머 지평선까지)
+  fx.ring(q, Math.min(N.r1, 90000), dur * 1.6, kind === 'anti' ? 0xd8c8ff : 0xffe2b0, 0.55);
+  if (N.r5 > half) fx.ring(q, Math.min(N.r5, 60000), dur * 1.1, 0xfff0d8, 0.35);
+  if (!real) {
+    fx.nuke(q, Math.min(Rv, 4000));
+    audio.nuke();
+  } else {
+    A.addActive(new RealNukeFX(A, q, Rv, light, { kind, skirt: Math.min(N.r5, Math.max(mapR * 1.2, Rv * 1.6)), fireR: N.fire }));
+    const delay = Math.min(6, camDist / 343);
+    A.addActive({ t: 0, update(dt) { this.t += dt; if (this.t >= delay) { audio.nuke(); if (Y > 3000) audio.nuke(); return false; } return true; } });
+  }
+  // 카메라가 버섯구름에 묻히면 자동으로 물러나서 지켜봄
+  if (pullback && game && A.opts.cinematic && !game.cine.active && camDist < Rv * 2.2 && Y > 400) {
+    const off = v3().subVectors(camera.position, v3(q.x, q.y, q.z)); off.y = 0;
+    if (off.lengthSq() < 1) off.set(1, 0, 0);
+    game.cine.play(aftermathShots(A, q, Rv, off, true), {});
+  }
+  if (A.ctx.hud && A.ctx.hud.toast) A.ctx.hud.toast(`${kind === 'anti' ? '반물질 소멸' : kind === 'impact' ? '충돌' : '핵폭발'} · TNT ${fmtYield(Y)}`);
+  return N;
+}
+
+export class RealNukeFX {
+  constructor(A, q, R, light, o = {}) {
+    this.A = A; this.q = q; this.R = R; this.t = 0; this.light = light; this.o = o;
+    this.anti = o.kind === 'anti';
+    this.k = Math.max(1, Math.min(1.6, (R / 600) ** 0.25)); // 큰 구름일수록 느리게
+    this.skirtR = o.skirt || R * 1.05;
+    this.rf0 = Math.max(R * 0.16, Math.min((o.fireR || 0) * 0.7, R * (this.anti ? 0.36 : 0.26)));
     const { scene, fx } = A.ctx;
     this.scene = scene;
     this.g = new THREE.Group(); this.g.position.set(q.x, q.y, q.z); scene.add(this.g);
@@ -120,6 +200,13 @@ class RealNukeFX {
     this.skirt = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.05, 1, seg + 16, 4, true), cloudMat({ smoke: [0.55, 0.48, 0.4], disp: 0.08, scale: 3.5, swirl: 1.2 }));
     for (const m of [this.fire, this.cap, this.capTop, this.stem, this.wilson, this.skirt]) { m.renderOrder = 12; m.frustumCulled = false; this.g.add(m); }
     this.cap.visible = this.capTop.visible = this.stem.visible = false;
+    if (o.kind === 'impact') {
+      for (const m of [this.fire, this.cap, this.capTop, this.stem, this.skirt, this.wilson]) m.material.uniforms.uSmoke.value.lerp(new THREE.Color(0.36, 0.28, 0.2), 0.7);
+    }
+    if (this.anti) {
+      for (const m of [this.cap, this.capTop, this.stem, this.skirt]) m.material.uniforms.uSmoke.value.lerp(new THREE.Color(0.55, 0.5, 0.75), 0.6);
+      this.wilson.material.uniforms.uSmoke.value.setRGB(0.85, 0.82, 1);
+    }
     this.pl = new THREE.PointLight(0xffd8a0, 0, R * 6, 1.4); this.g.add(this.pl);
     this._c = new THREE.Color();
     fx.flash = 0.62;
@@ -136,16 +223,16 @@ class RealNukeFX {
   }
   update(dt) {
     this.t += dt;
-    const t = this.t, R = this.R;
+    const R = this.R, t = this.t / this.k;
     const life = 46, fadeOut = Math.min(1, Math.max(0, (life - t) / 10));
     for (const m of [this.fire, this.cap, this.capTop, this.stem, this.wilson, this.skirt]) m.material.uniforms.uTime.value = t;
     // 화구: 급팽창 → 상승하며 식음
-    const rf = R * 0.16 * (1 - Math.exp(-t / 0.35));
-    const rise = R * 0.82 * (1 - Math.exp(-t / 7.5));
+    const rf = this.rf0 * (1 - Math.exp(-t / 0.35));
+    const rise = R * (this.anti ? 0.35 : 0.82) * (1 - Math.exp(-t / 7.5));
     const fy = rf * 0.85 + rise;
     const T = Math.exp(-t / 3.2);
     const fu = this.fire.material.uniforms;
-    heatColor(T, fu.uHot.value);
+    heatColor(T, fu.uHot.value); if (this.anti) fu.uHot.value.lerp(this._anti || (this._anti = new THREE.Color(0.7, 0.6, 1.0)), 0.75);
     fu.uHeat.value = Math.min(1, 0.25 + T);
     const squash = 1 - 0.35 * Math.min(1, Math.max(0, (t - 2) / 4));
     this.fire.scale.set(rf * (1 + 0.25 * (1 - squash)), rf * squash, rf * (1 + 0.25 * (1 - squash)));
@@ -164,6 +251,7 @@ class RealNukeFX {
       const cu = this.cap.material.uniforms, tu = this.capTop.material.uniforms;
       const capT = Math.max(0, T * 1.8);
       heatColor(Math.min(1, capT + 0.15), cu.uHot.value); heatColor(Math.min(1, capT), tu.uHot.value);
+      if (this.anti) { cu.uHot.value.lerp(this._anti, 0.75); tu.uHot.value.lerp(this._anti, 0.75); }
       cu.uHeat.value = Math.min(0.9, capT * 0.8); tu.uHeat.value = Math.min(0.6, capT * 0.5);
       cu.uUnder.value = 0.5 * Math.exp(-(t - 2.2) / 10); tu.uUnder.value = 0;
       cu.uAlpha.value = tu.uAlpha.value = Math.min(1, (t - 2.2) * 0.8) * fadeOut;
@@ -191,10 +279,11 @@ class RealNukeFX {
     // 지면 충격파 먼지벽
     const su2 = this.skirt.material.uniforms;
     if (t < 9) {
-      const sr = R * 1.05 * (1 - Math.exp(-t / 1.4));
+      const sr = this.skirtR * (1 - Math.exp(-t / 1.4));
       const f = Math.max(0, 1 - t / 9);
-      this.skirt.scale.set(sr, 18 + 30 * f, sr);
-      this.skirt.position.y = (18 + 30 * f) / 2 - 2;
+      const sh = (18 + 30 * f) * Math.max(1, Math.sqrt(this.skirtR / 400));
+      this.skirt.scale.set(sr, sh, sr);
+      this.skirt.position.y = sh / 2 - 2;
       su2.uAlpha.value = Math.min(0.85, t * 3) * f;
       this.skirt.visible = true;
     } else this.skirt.visible = false;
@@ -222,19 +311,19 @@ class RealNukeFX {
 }
 
 // ---------- 공용: 시네마틱 마무리 샷 (폭발 후 멀리서 지켜보기) ----------
-function aftermathShots(A, q, R, dirWide) {
-  const wd = Math.max(500, Math.min(2200, R * 1.45));
+export function aftermathShots(A, q, R, dirWide, auto = false) {
+  const wd = auto ? Math.max(700, R * 2.3) : Math.max(500, R < 1500 ? Math.min(2200, R * 1.45) : R * 1.6);
   const base = v3(q.x, q.y, q.z);
   const side = dirWide.clone().normalize();
   return [
     { dur: 1.6, caption: '', update: (t, u, out) => {
-      out.pos.copy(base).addScaledVector(side, wd).add(v3(0, 45, 0));
+      out.pos.copy(base).addScaledVector(side, wd).add(v3(0, 45 + wd * 0.03, 0));
       out.look.copy(base).add(v3(0, R * 0.18, 0));
-      out.fov = 42; out.timeScale = 0.35;
+      out.fov = 42; out.timeScale = auto ? 0.6 : 0.35; if (auto) out.fade = Math.max(0, 1 - t * 2.5);
     } },
     { dur: 9, cut: false, update: (t, u, out) => {
-      out.pos.copy(base).addScaledVector(side, wd * (1 + 0.25 * ease.inOut(u))).add(v3(0, 45 + 90 * ease.inOut(u), 0));
-      out.look.copy(base).add(v3(0, R * (0.25 + 0.55 * ease.inOut(u)), 0));
+      out.pos.copy(base).addScaledVector(side, wd * (1 + 0.25 * ease.inOut(u))).add(v3(0, 45 + wd * 0.03 + (90 + wd * 0.08) * ease.inOut(u), 0));
+      out.look.copy(base).add(v3(0, R * (0.2 + (auto ? 0.3 : 0.5) * ease.inOut(u)), 0));
       out.fov = 42 + 8 * u; out.timeScale = Math.min(1, 0.35 + t * 0.5); out.smooth = 0.25;
     } },
   ];
@@ -269,7 +358,7 @@ export const NUKES = {
       const plane = A.spawn(makeBomber(), 1.4);
       const pu = plane.userData;
       const st = { t: 0, released: false, exploded: false, bomb: null, bombPos: v3(), relPos: v3(), planePos: start.clone(), skip: false };
-      const R = 380 * S.r;
+      const R = nukeRadii(nukeYield(S.P)).cloud;
       audio.drone && audio.drone(16);
       // 비행기 + 폭탄 진행 (시네마틱과 별개로 시뮬레이션 시간 기준)
       const fly = A.addActive({
@@ -381,13 +470,13 @@ export const NUKES = {
       const ru = rocket.userData;
       rocket.position.copy(silo.position).add(v3(0, -ru.height * 1.2, 0));
       const toT = v3(tgt.x - sx, 0, tgt.z - sz).normalize();
-      const R = 380 * S.r;
+      const R = nukeRadii(nukeYield(S.P)).cloud;
       const mirv = A.opts.mirv;
       const nW = mirv ? Math.min(10, 3 + Math.round(S.n)) : 1;
       // 탄두 목표
       const targets = [tgt.clone()];
       for (let i = 1; i < nW; i++) {
-        const a = (i / (nW - 1)) * Math.PI * 2 + Math.random() * 0.4, d = R * (0.45 + Math.random() * 0.35);
+        const a = (i / (nW - 1)) * Math.PI * 2 + Math.random() * 0.4, d = Math.min(half * 0.7, R * (0.45 + Math.random() * 0.35));
         const x = tgt.x + Math.cos(a) * d, z = tgt.z + Math.sin(a) * d;
         targets.push(v3(x, grid.sample(x, z), z));
       }
@@ -533,6 +622,136 @@ export const NUKES = {
           else for (const w of st.warheads) w.t0 = Math.min(w.t0, st.t - w.dur + 0.05);
         },
       });
+    },
+  },
+
+  // 차르 봄바급: 대형 폭격기 + 낙하산 투하, 수십 Mt
+  tsar: {
+    fire(A, hit) {
+      const { fx, audio, grid, game, camera } = A.ctx;
+      const S = A.S, p = hit.point;
+      const tgt = v3(p.x, grid.sample(p.x, p.z), p.z);
+      const kt = 50000 * Math.max(0.1, S.P / 10);
+      const N = nukeRadii(kt);
+      const camF = v3().subVectors(tgt, camera.position); camF.y = 0; camF.normalize();
+      const dir = v3(-camF.z, 0, camF.x); if (Math.random() < 0.5) dir.negate();
+      const perp = v3(-dir.z, 0, dir.x);
+      const V = 160, alt = tgt.y + 650, tr = 7;
+      const start = tgt.clone().addScaledVector(dir, -V * tr); start.y = alt;
+      const plane = A.spawn(makeBomber(), 2.2);
+      const pu = plane.userData;
+      const st = { t: 0, released: false, exploded: false, bomb: null, chute: null, bombPos: v3(), vel: v3(), planePos: start.clone() };
+      audio.drone(18);
+      if (game) game.ensureView(N.cloud * 8, N.cloud * 3);
+      const boom = () => {
+        if (st.exploded) return;
+        st.exploded = true;
+        if (st.bomb) { A.remove(st.bomb); st.bomb = null; }
+        if (st.chute) { A.remove(st.chute); st.chute = null; }
+        detonate(A, tgt, { kt, pullback: false });
+      };
+      A.addActive({
+        update(dt) {
+          st.t += dt;
+          const t = st.t, pp = st.planePos;
+          // 투하 후엔 최대 출력으로 상승 이탈
+          if (t < tr + 0.5) pp.copy(start).addScaledVector(dir, V * t);
+          else { pp.addScaledVector(dir, V * 1.3 * dt); pp.y += 25 * dt; }
+          plane.position.copy(pp);
+          plane.quaternion.setFromUnitVectors(v3(0, 0, 1), dir);
+          if (t > tr + 0.5) plane.rotateX(-Math.min(0.25, (t - tr - 0.5) * 0.08));
+          const open = Math.min(1, Math.max(0, (t - (tr - 1.5)) / 0.6));
+          for (const d of pu.doors) d.hinge.rotation.z = d.s * open * 1.4;
+          if (!st.released && t >= tr) {
+            st.released = true;
+            st.bombPos.copy(pp).add(v3(0, -6, 0)); st.vel.copy(dir).multiplyScalar(V * 0.9);
+            st.bomb = A.spawn(makeTsarBomb(), 2.2);
+            audio.whoosh(2);
+          }
+          if (st.bomb && !st.exploded) {
+            const tb = t - tr;
+            // 1초 자유낙하 뒤 낙하산 전개 → 천천히 내려옴
+            if (tb > 1 && !st.chute) { st.chute = A.spawn(makeParachute(), 2.6); audio.whoosh(0.6); }
+            const term = st.chute ? 55 : 200;
+            st.vel.y -= 9.8 * dt;
+            if (st.chute) { st.vel.x *= Math.exp(-dt * 1.2); st.vel.z *= Math.exp(-dt * 1.2); st.vel.y = Math.max(st.vel.y, -term) + (-term - st.vel.y) * Math.min(1, dt * 2); }
+            st.bombPos.addScaledVector(st.vel, dt);
+            st.bomb.position.copy(st.bombPos);
+            st.bomb.quaternion.setFromUnitVectors(v3(0, -1, 0), st.chute ? v3(0, -1, 0) : st.vel.clone().normalize());
+            if (st.chute) { st.chute.position.copy(st.bombPos).add(v3(0, 8, 0)); st.chute.rotation.y += dt * 0.3; }
+            if (st.bombPos.y - grid.sample(st.bombPos.x, st.bombPos.z) < 160) { tgt.set(st.bombPos.x, grid.sample(st.bombPos.x, st.bombPos.z), st.bombPos.z); boom(); }
+          }
+          return t < 60 && !(st.exploded && t > tr + 30);
+        },
+        dispose() { A.remove(plane); if (st.bomb) A.remove(st.bomb); if (st.chute) A.remove(st.chute); },
+      });
+      if (!A.opts.cinematic || !game) return;
+      const fallT = 1 + (alt - tgt.y - 160 - 60) / 55;
+      game.cine.play([
+        { dur: 3.4, caption: '차르 봄바 · TNT ' + fmtYield(kt), update: (t, u, out) => {
+          out.pos.copy(tgt).addScaledVector(perp, 220).addScaledVector(dir, -380); out.pos.y = tgt.y + 8;
+          out.look.copy(st.planePos); out.fov = 30; out.smooth = 0.15;
+        } },
+        { dur: 4.2, update: (t, u, out) => {
+          const pp = st.planePos;
+          out.pos.copy(pp).addScaledVector(perp, 90).addScaledVector(dir, -40).add(v3(0, -30, 0));
+          out.look.copy(st.bomb ? st.bombPos : pp).add(v3(0, 4, 0)); out.fov = 50; out.smooth = 0.12;
+        } },
+        { dur: Math.max(3, fallT - 2.6), caption: '낙하산 전개', update: (t, u, out) => {
+          const bp = st.bomb ? st.bombPos : tgt;
+          out.pos.copy(bp).addScaledVector(perp, 150).addScaledVector(dir, 40).add(v3(0, -25, 0));
+          out.look.copy(bp).add(v3(0, 28, 0)); out.fov = 50; out.smooth = 0.1;
+        } },
+        ...aftermathShots(A, tgt, N.cloud, perp.clone().negate()),
+      ], { onSkip: () => { if (!st.exploded) { st.released = true; boom(); } } });
+    },
+  },
+
+  // 반물질 폭탄: 격납 용기 카운트다운 → 소멸 섬광
+  antimatter: {
+    fire(A, hit) {
+      const { fx, audio, grid, game, camera } = A.ctx;
+      const S = A.S, p = hit.point;
+      const tgt = v3(p.x, grid.sample(p.x, p.z), p.z);
+      const kt = nukeYield(S.P) * 25;
+      const N = nukeRadii(kt);
+      const dev = A.spawn(makeAntimatter(), 2.2);
+      dev.position.copy(tgt);
+      const U = dev.userData;
+      const T = 3.6;
+      audio.charge(T);
+      const st = { t: 0, done: false };
+      A.addActive({
+        update(dt) {
+          st.t += dt;
+          const t = st.t;
+          const f = 3 + t * t * 3;
+          U.rings.forEach((r, i) => { r.rotation.x += dt * f * (0.6 + i * 0.3); r.rotation.y += dt * f * 0.4; });
+          const pulse = 1 + 0.25 * Math.sin(t * f * 2);
+          U.orb.scale.setScalar(pulse * (1 + t * 0.3)); U.halo.scale.setScalar(pulse * (1 + t * 0.6));
+          U.halo.material.opacity = 0.25 + 0.4 * (t / T);
+          fx.light(tgt.x, tgt.y + 15, tgt.z, 4000 + 3e4 * (t / T) ** 2, 300, 0.05, 0xb090ff);
+          if (Math.random() < dt * 30) fx.sparks(v3(tgt.x, tgt.y + 15, tgt.z), { x: 0, y: 1, z: 0 }, 3);
+          if (t >= T && !st.done) {
+            st.done = true; A.remove(dev);
+            detonate(A, tgt, { kt, kind: 'anti', pullback: false });
+            return false;
+          }
+          return true;
+        },
+        dispose() { if (!st.done) A.remove(dev); },
+      });
+      if (!A.opts.cinematic || !game) return;
+      const camF = v3().subVectors(tgt, camera.position); camF.y = 0; camF.normalize();
+      const a0 = Math.atan2(-camF.z, -camF.x);
+      game.cine.play([
+        { dur: T, caption: '반물질 격납 해제 · TNT ' + fmtYield(kt), update: (t, u, out) => {
+          const a = a0 + u * 1.2, d = 45 - u * 15;
+          out.pos.set(tgt.x + Math.cos(a) * d, tgt.y + 12 + u * 4, tgt.z + Math.sin(a) * d);
+          out.look.copy(tgt).add(v3(0, 14, 0)); out.fov = 45 - u * 10; out.timeScale = 1;
+        } },
+        ...aftermathShots(A, tgt, N.cloud, camF.clone().negate()),
+      ], { onSkip: () => { st.t = T; } });
     },
   },
 };

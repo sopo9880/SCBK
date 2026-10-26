@@ -142,12 +142,18 @@ export class World {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform sampler2D uScorch;')
         .replace('#include <map_fragment>', `#include <map_fragment>
-{ vec4 s = texture2D(uScorch, vMapUv); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06,0.05,0.045), s.a * 0.92); diffuseColor.rgb += vec3(0.9,0.35,0.05) * s.r * s.a * 0.0; }`);
+{ vec4 s = texture2D(uScorch, vMapUv); float fr = clamp(s.r * 1.2, 0.0, 1.0); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06,0.05,0.045), s.a * 0.92 * (1.0 - fr)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8,0.88,0.96), s.a * 0.92 * fr); }`);
     };
-    mat.customProgramCacheKey = () => 'sw-terrain-v2';
+    mat.customProgramCacheKey = () => 'sw-terrain-v3';
     this.terrain = new THREE.Mesh(geo, mat);
     this.terrain.receiveShadow = true;
     this.group.add(this.terrain);
+    // 지도 바깥 지평선까지 이어지는 바닥 (멀리서 볼 때 지도가 떠 보이지 않게)
+    let edge = Infinity;
+    for (let i = 0; i < g.n; i++) edge = Math.min(edge, g.h[i], g.h[(g.n - 1) * g.n + i], g.h[i * g.n], g.h[i * g.n + g.n - 1]);
+    const outer = new THREE.Mesh(new THREE.RingGeometry(g.span * 0.5, 120000, 96, 1), new THREE.MeshStandardMaterial({ color: 0x4f5a3d, roughness: 1, metalness: 0 }));
+    outer.rotation.x = -Math.PI / 2; outer.position.y = edge - 1.5; outer.receiveShadow = false;
+    this.outer = outer; this.group.add(outer);
   }
 
   // 바뀐 격자 범위만 위치·법선 갱신
@@ -179,6 +185,18 @@ export class World {
     gr.addColorStop(0, `rgba(0,0,0,${strength})`);
     gr.addColorStop(0.6, `rgba(0,0,0,${strength * 0.6})`);
     gr.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+    this._scorchDirty = true;
+  }
+
+  // 서리·얼음 (흰색으로 칠함)
+  paintFrost(x, z, r, strength = 0.8) {
+    const ctx = this.scorchCtx, k = this._sk, off = this._off;
+    const px = (x + off) * k, py = (z + off) * k, pr = Math.max(2, r * k);
+    const gr = ctx.createRadialGradient(px, py, 0, px, py, pr);
+    gr.addColorStop(0, `rgba(255,255,255,${strength})`);
+    gr.addColorStop(0.7, `rgba(255,255,255,${strength * 0.7})`);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
     this._scorchDirty = true;
   }
@@ -276,7 +294,7 @@ export class World {
       trunks.setMatrixAt(i, m);
       const conifer = kind === 0 && rnd() < 0.45;
       c.setHSL(0.24 + rnd() * 0.08, 0.38 + rnd() * 0.2, 0.22 + rnd() * 0.12);
-      const t = { x, y, z, sc, m: m.clone(), alive: true, burnt: false, conifer, idx: conifer ? ib : ia };
+      const t = { x, y, z, sc, m: m.clone(), col: c.clone(), alive: true, burnt: false, conifer, idx: conifer ? ib : ia };
       if (conifer) { crownsB.setMatrixAt(ib, m); crownsB.setColorAt(ib, c); ib++; }
       else { crownsA.setMatrixAt(ia, m); crownsA.setColorAt(ia, c); ia++; }
       this.trees.push(t);
@@ -324,6 +342,24 @@ export class World {
       for (const im of [trunks, crownsA, crownsB]) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
     }
     return changed;
+  }
+
+  // 시간 역행: 나무와 그을음 되돌리기 (k: 0~1 진행)
+  restoreTrees() {
+    if (!this.treeMeshes) return;
+    const { trunks, crownsA, crownsB } = this.treeMeshes;
+    this.trees.forEach((t, i) => {
+      if (t.alive && !t.burnt) return;
+      const cm = t.conifer ? crownsB : crownsA;
+      trunks.setMatrixAt(i, t.m); cm.setMatrixAt(t.idx, t.m); cm.setColorAt(t.idx, t.col);
+      t.alive = true; t.burnt = false;
+    });
+    for (const im of [trunks, crownsA, crownsB]) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+  }
+  fadeScorch(k) {
+    const ctx = this.scorchCtx, c = this.scorchCanvas;
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, c.width, c.height); ctx.restore();
+    this._scorchDirty = true;
   }
 
   dispose() {

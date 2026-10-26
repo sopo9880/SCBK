@@ -5,8 +5,14 @@ import { CLASSIC } from './classic.js';
 import { EXTRA } from './extra.js';
 import { STORMS } from './storms.js';
 import { NUKES, detonate } from './nukes.js';
+import { AIR } from './air.js';
+import { SKY2 } from './sky2.js';
+import { NATURE2 } from './nature2.js';
+import { FUN } from './fun.js';
+import { SPECIAL2 } from './special2.js';
 
-const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES };
+const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2 };
+export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
 
@@ -68,7 +74,7 @@ export class Arsenal {
     if (!o.silent) audio.boom(Math.min(3, r / 15), this.ctx.camera.position.distanceTo(this._tmp.set(q.x, q.y, q.z)));
   }
   crater(x, z, r, d) { this._crater.push([x, z, r, d]); }
-  nukeHit(q) { detonate(this, q); }
+  nukeHit(q, o) { return detonate(this, q, o); }
 
   update(dt, aim) {
     const { D, fx, grid } = this.ctx;
@@ -118,9 +124,10 @@ export class Arsenal {
     if (this._crater.length) {
       const ranges = [];
       let deep = 0;
-      for (const [x, z, r, d] of this._crater) { ranges.push(grid.crater(x, z, r, d)); deep = Math.max(deep, d); }
+      const list = this._crater;
+      for (const [x, z, r, d] of list) { ranges.push(grid.crater(x, z, r, d)); deep = Math.max(deep, Math.abs(d)); }
       this._crater = [];
-      this.ctx.onCrater(ranges, deep);
+      this.ctx.onCrater(ranges, deep, list);
     }
   }
 

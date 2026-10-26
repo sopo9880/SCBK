@@ -1,4 +1,4 @@
-import sys, time, json, threading, http.server, socketserver, functools, os
+import sys, time, json, os, threading, http.server, socketserver, functools, os
 from playwright.sync_api import sync_playwright
 ROOT = os.path.abspath('app')
 OUT = sys.argv[1] if len(sys.argv) > 1 else '/tmp/claude-0/shots'
@@ -14,7 +14,7 @@ with sync_playwright() as p:
     logs = []
     pg.on('console', lambda m: logs.append(f'[{m.type}] {m.text}'))
     pg.on('pageerror', lambda e: logs.append(f'[pageerror] {e}'))
-    pg.add_init_script("localStorage.setItem('we.settings', JSON.stringify({radius:500, quality:'medium', time:'noon'}))")
+    pg.add_init_script("localStorage.setItem('we.settings', JSON.stringify({radius:500, quality:'medium', time:'noon', physWorker: !!sessionStorage.getItem('W')}))")
     pg.goto(f'http://127.0.0.1:{port}/index.html')
     pg.wait_for_timeout(800)
     pg.screenshot(path=f'{OUT}/menu.png')

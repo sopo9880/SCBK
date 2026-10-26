@@ -119,5 +119,33 @@ export class Audio {
     this._tone(1800, 120, 0.4, 0.35, 'sawtooth');
     this._noise(1.5, 500, 0.7, 0.01, 0.6, 60);
   }
+  buzz(dur) {
+    if (!this._init() || this.muted) return;
+    for (const f of [180, 232, 291]) this._tone(f, f * 0.94, dur, 0.035, 'sawtooth');
+    this._noise(dur, 1800, 0.05, 0.3, 4, 600);
+  }
+  horn(dur = 1.6) {
+    if (!this._init() || this.muted) return;
+    for (const f of [311, 370, 466]) this._tone(f, f * 0.995, dur, 0.09, 'sawtooth');
+  }
+  roar(dur = 2.5) {
+    if (!this._init() || this.muted) return;
+    this._tone(110, 48, dur, 0.5, 'sawtooth'); this._tone(73, 35, dur, 0.5, 'square');
+    this._noise(dur, 700, 0.6, 0.2, 1.5, 120);
+  }
+  rewind(dur = 3) {
+    if (!this._init() || this.muted) return;
+    this._tone(60, 900, dur, 0.18, 'sawtooth'); this._tone(90, 1400, dur, 0.1, 'triangle');
+    this._noise(dur, 5000, 0.2, dur * 0.8, 3, 200);
+  }
+  freeze(dur = 2) {
+    if (!this._init() || this.muted) return;
+    this._noise(dur, 7000, 0.3, 0.05, 6, 2500);
+    this._tone(2400, 900, dur, 0.06, 'sine');
+  }
+  charge(dur = 2) {
+    if (!this._init() || this.muted) return;
+    this._tone(80, 900, dur, 0.22, 'sawtooth'); this._tone(40, 460, dur, 0.25, 'sine');
+  }
   hum(dur) { if (!this._init() || this.muted) return; this._tone(48, 30, dur, 0.5, 'sine'); this._tone(96, 40, dur, 0.15, 'triangle'); }
 }
