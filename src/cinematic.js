@@ -40,6 +40,7 @@ export class Cinematic {
     if (!s) return;
     this._snap = s.cut !== false;
     if (s.enter) s.enter();
+    this._solveOcclusion(s);
     if (this.capEl) { this.capEl.textContent = s.caption || ''; this.capEl.classList.toggle('show', !!s.caption); }
   }
   skip() {
@@ -65,6 +66,42 @@ export class Cinematic {
     if (cb) cb(skipped);
   }
 
+  // 시선이 막히지 않는지 (보는 대상 바로 옆의 충돌은 대상 자체로 보고 무시)
+  _clear(look, pos) {
+    const D = this.game.D;
+    const dir = new THREE.Vector3().subVectors(pos, look);
+    const len = dir.length();
+    if (len < 8) return true;
+    dir.divideScalar(len);
+    const h = D.raycast(look, dir, len);
+    if (!h) return true;
+    return !(h.dist > Math.min(len * 0.12, 60) && h.dist < len - 2);
+  }
+  // 샷을 시작할 때: 처음·중간·끝 시점의 카메라 위치가 건물·언덕에 가리면
+  // 대상을 중심으로 옆으로 돌리거나 위로 올려 가리지 않는 자리를 찾아 샷 전체에 적용
+  _solveOcclusion(s) {
+    this._rot = 0; this._lift = 0;
+    if (!this.game.D || !this.game.D.raycast || s.noAvoid) return;
+    const smp = [];
+    for (const u of [0.02, 0.5, 0.95]) {
+      const o = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: null, timeScale: 1, smooth: 0, fade: 0 };
+      try { s.update(u * s.dur, u, o); } catch (e) { return; }
+      smp.push(o);
+    }
+    const p = new THREE.Vector3();
+    for (const lift of [0, 10, 25, 50, 90, 150, 240]) for (const rot of [0, 0.3, -0.3, 0.6, -0.6, 1.0, -1.0]) {
+      let ok = true;
+      for (const o of smp) { this._apply(o.pos, o.look, rot, lift, p); if (!this._clear(o.look, p)) { ok = false; break; } }
+      if (ok) { this._rot = rot; this._lift = lift; return; }
+    }
+  }
+  _apply(pos, look, rot, lift, out) {
+    out.copy(pos);
+    if (rot) { const dx = pos.x - look.x, dz = pos.z - look.z, c = Math.cos(rot), sn = Math.sin(rot); out.x = look.x + dx * c - dz * sn; out.z = look.z + dx * sn + dz * c; }
+    out.y += lift;
+    return out;
+  }
+
   _fixTarget(pos, look) {
     const D = this.game.D;
     const out = this._tmpFix || (this._tmpFix = new THREE.Vector3());
@@ -77,7 +114,8 @@ export class Cinematic {
     dir.divideScalar(len);
     const h = D.raycast(look, dir, len);
     // 표적 바로 옆(보려는 건물 자체)은 무시, 중간을 가리는 건물만
-    if (h && h.info && h.info.b && h.dist > len * 0.3 && h.dist < len - 2) out.copy(look).addScaledVector(dir, h.dist - 4);
+    const solid = h && h.info && (h.info.b || (h.info.chunk && h.info.chunk.state === 0));
+    if (solid && h.dist > Math.min(len * 0.12, 60) && h.dist < len - 2) out.copy(look).addScaledVector(dir, h.dist - 4);
     return out;
   }
 
@@ -93,6 +131,7 @@ export class Cinematic {
     if (!s) { this.stop(false); return; }
     const out = { pos: this._pos, look: this._look, fov: null, timeScale: 1, smooth: 0, fade: 0 };
     s.update(this.t, clamp01(this.t / s.dur), out);
+    if (this._rot || this._lift) this._apply(out.pos, out.look, this._rot, this._lift, out.pos);
     this.timeScale = out.timeScale; this.fade = out.fade;
     const cam = this.game.camera;
     const k = this._snap ? 1 : out.smooth > 0 ? 1 - Math.exp(-dt * (1 / out.smooth)) : 1;

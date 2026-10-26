@@ -116,6 +116,10 @@ function initMenu() {
   demo.innerHTML = '데모 시티<small>오프라인</small>';
   demo.onclick = () => start({ demo: true, name: '데모 시티', sub: '오프라인 · 절차 생성' });
   pres.appendChild(demo);
+  const mega = document.createElement('button'); mega.className = 'chip demo';
+  mega.innerHTML = '메가 시티 8×8km<small>오프라인 · 고사양</small>';
+  mega.onclick = () => start({ demo: true, mega: true, name: '메가 시티', sub: '오프라인 · 8×8km 절차 생성' });
+  pres.appendChild(mega);
 
   const r = $('#radius'); r.value = settings.radius;
   const showR = () => {
@@ -184,7 +188,7 @@ function initMenu() {
   }
 }
 
-function placeKey(p) { return p.demo ? 'demo' : `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`; }
+function placeKey(p) { return p.demo ? (p.mega ? 'demo-mega' : 'demo') : `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`; }
 
 function renderRecent() {
   const recs = Object.values(store.get('records', {})).sort((a, b) => b.when - a.when).slice(0, 12);
@@ -208,7 +212,7 @@ function saveRecord() {
   const recs = store.get('records', {});
   const k = placeKey(current);
   const prev = recs[k];
-  recs[k] = { place: { name: current.name, sub: current.sub, lat: current.lat, lon: current.lon, demo: current.demo }, best: Math.max(prev ? prev.best : 0, s.score), when: Date.now() };
+  recs[k] = { place: { name: current.name, sub: current.sub, lat: current.lat, lon: current.lon, demo: current.demo, mega: current.mega }, best: Math.max(prev ? prev.best : 0, s.score), when: Date.now() };
   store.set('records', recs);
 }
 
@@ -234,7 +238,7 @@ async function loadAndRun(place, reuse) {
   $('#loadTitle').textContent = place.name;
   $('#steps').innerHTML = STEPS.map(s => `<li>${s}<small></small></li>`).join('');
   $('#loadErr').hidden = true; $('#loadActions').hidden = true;
-  const radius = settings.radius;
+  const radius = place.mega ? 4000 : settings.radius;
   let i = 0;
   try {
     setStep(i, 'run');
@@ -250,7 +254,7 @@ async function loadAndRun(place, reuse) {
       data = cachedData.makeData();
     } else if (place.demo) {
       setStep(i, 'run');
-      const demo = generateDemoCity(radius);
+      const demo = generateDemoCity(radius, 7, { square: !!place.mega });
       proj = makeProjection(demo.center.lat, demo.center.lon);
       const json = demo.json;
       setStep(i++, 'done', '오프라인');
@@ -314,7 +318,7 @@ const hud = {
   _toastT: 0, _lastScore: 0,
   enter(place, data) {
     $('#placeName').textContent = place.name;
-    $('#placeSub').textContent = `건물 ${data.buildings.length.toLocaleString()}동 · 반경 ${settings.radius >= 1000 ? (settings.radius / 1000).toFixed(1) + 'km' : settings.radius + 'm'} · ${QUALITY[settings.quality].name}`;
+    $('#placeSub').textContent = `건물 ${data.buildings.length.toLocaleString()}동 · ${place.mega ? '8×8km' : '반경 ' + (game.radius >= 1000 ? (game.radius / 1000).toFixed(1) + 'km' : game.radius + 'm')} · ${QUALITY[settings.quality].name}`;
     const rec = store.get('records', {})[placeKey(place)];
     $('#best').textContent = rec ? `이 장소 최고 ${formatScore(rec.best)}` : '';
     game.arsenal.opts = Object.assign({}, settings.wopts);

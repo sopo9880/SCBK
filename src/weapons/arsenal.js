@@ -89,7 +89,7 @@ export class Arsenal {
       const dir = step.clone().divideScalar(len || 1);
       const hit = pr.ignoreHits ? null : D.raycast(pr.pos, dir, len + 0.5);
       const ground = grid.sample(pr.pos.x, pr.pos.z);
-      if (hit || pr.pos.y + step.y < ground) {
+      if (hit || (!pr.ignoreHits && pr.pos.y + step.y < ground)) {
         const q = hit ? hit.point : { x: pr.pos.x, y: ground, z: pr.pos.z };
         this.remove(pr.mesh);
         this.projectiles.splice(i, 1);

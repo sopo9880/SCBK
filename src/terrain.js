@@ -51,7 +51,7 @@ export class HeightGrid {
 
 export function chooseTerrainParams(radius) {
   const span = Math.round(radius * 2 * 1.35 + 500);
-  const n = Math.min(513, Math.max(257, Math.round(span / 7) | 1));
+  const n = Math.min(radius >= 3500 ? 769 : 513, Math.max(257, Math.round(span / 7) | 1));
   return { span, n: n % 2 ? n : n + 1 };
 }
 
