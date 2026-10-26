@@ -355,8 +355,9 @@ const hud = {
     const w = $('#weapons'); w.innerHTML = '';
     WEAPONS.filter(x => x.cat === cat).forEach((wp, i) => {
       const b = document.createElement('button');
-      b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} (${i + 1}) — ${wp.desc}`;
-      b.innerHTML = `<kbd>${i + 1}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
+      b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} — ${wp.desc}`;
+      const key = i < 9 ? String(i + 1) : i === 9 ? '0' : '⇧' + (i - 9);
+      b.innerHTML = `<kbd>${key}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
       b.onclick = () => this.select(wp.id);
       w.appendChild(b);
     });
@@ -506,8 +507,10 @@ function initHud() {
     if (!game || $('#hud').hidden) return;
     if (game.planetFX) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.endPlanet(); } return; }
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
-    if (/^Digit[1-9]$/.test(e.code)) {
-      const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[+e.code.slice(5) - 1];
+    if (/^Digit[0-9]$/.test(e.code)) {
+      // 1~9, 0 = 10번째, Shift+1~9 = 11번째부터
+      const d = +e.code.slice(5), idx = e.shiftKey ? 10 + d - 1 : d === 0 ? 9 : d - 1;
+      const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[idx];
       if (wp) hud.select(wp.id);
       return;
     }

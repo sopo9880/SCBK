@@ -7,7 +7,7 @@ const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
 
 // 지도 안 아무 지점
-function mapPoint(A, margin = 0.92, near = null, spread = 1) {
+export function mapPoint(A, margin = 0.92, near = null, spread = 1) {
   const { grid } = A.ctx;
   const h = grid.span / 2 * margin;
   let x, z;
@@ -17,7 +17,7 @@ function mapPoint(A, margin = 0.92, near = null, spread = 1) {
 }
 
 // 물리 없이 보이기만 하는 큰 폭발 (지도 전체에 수십 개를 뿌릴 때)
-function fxBlast(A, q, r, opts = {}) {
+export function fxBlast(A, q, r, opts = {}) {
   const { fx, world, audio, camera } = A.ctx;
   fx.explosion(q, r * 0.75, { ring: true, smokeColumn: opts.smoke !== false });
   world.paintScorch(q.x, q.z, r * 1.1, 0.8);
@@ -26,13 +26,13 @@ function fxBlast(A, q, r, opts = {}) {
 }
 
 // n개의 사건을 dur 초 동안 고르게
-function over(A, n, dur, fn, delay = 0) {
+export function over(A, n, dur, fn, delay = 0) {
   let k = 0;
   A.addActive({ t: 0, update(dt) { this.t += dt; while (k < n && this.t >= delay + (k / n) * dur) fn(k++); return k < n; } });
 }
 
 // 다른 무기를 같은 위력으로 여러 번 (연출 카메라는 끔, 결말 재귀 방지)
-function copies(A, id, n, dur, spread = 1) {
+export function copies(A, id, n, dur, spread = 1) {
   over(A, n, dur, () => {
     const p = mapPoint(A, 0.9, v3(0, 0, 0), spread);
     const cine = A.opts.cinematic; A.opts.cinematic = false; A._noEnding = true;
@@ -41,7 +41,7 @@ function copies(A, id, n, dur, spread = 1) {
 }
 
 // 하늘에서 떨어지는 투사체 폭우
-function rain(A, n, dur, { model = makeMeteor, size = 6, r = 40, speed = 260, angle = 0.5, phys = 0.25 } = {}) {
+export function rain(A, n, dur, { model = makeMeteor, size = 6, r = 40, speed = 260, angle = 0.5, phys = 0.25 } = {}) {
   const az = R() * 6.28;
   const dirIn = v3(Math.cos(az) * angle, -1, Math.sin(az) * angle).normalize();
   over(A, n, dur, (k) => {
@@ -56,12 +56,13 @@ function rain(A, n, dur, { model = makeMeteor, size = 6, r = 40, speed = 260, an
 }
 
 // 지도 전체가 물에 잠김
-function flood(A, { dur = 12, color = 0x2a5c7a } = {}) {
+export function flood(A, { dur = 12, color = 0x2a5c7a, height = 1 } = {}) {
   const { scene, grid, D, fx, world } = A.ctx;
   let lo = Infinity, hi = -Infinity;
   for (const h of grid.h) { lo = Math.min(lo, h); hi = Math.max(hi, h); }
   let top = hi;
   for (const b of D.buildings) top = Math.max(top, b.baseY + b.height);
+  top = lo + (top - lo) * height;
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.08, metalness: 0.3, transparent: true, opacity: 0.86 });
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 1, 1), mat);
   sea.rotation.x = -Math.PI / 2; sea.scale.set(grid.span * 8, grid.span * 8, 1); sea.renderOrder = 3;
@@ -91,7 +92,7 @@ function flood(A, { dur = 12, color = 0x2a5c7a } = {}) {
 }
 
 // 지도 위 모든 건물이 하늘로 떨어져 사라짐
-function liftAll(A, c, dur = 7) {
+export function liftAll(A, c, dur = 7) {
   const { D } = A.ctx;
   const list = D.buildings.filter(b => b.state === 'intact').sort((a, b) => Math.hypot(a.cx - c.x, a.cz - c.z) - Math.hypot(b.cx - c.x, b.cz - c.z));
   list.forEach((b, i) => D.levitate(b, 2500 + R() * 2500, 6 + R() * 4, (i / list.length) * dur));
@@ -100,7 +101,7 @@ function liftAll(A, c, dur = 7) {
 }
 
 // 줄지어 지나가는 폭격기 편대 (그림만, 폭탄은 rain 으로)
-function fleet(A, n = 14, dur = 10) {
+export function fleet(A, n = 14, dur = 10) {
   const { grid } = A.ctx;
   const half = grid.span / 2;
   const dir = v3(R() - 0.5, 0, R() - 0.5).normalize();

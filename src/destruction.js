@@ -1188,6 +1188,17 @@ export class Destruction {
       if (b.state === 'gone' || b.state === 'fractured') { this._anim.splice(i, 1); continue; }
       a.t += dt;
       const u = Math.min(1, a.t / a.dur), e = u * u * (3 - 2 * u);
+      if (a.grow) {
+        // 크기 바꾸기 (축소·확대 광선): 바닥 중심 기준 균일 배율
+        const sc = 1 + (a.grow - 1) * e;
+        m.makeTranslation(b.cx, b.baseY, b.cz);
+        m.multiply(M2.makeScale(sc, sc, sc));
+        m.multiply(M2.makeTranslation(-b.cx, -b.baseY, -b.cz));
+        this.intact.setMatrixAt(b.inst, m);
+        if (a.onStep) a.onStep(sc, u);
+        if (u >= 1) { this._anim.splice(i, 1); if (a.onDone) a.onDone(); }
+        continue;
+      }
       if (a.lift) {
         // 통째로 하늘로 떠올라 사라짐 (반중력·중력 반전 세계 멸망)
         const k = Math.max(0, (a.t - a.wait) / a.dur);
@@ -1217,6 +1228,14 @@ export class Destruction {
         this._anim.splice(i, 1);
       }
     }
+  }
+  // 건물 크기 바꾸기 (애니메이션). 끝나면 onDone
+  scaleBuilding(b, grow, dur, onStep, onDone) {
+    if (b.state !== 'intact') return false;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._anim.push({ b, t: 0, dur, grow, onStep, onDone });
+    return true;
   }
   // 건물 통째로 하늘로 (물리 없이)
   levitate(b, height = 3000, dur = 8, wait = 0) {

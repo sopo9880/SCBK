@@ -239,3 +239,4 @@ body.rewind canvas { filter: sepia(0.55) hue-rotate(170deg) saturate(1.4) contra
 .set-key.wait { border-color: #ff5a1f; color: #ff8a55; }
 .set-auto { font-size: 12px; }
 @media (max-width: 700px) { .set-body { grid-template-columns: 1fr; } .set-tabs { flex-direction: row; border-right: 0; border-bottom: 1px solid #ffffff10; } .set-row { grid-template-columns: 1fr; } }
+body.timestop canvas { filter: grayscale(0.85) contrast(1.15) brightness(1.05); }

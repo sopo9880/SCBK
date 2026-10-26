@@ -10,9 +10,13 @@ import { SKY2 } from './sky2.js';
 import { NATURE2 } from './nature2.js';
 import { FUN } from './fun.js';
 import { SPECIAL2 } from './special2.js';
-import { runEnding } from './endings.js';
+import { runEnding, ENDINGS } from './endings.js';
+import { NEW1, NEW1_ENDINGS } from './new1.js';
+import { NEW2, NEW2_ENDINGS } from './new2.js';
+import { NEW3, NEW3_ENDINGS } from './new3.js';
+Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS);
 
-const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2 };
+const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3 };
 export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
