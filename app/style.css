@@ -170,3 +170,37 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px;
 .foot-actions { display: flex; gap: 14px; }
 .link { background: none; border: 0; padding: 0; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .link:hover { color: var(--text); }
+.perf-overlay { position: absolute; left: 16px; top: 76px; margin: 0; background: rgba(0,0,0,.72); border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px; font: 12px/1.45 ui-monospace, Consolas, monospace; color: #cfe; pointer-events: none !important; white-space: pre; }
+
+/* v1.1: 무기 분류 탭, 옵션, 위력 표시, 시네마틱 */
+.dock-row { display: flex; gap: 8px; align-items: center; }
+.wcats { display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px; backdrop-filter: blur(10px); }
+.wcat { border: 0; background: transparent; color: var(--muted); font-weight: 700; font-size: 12.5px; padding: 6px 14px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.wcat small { font-size: 10.5px; opacity: .7; }
+.wcat:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.wcat.on { background: rgba(255, 91, 31, .18); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 91, 31, .55); }
+.wopts { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 6px; backdrop-filter: blur(10px); }
+.wopt { border: 1px solid var(--line-2); background: transparent; color: var(--muted); border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.wopt::before { content: '○ '; }
+.wopt.on { color: #fff; border-color: var(--accent-2); background: rgba(255, 194, 51, .14); }
+.wopt.on::before { content: '● '; color: var(--accent-2); }
+.ptag { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--muted); min-width: 52px; text-align: center; }
+.ptag[data-lv="2"] { background: rgba(255, 194, 51, .18); color: var(--accent-2); }
+.ptag[data-lv="3"] { background: rgba(255, 91, 31, .22); color: #ff8a5c; }
+.ptag[data-lv="4"] { background: linear-gradient(90deg, #ff5b1f, #ff2d55); color: #fff; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { filter: brightness(1.35); } }
+.power input { width: 200px; }
+.wbtn.bomber.on, .wbtn.icbm.on { background: linear-gradient(135deg, #ffc233, #ff5b1f); }
+#cineFade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 41; transition: opacity .05s; }
+.letterbox { position: fixed; left: 0; right: 0; height: 0; background: #000; z-index: 35; pointer-events: none; transition: height .5s ease; }
+.letterbox.top { top: 0; } .letterbox.bottom { bottom: 0; }
+body.cine .letterbox { height: 10vh; }
+body.cine #hud > * { opacity: 0 !important; pointer-events: none !important; }
+body.cine #hud > #toasts { opacity: 1 !important; }
+.cine-cap { position: fixed; left: 50%; bottom: calc(10vh + 22px); transform: translateX(-50%); z-index: 36; color: #fff; font-weight: 800; font-size: 22px; letter-spacing: .06em; text-shadow: 0 2px 12px rgba(0,0,0,.8); opacity: 0; transition: opacity .3s; pointer-events: none; }
+.cine-cap.show { opacity: 1; }
+.cine-skip { position: fixed; right: 22px; bottom: 3.5vh; z-index: 36; color: rgba(255,255,255,.55); font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .4s; }
+body.cine .cine-skip { opacity: 1; }
+.power .lbl, .wopt, .ptag { white-space: nowrap; }
+.power { flex: none; }
+.dock-row { flex-wrap: nowrap; }

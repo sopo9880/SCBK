@@ -3,8 +3,11 @@ import * as THREE from 'three';
 import { buildingShell, fractureBuilding } from './fracture.js';
 import { makeBuildingMaterial } from './materials.js';
 import { hash01 } from './geo.js';
+import { PROF } from './prof.js';
 
 const FIXED = 0, DYN = 1, FROZEN = 2, GONE = 3;
+const GROUP_NORMAL = (0x0001 << 16) | 0xffff; // 소속 1, 모두와 충돌
+const GROUP_SMALL = (0x0002 << 16) | 0x0001;  // 소속 2, 소속 1 하고만 충돌
 const DENSITY = 0.55;
 
 const PALETTE = {
@@ -54,7 +57,7 @@ export class Destruction {
     this.group = new THREE.Group(); scene.add(this.group);
     this.material = makeBuildingMaterial();
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-    this.world.integrationParameters.numSolverIterations = 4;
+    this.world.integrationParameters.numSolverIterations = 2;
     this.world.timestep = 1 / 60;
     this.timeScale = 1; this._acc = 0;
     this.bodyMap = new Map();     // body handle → {b} 또는 {chunk}
@@ -67,8 +70,14 @@ export class Destruction {
     this._c = new THREE.Color();
     this._buildTerrainCollider();
     this._buildIntact();
+    for (const name of ['fracture', 'explode', 'laser', 'field', 'quake', '_support']) {
+      const f = this[name].bind(this);
+      this[name] = (...a) => { const t = performance.now(); try { return f(...a); } finally { PROF.add(name, performance.now() - t); } };
+    }
     this._dirty = new Set();
     this._crushing = new Set();
+    this._pendingQ = []; this.fracBudgetMs = 7; this._fracSpent = 0; this._settled = [];
+    this._lgrid = new Map(); this._frame = 0; this._lgridFrame = -1; this._lgridDirty = true; this._stepMs = 0;
     this._dustBudget = 0;
   }
 
@@ -83,6 +92,8 @@ export class Destruction {
     this.bodyMap.set(this.terrainBody.handle, { terrain: true });
   }
   rebuildTerrainCollider() { this._buildTerrainCollider(); }
+  // 물리 지형은 크레이터가 생긴 직후가 아니라 잠시 뒤 한 번만 다시 만든다 (폭발 프레임 끊김 방지)
+  scheduleTerrainRebuild() { if (this._terrainT === undefined || this._terrainT < 0) this._terrainT = 0.6; }
 
   _buildIntact() {
     const g = this.grid, R = this.R;
@@ -164,9 +175,15 @@ export class Destruction {
       batch.setMatrixAt(inst, this._m);
       batch.setColorAt(inst, col);
       const body = this.world.createRigidBody(R.RigidBodyDesc.fixed().setTranslation(cx, cy, cz).setCanSleep(true).setLinearDamping(0.05).setAngularDamping(0.25));
-      let cd = R.ColliderDesc.convexHull(ch.hull);
+      let cd = null;
+      if (ch.box) {
+        const bx = ch.box;
+        cd = R.ColliderDesc.cuboid(Math.max(0.2, bx.hu), Math.max(0.2, bx.hy), Math.max(0.2, bx.hv)).setTranslation(bx.ox, 0, bx.oz).setRotation({ x: 0, y: bx.qy, z: 0, w: bx.qw });
+      } else cd = R.ColliderDesc.convexHull(ch.hull);
       if (!cd) cd = R.ColliderDesc.cuboid(Math.max(0.3, ch.half[0]), Math.max(0.3, ch.half[1]), Math.max(0.3, ch.half[0]));
       cd.setDensity(DENSITY).setFriction(0.6).setRestitution(0.05);
+      // 작은 파편끼리는 충돌하지 않음 (월드·큰 조각과는 충돌)
+      cd.setCollisionGroups(ch.vol < 14 ? GROUP_SMALL : GROUP_NORMAL);
       this.world.createCollider(cd, body);
       const c = { b, batch, inst, body, i: ch.i, j: ch.j, k: ch.k, vol: ch.vol, state: FIXED, age: 0, size: Math.cbrt(ch.vol), x: cx, y: cy, z: cz, pvy: 0, top: ch.top };
       this.bodyMap.set(body.handle, { chunk: c });
@@ -202,11 +219,17 @@ export class Destruction {
       if (c.state === DYN && (ix || iy || iz)) c.body.applyImpulse({ x: ix, y: iy, z: iz }, true);
       return;
     }
-    if (c.state === FROZEN && this.dynamic.size >= this.quality.maxDynamic) return;
+    if (c.state === FROZEN && this.dynamic.size >= (this.dynBudget || this.quality.maxDynamic)) return;
+    // 움직이는 조각이 예산을 넘으면 작은 조각은 물리 대신 먼지로 사라짐
+    if (c.state === FIXED && this.dynamic.size >= (this.dynBudget || this.quality.maxDynamic) && c.size < 3.2) {
+      this.hooks.onDust && this._dustBudget > 0.5 && (this._dustBudget -= 0.5, this.hooks.onDust({ x: c.x, y: c.y, z: c.z }, c.size));
+      this.removeChunk(c);
+      return;
+    }
     const was = c.state;
     c.body.setBodyType(this.R.RigidBodyType.Dynamic, true);
     c.state = DYN; c.age = 0;
-    this.dynamic.add(c); this.loose.add(c);
+    this.dynamic.add(c); this.loose.add(c); this._lgridDirty = true;
     if (ix || iy || iz) c.body.applyImpulse({ x: ix, y: iy, z: iz }, true);
     if (spin) {
       const m = c.body.mass() * spin;
@@ -227,6 +250,17 @@ export class Destruction {
   _freeze(c) {
     c.body.setBodyType(this.R.RigidBodyType.Fixed, true);
     c.state = FROZEN; this.dynamic.delete(c);
+    if (c.size < 3) this._settled.push(c);
+  }
+  // 쌓인 잔해가 너무 많으면 오래된 작은 조각부터 정리 (물리 부하 상한)
+  _trimRubble() {
+    const max = this.quality.maxLoose || 6000;
+    let n = 0;
+    while (this.loose.size > max && this._settled.length && n < 40) {
+      const c = this._settled.shift();
+      if (c.state !== FROZEN) continue;
+      this.removeChunk(c); n++;
+    }
   }
 
   chunkPos(c) {
@@ -317,19 +351,58 @@ export class Destruction {
   explode(o) {
     const { x, y, z, r } = o;
     const power = o.power || 20, lift = o.lift ?? 0.35, inner = o.inner || 0, vap = o.vaporize || 0;
-    const blds = this.buildingsNear(x, z, r);
+    let blds = this.buildingsNear(x, z, r);
+    // 충격파 링: 이미 지나간 안쪽 건물은 건너뜀
+    if (inner) blds = blds.filter(b => Math.max(Math.hypot(b.minx - x, b.minz - z), Math.hypot(b.maxx - x, b.minz - z), Math.hypot(b.minx - x, b.maxz - z), Math.hypot(b.maxx - x, b.maxz - z)) >= inner);
     // LOD 결정
     const intactList = blds.filter(b => b.state === 'intact').map(b => [b, Math.hypot(b.cx - x, b.cz - z)]).sort((a, b) => a[1] - b[1]);
     const budget = o.lodBudget ?? 8;
-    let fr = 0;
     intactList.forEach(([b, d], idx) => {
       // 수직 범위 체크
       if (y - r > b.baseY + b.height || y + r < b.baseY + b.minH) return;
       if (inner && d + Math.max(b.maxx - b.minx, b.maxz - b.minz) / 2 < inner) return;
       const lod = o.lod ?? (idx < budget ? 0 : idx < budget * 4 ? 1 : 2);
-      if (o.maxFracture && fr >= o.maxFracture) { this._darken(b, 0.25); return; }
-      if (this.fracture(b, lod)) fr++;
+      // 프레임 시간 예산을 넘으면 다음 프레임에 조각내고 이 폭발을 그때 적용
+      if (this._fracSpent >= this.fracBudgetMs && idx > 0) { this._queueFracture(b, lod, o); return; }
+      this._timedFracture(b, lod);
     });
+    const hit = this._blastChunks(o, blds, true);
+    for (const b of blds) { this._dirty.add(b); if (b.blastDir === undefined) b.blastDir = Math.atan2(b.cz - z, b.cx - x); }
+    return hit;
+  }
+
+  _timedFracture(b, lod) {
+    const t = performance.now();
+    const ok = this.fracture(b, lod);
+    this._fracSpent += performance.now() - t;
+    return ok;
+  }
+  // 예산 안이면 바로, 아니면 다음 프레임에 조각화 (true = 지금 조각남)
+  _fractureSoon(b, lod) {
+    if (b.state !== 'intact') return b.state === 'fractured';
+    if (this._fracSpent >= this.fracBudgetMs) { if (!b.pending) this._queueFracture(b, lod, null); return false; }
+    return this._timedFracture(b, lod);
+  }
+  _queueFracture(b, lod, o) {
+    if (b.pending) { if (o) b.pending.blasts.push(o); return; }
+    b.pending = { lod, blasts: o ? [o] : [] };
+    this._pendingQ.push(b);
+  }
+  _processPending() {
+    while (this._pendingQ.length && this._fracSpent < this.fracBudgetMs) {
+      const b = this._pendingQ.shift();
+      const p = b.pending; b.pending = null;
+      if (b.state !== 'intact') continue;
+      this._timedFracture(b, p.lod);
+      for (const o of p.blasts) { if (typeof o === 'function') o(b); else this._blastChunks(o, [b], false); }
+      this._dirty.add(b);
+    }
+  }
+
+  // 폭발을 조각에 적용 (loose = 이미 흩어진 파편까지 포함할지)
+  _blastChunks(o, blds, loose) {
+    const { x, y, z, r } = o;
+    const power = o.power || 20, lift = o.lift ?? 0.35, inner = o.inner || 0, vap = o.vaporize || 0;
     let hit = 0;
     const r2 = r * r;
     const apply = (c, base) => {
@@ -350,20 +423,40 @@ export class Destruction {
     };
     for (const b of blds) {
       if (b.state === 'fractured') { for (const c of b.chunks) if (c.state === FIXED) apply(c, FIXED); }
-      else if (b.state === 'intact' && o.scorch) {
+      else if (b.state === 'intact' && o.scorch && !b.pending) {
         const d = Math.hypot(b.cx - x, b.cz - z);
         if (d < r * 1.3) this._darken(b, o.scorch * 0.5 * (1 - d / (r * 1.3)));
       }
     }
-    for (const c of this.loose) { if (c.state === GONE) continue; this.chunkPos(c); apply(c, c.state); }
-    for (const b of blds) { this._dirty.add(b); if (b.blastDir === undefined) b.blastDir = Math.atan2(b.cz - z, b.cx - x); }
+    if (loose) {
+      // 공간 격자로 근처 파편만 검사
+      for (const c of this._looseNear(x, z, r)) { if (c.state === GONE) continue; this.chunkPos(c); apply(c, c.state); }
+    }
     return hit;
+  }
+
+  // 흩어진 파편 공간 격자 (프레임마다 갱신)
+  _rebuildLooseGrid() {
+    const G = this._lgrid; G.clear();
+    for (const c of this.loose) {
+      const k = Math.floor(c.x / 40) * 100003 + Math.floor(c.z / 40);
+      let l = G.get(k); if (!l) { l = []; G.set(k, l); } l.push(c);
+    }
+    this._lgridFrame = this._frame;
+  }
+  *_looseNear(x, z, r) {
+    if (this._lgridFrame !== this._frame || this._lgridDirty) { this._rebuildLooseGrid(); this._lgridDirty = false; }
+    const c0 = Math.floor((x - r) / 40), c1 = Math.floor((x + r) / 40), d0 = Math.floor((z - r) / 40), d1 = Math.floor((z + r) / 40);
+    if ((c1 - c0 + 1) * (d1 - d0 + 1) > this._lgrid.size) { yield* this.loose; return; }
+    for (let i = c0; i <= c1; i++) for (let j = d0; j <= d1; j++) {
+      const l = this._lgrid.get(i * 100003 + j); if (l) yield* l;
+    }
   }
 
   // 수직 기둥(레이저) - xz 거리 기준
   laser(x, z, r, dt) {
     const blds = this.buildingsNear(x, z, r + 2);
-    for (const b of blds) if (b.state === 'intact') this.fracture(b, 0);
+    for (const b of blds) if (b.state === 'intact') this._fractureSoon(b, 0);
     let n = 0;
     for (const b of blds) {
       if (b.state !== 'fractured') continue;
@@ -389,26 +482,42 @@ export class Destruction {
   }
 
   // 회오리/블랙홀용 힘장. mode: 'vortex' | 'gravity'
+  // 힘장: gravity(블랙홀) / vortex(회오리) / lift(반중력) / slam(반중력 해제)
   field(o, dt) {
     const { x, y, z, r, mode } = o;
-    const blds = this.buildingsNear(x, z, o.grab || r * 0.35);
-    const grab = o.grab || r * 0.35;
-    for (const b of blds) {
-      if (b.state === 'intact') this.fracture(b, 1);
-      if (b.state !== 'fractured') continue;
-      for (const c of b.chunks) {
-        if (c.state !== FIXED) continue;
-        // 블랙홀: 수직 거리는 덜 따진다 (아래 건물 지붕부터 뜯겨 올라감)
-        const d = mode === 'gravity' ? Math.hypot(c.x - x, (c.y - y) * 0.35, c.z - z) : Math.hypot(c.x - x, c.z - z);
-        if (d < grab && Math.random() < dt * (mode === 'gravity' ? 2.5 + (c.top ? 4 : 0) : 6) * (1.3 - d / grab)) {
-          const m = c.body.mass();
-          this.release(c, (x - c.x) * m * 0.05, m * (mode === 'gravity' ? 8 : 2), (z - c.z) * m * 0.05, 0.5);
-        }
-      }
-      this._dirty.add(b);
-    }
+    const grab = o.grab || 0;
     let consumed = 0;
-    for (const c of this.loose) {
+    if (mode === 'slam') {
+      // 떠 있던 모든 파편을 아래로 내리꽂음
+      for (const c of this._looseNear(x, z, r)) {
+        if (c.state !== DYN) continue;
+        const m = c.body.mass();
+        c.body.setGravityScale(1, true); c.float = false; c.age = 0;
+        c.body.applyImpulse({ x: (Math.random() - 0.5) * m * 4, y: -m * 35, z: (Math.random() - 0.5) * m * 4 }, true);
+      }
+      return 0;
+    }
+    if (grab > 0) {
+      const blds = this.buildingsNear(x, z, grab);
+      for (const b of blds) {
+        if (b.state === 'intact') this._fractureSoon(b, 1);
+        if (b.state !== 'fractured') continue;
+        for (const c of b.chunks) {
+          if (c.state !== FIXED) continue;
+          let d, rate;
+          if (mode === 'gravity') { d = Math.hypot(c.x - x, (c.y - y) * 0.35, c.z - z); rate = (2.5 + (c.top ? 4 : 0)) * (o.consume ? 3 : 1); }
+          else if (mode === 'lift') { d = Math.hypot(c.x - x, c.z - z); rate = 0.9 + (c.top ? 0.6 : 0); }
+          else { d = Math.hypot(c.x - x, c.z - z); rate = 4 + (c.top ? 7 : 0) + (c.k > 2 ? 2 : 0); } // 회오리: 지붕부터 뜯김
+          if (d < grab && Math.random() < dt * rate * (1.3 - d / grab)) {
+            const m = c.body.mass();
+            if (mode === 'lift') { this.release(c, 0, m * (2 + Math.random() * 3), 0, 0.15); if (c.state === DYN) { c.body.setGravityScale(-0.35, true); c.float = true; } }
+            else this.release(c, (x - c.x) * m * 0.05, m * (mode === 'gravity' ? 8 : 4), (z - c.z) * m * 0.05, 0.5);
+          }
+        }
+        this._dirty.add(b);
+      }
+    }
+    for (const c of this._looseNear(x, z, r)) {
       if (c.state === GONE) continue;
       this.chunkPos(c);
       const dx = x - c.x, dy = y - c.y, dz = z - c.z;
@@ -422,23 +531,151 @@ export class Destruction {
         const s = o.strength * m * dt / Math.max(0.15, (d / r) ** 1.2);
         const tx = -dz / (dh + 0.01), tz = dx / (dh + 0.01);
         c.body.applyImpulse({ x: (dx / d + tx * 0.35) * s, y: (dy / d) * s, z: (dz / d + tz * 0.35) * s }, true);
+        const damp = o.consume ? 1.2 : 0.6;
         const lv = c.body.linvel();
-        c.body.setLinvel({ x: lv.x * (1 - 0.6 * dt), y: lv.y * (1 - 0.6 * dt), z: lv.z * (1 - 0.6 * dt) }, true);
+        c.body.setLinvel({ x: lv.x * (1 - damp * dt), y: lv.y * (1 - damp * dt), z: lv.z * (1 - damp * dt) }, true);
+      } else if (mode === 'lift') {
+        // 천천히 떠오르며 회전, 너무 높이 가면 멈춤
+        if (!c.float) { c.body.setGravityScale(-0.35, true); c.float = true; }
+        const lv = c.body.linvel();
+        const hgt = c.y - y;
+        const cap = hgt > r * 0.9 ? 0.4 : 1;
+        c.body.setLinvel({ x: lv.x * (1 - 0.8 * dt), y: Math.min(lv.y, 7) * cap, z: lv.z * (1 - 0.8 * dt) }, true);
+        if (Math.random() < dt * 0.6) c.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m }, true);
       } else {
-        // 회오리: 접선 + 상승 + 약한 구심
+        // 회오리: 접선 + 상승 + 약한 구심, 꼭대기에서 바깥으로 내던짐
         const f = 1 - dh / r;
         const tx = -dz / (dh + 0.01), tz = dx / (dh + 0.01);
         const s = o.strength * m * dt;
         const height = c.y - y;
-        const up = height < o.height ? 1.25 : -0.2;
-        c.body.applyImpulse({ x: (tx * 1.2 + dx / (dh + 0.1) * 0.55) * s * f, y: up * s * (0.4 + f), z: (tz * 1.2 + dz / (dh + 0.1) * 0.55) * s * f }, true);
-        if (height > o.height) { // 위쪽에서 바깥으로 던짐
-          c.body.applyImpulse({ x: -dx / (dh + 0.1) * s * 0.8, y: 0, z: -dz / (dh + 0.1) * s * 0.8 }, true);
-        }
+        const up = height < o.height ? 1.35 : -0.2;
+        c.body.applyImpulse({ x: (tx * 1.3 + dx / (dh + 0.1) * 0.6) * s * f, y: up * s * (0.4 + f), z: (tz * 1.3 + dz / (dh + 0.1) * 0.6) * s * f }, true);
+        if (height > o.height) c.body.applyImpulse({ x: -dx / (dh + 0.1) * s * 1.1, y: 0, z: -dz / (dh + 0.1) * s * 1.1 }, true);
       }
     }
     return consumed;
   }
+
+  // 선분 관통 (레일건)
+  lineBlast(a, b, r, power) {
+    const ab = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+    const L = Math.hypot(ab.x, ab.y, ab.z) || 1;
+    const u = { x: ab.x / L, y: ab.y / L, z: ab.z / L };
+    const segD = (px, py, pz) => {
+      const t = Math.max(0, Math.min(L, (px - a.x) * u.x + (py - a.y) * u.y + (pz - a.z) * u.z));
+      return Math.hypot(px - a.x - u.x * t, py - a.y - u.y * t, pz - a.z - u.z * t);
+    };
+    let hit = 0;
+    const push = (c) => {
+      const d = segD(c.x, c.y, c.z);
+      if (d > r) return;
+      if (d < r * 0.45) { this.removeChunk(c); this.hooks.onVaporize && this.hooks.onVaporize(c); hit++; return; }
+      const m = c.body.mass(), f = 1 - d / r;
+      this.release(c, u.x * m * power * f, (u.y * power * f + 4) * m, u.z * m * power * f, 1);
+      hit++;
+    };
+    const seen = new Set();
+    for (let t = 0; t <= L; t += 30) {
+      const px = a.x + u.x * t, pz = a.z + u.z * t, py = a.y + u.y * t;
+      for (const bd of this.buildingsNear(px, pz, r + 20)) {
+        if (seen.has(bd)) continue;
+        if (py < bd.baseY - r || py > bd.baseY + bd.height + r) continue;
+        seen.add(bd);
+        // 조각화가 다음 프레임으로 밀리면 그때 관통 효과를 적용
+        if (!this._fractureSoon(bd, 0) && bd.pending) bd.pending.blasts.push((b2) => { for (const c of b2.chunks) if (c.state === FIXED) push(c); });
+      }
+    }
+    for (const bd of seen) { if (bd.state === 'fractured') for (const c of bd.chunks) if (c.state === FIXED) push(c); this._dirty.add(bd); }
+    for (const c of this.loose) { if (c.state === GONE) continue; this.chunkPos(c); push(c); }
+    return hit;
+  }
+
+  // 쓰나미: 진행 방향 띠 안의 건물·파편을 밀어냄
+  sweep(o, dt) {
+    const { ox, oz, dx, dz, prev, front, halfW, waterY, power } = o;
+    const sx = -dz, sz = dx;
+    const proj = (x, z) => [(x - ox) * dx + (z - oz) * dz, (x - ox) * sx + (z - oz) * sz];
+    const cx = ox + dx * front, cz = oz + dz * front;
+    const blds = this.buildingsNear(cx, cz, halfW + 60);
+    for (const b of blds) {
+      const [s, l] = proj(b.cx, b.cz);
+      const ext = Math.max(b.maxx - b.minx, b.maxz - b.minz) / 2;
+      if (s - ext > front || s + ext < prev || Math.abs(l) > halfW + ext) continue;
+      if (b.baseY > waterY) continue;
+      if (b.state === 'intact') this._fractureSoon(b, 1);
+      if (b.state !== 'fractured') continue;
+      for (const c of b.chunks) {
+        if (c.state !== FIXED) continue;
+        const [cs] = proj(c.x, c.z);
+        if (cs > front || c.y > waterY + 4) continue;
+        if (Math.random() < 0.55) {
+          const m = c.body.mass();
+          this.release(c, dx * m * power, m * (3 + Math.random() * 4), dz * m * power, 0.6);
+        }
+      }
+      this._dirty.add(b);
+    }
+    for (const c of this._looseNear(cx, cz, halfW + 60)) {
+      if (c.state === GONE) continue;
+      this.chunkPos(c);
+      const [s, l] = proj(c.x, c.z);
+      if (s > front || s < front - 70 || Math.abs(l) > halfW || c.y > waterY + 6) continue;
+      if (c.state === FROZEN) { this.release(c); if (c.state !== DYN) continue; }
+      const m = c.body.mass();
+      c.body.applyImpulse({ x: dx * m * power * dt * 3, y: m * 14 * dt, z: dz * m * power * dt * 3 }, true);
+    }
+  }
+
+  // 싱크홀: 아래로 빨려 들어감
+  sink(x, z, r, dt, pull) {
+    for (const b of this.buildingsNear(x, z, r)) {
+      if (Math.hypot(b.cx - x, b.cz - z) > r + 10) continue;
+      if (b.state === 'intact') this._fractureSoon(b, 1);
+      if (b.state !== 'fractured') continue;
+      for (const c of b.chunks) {
+        if (c.state !== FIXED) continue;
+        const d = Math.hypot(c.x - x, c.z - z);
+        if (d > r) continue;
+        const low = c.k <= (b.colMin.get(c.i + ',' + c.j) || 0) + 1;
+        if (Math.random() < dt * (low ? 2.5 : 0.4) * (1.2 - d / r)) {
+          const m = c.body.mass();
+          this.release(c, (x - c.x) * m * 0.08, -m * 4, (z - c.z) * m * 0.08, 0.3);
+        }
+      }
+      this._dirty.add(b);
+    }
+    for (const c of this._looseNear(x, z, r)) {
+      if (c.state !== DYN && c.state !== FROZEN) continue;
+      this.chunkPos(c);
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d > r) continue;
+      if (c.state === FROZEN) { this.release(c); if (c.state !== DYN) continue; }
+      const m = c.body.mass();
+      c.body.applyImpulse({ x: (x - c.x) / (d + 1) * m * pull * dt, y: -m * pull * dt, z: (z - c.z) / (d + 1) * m * pull * dt }, true);
+    }
+  }
+
+  // 네이팜: 불에 타며 서서히 약해짐
+  burn(x, z, r, dt) {
+    for (const b of this.buildingsNear(x, z, r)) {
+      const d = Math.hypot(b.cx - x, b.cz - z);
+      if (d > r + 15) continue;
+      if (b.state === 'intact') {
+        this._darken(b, dt * 0.3);
+        if (Math.random() < dt * 0.7) this._fractureSoon(b, 0);
+        continue;
+      }
+      if (b.state !== 'fractured') continue;
+      for (const c of b.chunks) {
+        if (c.state !== FIXED) continue;
+        if (Math.hypot(c.x - x, c.z - z) > r) continue;
+        if (Math.random() < dt * 0.8) this._darkenChunk(c, 0.1);
+        if (Math.random() < dt * (c.k <= 1 ? 0.3 : 0.12)) this.release(c, 0, 0, 0, 0.2);
+      }
+      this._dirty.add(b);
+    }
+  }
+
 
   // 지진: 반경 내 건물에 무작위 손상 + 진동
   quake(x, z, r, intensity, dt) {
@@ -448,7 +685,7 @@ export class Destruction {
       const f = Math.max(0, 1 - d / r) * intensity;
       const tall = Math.min(1.6, b.height / 25);
       if (b.state === 'intact') {
-        if (Math.random() < dt * f * 0.5 * (0.5 + tall)) this.fracture(b, d < r * 0.4 ? 0 : 1);
+        if (Math.random() < dt * f * 0.5 * (0.5 + tall)) this._fractureSoon(b, d < r * 0.4 ? 0 : 1);
         continue;
       }
       if (b.state !== 'fractured') continue;
@@ -497,7 +734,7 @@ export class Destruction {
         const blds = this.buildingsNear(t.x, t.z, rr);
         for (const b of blds) {
           if (t.y - rr > b.baseY + b.height || t.y + rr < b.baseY) continue;
-          if (b.state === 'intact') { this.fracture(b, 0); this.hooks.onImpact && this.hooks.onImpact(t, sp); }
+          if (b.state === 'intact') { if (this._fractureSoon(b, 0)) this.hooks.onImpact && this.hooks.onImpact(t, sp); }
           if (b.state !== 'fractured') continue;
           for (const c of b.chunks) {
             if (c.state !== FIXED) continue;
@@ -533,15 +770,27 @@ export class Destruction {
 
   // ---------- 매 프레임 ----------
   update(dt) {
+    this._frame++;
     this._acc += Math.min(dt, 0.1) * this.timeScale;
     const step = 1 / 60;
+    // 물리가 무거우면 프레임당 1스텝만: 시뮬레이션이 잠깐 느려지는 대신 화면은 끊기지 않음
+    const maxSteps = this._stepMs > 9 ? 1 : 2;
     let steps = 0;
-    while (this._acc >= step && steps < 3) { this.world.step(); this._acc -= step; steps++; }
-    if (this._acc > step * 3) this._acc = 0;
+    const tStep = performance.now();
+    while (this._acc >= step && steps < maxSteps) { this.world.step(); this._acc -= step; steps++; }
+    const sm = performance.now() - tStep;
+    if (steps) this._stepMs = this._stepMs * 0.8 + (sm / steps) * 0.2;
+    PROF.add('step', sm);
+    const tSync = performance.now();
+    if (this._acc > step * maxSteps) this._acc = 0;
     const simDt = steps * step;
 
     const m = this._m, q = this._q, v = this._v, s = this._s;
-    const budget = this.quality.maxDynamic;
+    // PC 성능에 맞춰 동시에 움직이는 조각 상한을 자동 조절 (목표: 물리 스텝 8ms 이하)
+    const target = 8;
+    const want = this._stepMs > target ? this.quality.maxDynamic * target / this._stepMs : this.quality.maxDynamic;
+    this.dynBudget = Math.round(Math.max(250, Math.min(this.quality.maxDynamic, (this.dynBudget || this.quality.maxDynamic) * 0.9 + want * 0.1)));
+    const budget = this.dynBudget;
     let oldest = null;
     this._dustBudget = Math.min(6, this._dustBudget + dt * 30);
     for (const c of this.dynamic) {
@@ -558,15 +807,17 @@ export class Destruction {
         this.hooks.onDust && this.hooks.onDust(t, c.size);
       }
       c.pvy = lv.y;
-      const slow = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z < 0.25;
-      if (c.body.isSleeping() || (c.age > 9 && slow) || c.age > 28) this._freeze(c);
+      const slow = lv.x * lv.x + lv.y * lv.y + lv.z * lv.z < 0.6;
+      if (c.float) { /* 반중력으로 떠 있는 동안은 정지시키지 않음 */ }
+      else if (c.body.isSleeping() || (c.age > 4 && slow) || (c.age > 10 && c.size < 2.5) || c.age > 20) this._freeze(c);
       else if (!oldest || c.age > oldest.age) oldest = c;
     }
     // 예산 초과: 오래된 것부터 고정
     if (this.dynamic.size > budget) {
-      const arr = [...this.dynamic].sort((a, b) => b.age - a.age);
-      for (let i = 0; i < arr.length - budget; i++) this._freeze(arr[i]);
+      const arr = [...this.dynamic].filter(c => !c.float).sort((a, b) => b.age - a.age);
+      for (let i = 0; i < arr.length - budget && i < arr.length; i++) this._freeze(arr[i]);
     }
+    PROF.add('sync', performance.now() - tSync);
     this._updateBalls(dt);
     // 연쇄 압괴: 무너진 위층 질량이 아래층을 차례로 짓누름
     for (const b of this._crushing) {
@@ -590,16 +841,20 @@ export class Destruction {
       }
       if (cr.k < 0) this._crushing.delete(b);
     }
+    if (this._terrainT >= 0) { this._terrainT -= dt; if (this._terrainT < 0 && this._fracSpent < this.fracBudgetMs) this._buildTerrainCollider(); else if (this._terrainT < 0) this._terrainT = 0.05; }
+    this._processPending();
+    this._trimRubble();
     // 구조 계산 (프레임당 제한)
     let n = 0;
     for (const b of this._dirty) { this._dirty.delete(b); this._support(b); if (++n >= 8) break; }
+    this._fracSpent = 0; // 다음 프레임 예산
   }
 
   stats() {
     return {
       score: this.score, destroyed: this.destroyed, total: this.buildings.length,
       pct: this.totalVol ? this.releasedVol / this.totalVol : 0,
-      dynamic: this.dynamic.size, loose: this.loose.size,
+      dynamic: this.dynamic.size, loose: this.loose.size, budget: this.dynBudget || this.quality.maxDynamic, stepMs: this._stepMs,
     };
   }
 

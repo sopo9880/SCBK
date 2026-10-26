@@ -93,5 +93,31 @@ export class Audio {
     this._laser = null;
   }
   wind(dur) { if (!this._init() || this.muted) return; this._noise(dur, 900, 0.35, 1.5, 3, 300); this._noise(dur, 200, 0.4, 1.5, 0.5, 80); }
+  drone(dur) {
+    if (!this._init() || this.muted) return;
+    const c = this.ctx, t = c.currentTime;
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(70, t); o.frequency.linearRampToValueAtTime(58, t + dur);
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 380;
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16, t + dur * 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(f); f.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.1);
+    this._noise(dur, 600, 0.12, dur * 0.45, 1, 300);
+  }
+  rocket(dur) {
+    if (!this._init() || this.muted) return;
+    this._noise(dur, 700, 0.8, 0.4, 0.7, 120);
+    this._noise(dur * 0.8, 2400, 0.25, 0.2, 2, 300);
+    this._tone(45, 30, dur, 0.6);
+  }
+  thunder() {
+    if (!this._init() || this.muted) return;
+    this._noise(0.25, 4000, 0.6, 0.002, 0.7, 800);
+    this._noise(3.5, 260, 0.9, 0.05, 0.6, 40);
+  }
+  crack() {
+    if (!this._init() || this.muted) return;
+    this._noise(0.12, 9000, 0.9, 0.001, 0.5, 3000);
+    this._tone(1800, 120, 0.4, 0.35, 'sawtooth');
+    this._noise(1.5, 500, 0.7, 0.01, 0.6, 60);
+  }
   hum(dur) { if (!this._init() || this.muted) return; this._tone(48, 30, dur, 0.5, 'sine'); this._tone(96, 40, dur, 0.15, 'triangle'); }
 }

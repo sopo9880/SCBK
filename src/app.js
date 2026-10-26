@@ -4,8 +4,10 @@ import { makeProjection, bboxFor, overpassQuery, parseOSM } from './geo.js';
 import { buildTerrainFromTiles, buildProceduralTerrain, buildFlatTerrain, carveWater } from './terrain.js';
 import { generateDemoCity, demoTerrainFn } from './demo.js';
 import { Game, QUALITY, TIMES } from './game.js';
-import { WEAPONS, weaponIcon } from './weapons.js';
+import { WEAPONS, CATEGORIES, DEFAULT_OPTS, weaponIcon, sliderToPower, powerToSlider } from './weapons.js';
 import { Audio } from './audio.js';
+import { PROF } from './prof.js';
+window.__PROF = PROF;
 
 const $ = (s) => document.querySelector(s);
 const tick = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -41,6 +43,28 @@ const browserApi = {
 };
 const api = window.api || browserApi;
 
+// 큰 반경은 구역을 나눠 받은 뒤 합침 (지도 서버 시간 초과 방지)
+async function fetchOSMTiled(place, radius, onProgress) {
+  const R = radius * 1.08;
+  const n = R <= 1300 ? 1 : R <= 2300 ? 2 : 3;
+  if (n === 1) { onProgress(1, 1); return api.overpass(overpassQuery(bboxFor(place.lat, place.lon, R))); }
+  const full = bboxFor(place.lat, place.lon, R);
+  const dLat = (full.n - full.s) / n, dLon = (full.e - full.w) / n;
+  const seen = new Set(), elements = [];
+  let k = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    k++; onProgress(k, n * n);
+    const bb = { s: full.s + i * dLat, n: full.s + (i + 1) * dLat, w: full.w + j * dLon, e: full.w + (j + 1) * dLon };
+    const json = await api.overpass(overpassQuery(bb));
+    for (const e of json.elements || []) {
+      const key = e.type + e.id;
+      if (seen.has(key)) continue;
+      seen.add(key); elements.push(e);
+    }
+  }
+  return { elements };
+}
+
 // ---------- 저장 ----------
 const store = {
   get(k, d) { try { const v = localStorage.getItem('we.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -66,7 +90,8 @@ export function formatScore(n) {
   return Math.round(n).toLocaleString('ko-KR');
 }
 
-const settings = Object.assign({ radius: 600, quality: 'high', time: 'noon', volume: 0.7 }, store.get('settings', {}));
+const settings = Object.assign({ radius: 600, quality: 'high', time: 'noon', volume: 0.7, power: 3, wopts: {} }, store.get('settings', {}));
+settings.wopts = Object.assign({}, DEFAULT_OPTS, settings.wopts);
 const audio = new Audio(); audio.setVolume(settings.volume);
 let game = null, current = null, rapierReady = null, cachedData = null;
 
@@ -87,7 +112,7 @@ function initMenu() {
   const r = $('#radius'); r.value = settings.radius;
   const showR = () => {
     const v = +r.value; $('#radiusVal').textContent = v >= 1000 ? (v / 1000).toFixed(1) + ' km' : v + ' m';
-    $('#radiusHint').textContent = v <= 500 ? '가볍고 빠름 · 캠퍼스 하나 정도' : v <= 900 ? '균형 · 동네 전체' : '도심 전체 · 사양 높은 PC 권장';
+    $('#radiusHint').textContent = v <= 500 ? '가볍고 빠름 · 캠퍼스 하나 정도' : v <= 900 ? '균형 · 동네 전체' : v <= 1500 ? '도심 전체 · 사양 높은 PC 권장' : '구 단위 초대형 · 첫 로딩이 1~3분 걸릴 수 있고 고사양 PC 필요';
   };
   r.oninput = () => { showR(); settings.radius = +r.value; store.set('settings', settings); };
   showR();
@@ -232,7 +257,7 @@ async function loadAndRun(place, reuse) {
     } else {
       proj = makeProjection(place.lat, place.lon);
       setStep(i, 'run', '서버 응답 대기…');
-      const json = await api.overpass(overpassQuery(bboxFor(place.lat, place.lon, radius * 1.08)), placeKey(place) + ':' + radius);
+      const json = await fetchOSMTiled(place, radius, (k, n) => setStep(i, 'run', n > 1 ? `구역 ${k}/${n} 받는 중…` : '서버 응답 대기…'));
       const nEl = (json.elements || []).length;
       setStep(i++, 'done', `${nEl.toLocaleString()}개 요소`);
       setStep(i, 'run');
@@ -285,28 +310,72 @@ const hud = {
     $('#placeSub').textContent = `건물 ${data.buildings.length.toLocaleString()}동 · 반경 ${settings.radius >= 1000 ? (settings.radius / 1000).toFixed(1) + 'km' : settings.radius + 'm'} · ${QUALITY[settings.quality].name}`;
     const rec = store.get('records', {})[placeKey(place)];
     $('#best').textContent = rec ? `이 장소 최고 ${formatScore(rec.best)}` : '';
+    game.arsenal.opts = Object.assign({}, settings.wopts);
+    game.arsenal.power = settings.power;
     this.buildWeapons();
-    this.select(game.arsenal.current);
+    this.select(settings.weapon && WEAPONS.find(w => w.id === settings.weapon) ? settings.weapon : game.arsenal.current);
     this.toast(`${place.name} 도착 — 마음껏 부수세요`, 'info');
     $('#tTime').title = `시간대: ${TIMES[settings.time].name} (N)`;
   },
+  cat: null,
   buildWeapons() {
-    const w = $('#weapons'); w.innerHTML = '';
-    for (const wp of WEAPONS) {
+    this.cat = null;
+    const cats = $('#wcats'); cats.innerHTML = '';
+    for (const c of CATEGORIES) {
       const b = document.createElement('button');
-      b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} (${wp.key}) — ${wp.desc}`;
-      b.innerHTML = `<kbd>${wp.key}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
+      b.className = 'wcat'; b.dataset.cat = c.id;
+      b.innerHTML = `${c.name}<small>${WEAPONS.filter(w => w.cat === c.id).length}</small>`;
+      b.onclick = () => this.showCat(c.id);
+      cats.appendChild(b);
+    }
+    // 위력 슬라이더 (로그 스케일 1~100)
+    const pw = $('#power');
+    pw.value = powerToSlider(settings.power);
+    pw.oninput();
+  },
+  showCat(cat) {
+    this.cat = cat;
+    for (const b of document.querySelectorAll('.wcat')) b.classList.toggle('on', b.dataset.cat === cat);
+    const w = $('#weapons'); w.innerHTML = '';
+    WEAPONS.filter(x => x.cat === cat).forEach((wp, i) => {
+      const b = document.createElement('button');
+      b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} (${i + 1}) — ${wp.desc}`;
+      b.innerHTML = `<kbd>${i + 1}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
       b.onclick = () => this.select(wp.id);
       w.appendChild(b);
-    }
+    });
+    if (game) for (const b of document.querySelectorAll('.wbtn')) b.classList.toggle('on', b.dataset.id === game.arsenal.current);
   },
   select(id) {
     if (!game) return;
     game.arsenal.holdEnd();
     game.arsenal.current = id;
-    for (const b of document.querySelectorAll('.wbtn')) b.classList.toggle('on', b.dataset.id === id);
+    settings.weapon = id; store.set('settings', settings);
     const wp = WEAPONS.find(w => w.id === id);
+    if (wp.cat !== this.cat) this.showCat(wp.cat);
+    for (const b of document.querySelectorAll('.wbtn')) b.classList.toggle('on', b.dataset.id === id);
     $('#wdesc').textContent = wp.desc;
+    // 옵션 칩
+    const box = $('#wopts'); box.innerHTML = '';
+    for (const o of wp.opts || []) {
+      const b = document.createElement('button');
+      b.className = 'wopt' + (settings.wopts[o.key] ? ' on' : '');
+      b.textContent = o.label;
+      b.onclick = () => {
+        settings.wopts[o.key] = !settings.wopts[o.key]; store.set('settings', settings);
+        game.arsenal.opts[o.key] = settings.wopts[o.key];
+        b.classList.toggle('on', settings.wopts[o.key]);
+      };
+      box.appendChild(b);
+    }
+    box.hidden = !(wp.opts && wp.opts.length);
+  },
+  cycleCat(d) {
+    const i = CATEGORIES.findIndex(c => c.id === this.cat);
+    const c = CATEGORIES[(i + d + CATEGORIES.length) % CATEGORIES.length];
+    this.showCat(c.id);
+    const first = WEAPONS.find(w => w.cat === c.id);
+    if (first) this.select(first.id);
   },
   fired(id) {
     const b = document.querySelector(`.wbtn[data-id="${id}"]`);
@@ -322,6 +391,12 @@ const hud = {
     $('#pct').textContent = pct < 10 ? pct.toFixed(1) + '%' : Math.round(pct) + '%';
     $('#pctBar').style.width = pct + '%';
     $('#perf').textContent = `${Math.round(fps)} FPS · 움직이는 조각 ${s.dynamic.toLocaleString()}`;
+    const po = $('#perfOverlay');
+    if (!po.hidden) {
+      const a = PROF.avg, pk = PROF.peak, f = (k) => `${(a[k] || 0).toFixed(1).padStart(5)}  (최대 ${(pk[k] || 0).toFixed(0)})`;
+      const info = game ? game.renderer.info.render : { calls: 0, triangles: 0 };
+      po.textContent = `FPS        ${fps.toFixed(0)}\n렌더       ${f('render')} ms\n물리 전체  ${f('physics')} ms\n 스텝      ${f('step')} ms\n 조각화    ${f('fracture')} ms\n 폭발      ${f('explode')} ms\n무기       ${f('weapons')} ms\n연출       ${f('fx')} ms\n움직이는 조각 ${s.dynamic} / 상한 ${s.budget}\n흩어진 조각   ${s.loose}\n드로우콜     ${info.calls}`;
+    }
   },
   hover(b, x, y) {
     const tip = $('#tip');
@@ -348,7 +423,14 @@ const hud = {
 
 function initHud() {
   $('#back').onclick = toMenu;
-  $('#power').oninput = (e) => { const v = +e.target.value; $('#powerVal').textContent = '×' + v.toFixed(1); if (game) game.arsenal.power = v; };
+  $('#power').oninput = () => {
+    const v = sliderToPower(+$('#power').value);
+    settings.power = v; store.set('settings', settings);
+    $('#powerVal').textContent = '×' + (v >= 10 ? Math.round(v) : v.toFixed(1));
+    $('#powerTag').textContent = v < 3 ? '약함' : v < 10 ? '보통' : v < 35 ? '강함' : v < 75 ? '매우 강함' : '극강';
+    $('#powerTag').dataset.lv = v < 3 ? 0 : v < 10 ? 1 : v < 35 ? 2 : v < 75 ? 3 : 4;
+    if (game) game.arsenal.power = v;
+  };
   let slow = false;
   const toggleSlow = () => { slow = !slow; game && game.setSlowMo(slow); $('#tSlow').classList.toggle('on', slow); $('#slowBadge').hidden = !slow; };
   $('#tSlow').onclick = toggleSlow;
@@ -385,8 +467,13 @@ function initHud() {
     if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
     if (e.code === 'F11') { e.preventDefault(); api.toggleFullscreen(); return; }
     if (!game || $('#hud').hidden) return;
-    const wp = WEAPONS.find(w => e.key === w.key);
-    if (wp) { hud.select(wp.id); return; }
+    if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
+    if (/^Digit[1-9]$/.test(e.code)) {
+      const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[+e.code.slice(5) - 1];
+      if (wp) hud.select(wp.id);
+      return;
+    }
+    if (e.code === 'Tab') { e.preventDefault(); hud.cycleCat(e.shiftKey ? -1 : 1); return; }
     switch (e.code) {
       case 'KeyT': toggleSlow(); break;
       case 'KeyN': cycleTime(); break;
@@ -394,9 +481,10 @@ function initHud() {
       case 'KeyM': mute(); break;
       case 'KeyH': help(); break;
       case 'KeyU': $('#hud').classList.toggle('hide-ui'); break;
+      case 'F3': e.preventDefault(); $('#perfOverlay').hidden = !$('#perfOverlay').hidden; break;
       case 'Escape': if (!$('#help').hidden) help(); else toMenu(); break;
       case 'BracketLeft': case 'BracketRight': {
-        const p = $('#power'); p.value = Math.max(0.5, Math.min(3, +p.value + (e.code === 'BracketRight' ? 0.1 : -0.1))); p.oninput({ target: p }); break;
+        const p = $('#power'); p.value = Math.max(0, Math.min(1, +p.value + (e.code === 'BracketRight' ? 0.05 : -0.05))); p.oninput(); break;
       }
       case 'KeyR': if (e.ctrlKey) { e.preventDefault(); reset(); } break;
     }

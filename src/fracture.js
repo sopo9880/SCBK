@@ -199,6 +199,15 @@ export function fractureBuilding(b, baseY, groundAt, maxChunks = 220) {
     let gmax = groundAt(cx, cz);
     for (const p of ring) gmax = Math.max(gmax, groundAt(p[0], p[1]));
     const areaAbs = Math.abs(a);
+    // 거의 직사각형이면 상자 충돌체(볼록 다면체보다 물리 비용이 절반 이하)
+    let pu0 = Infinity, pu1 = -Infinity, pv0 = Infinity, pv1 = -Infinity;
+    for (const p of piece) { pu0 = Math.min(pu0, p[0]); pu1 = Math.max(pu1, p[0]); pv0 = Math.min(pv0, p[1]); pv1 = Math.max(pv1, p[1]); }
+    const fill = areaAbs / Math.max(1e-6, (pu1 - pu0) * (pv1 - pv0));
+    let boxBase = null;
+    if (fill > 0.82) {
+      const [bx, bz] = toXZ([(pu0 + pu1) / 2, (pv0 + pv1) / 2]);
+      boxBase = { hu: (pu1 - pu0) / 2 * 0.95, hv: (pv1 - pv0) / 2 * 0.95, ox: bx - cx, oz: bz - cz, qy: Math.sin(-th / 2), qw: Math.cos(-th / 2) };
+    }
 
     for (let k = 0; k < nL; k++) {
       let y0 = bottom + k * layerH, y1 = bottom + (k + 1) * layerH;
@@ -210,13 +219,14 @@ export function fractureBuilding(b, baseY, groundAt, maxChunks = 220) {
       addWalls(Bd, ring, y0, y1, c, kinds);
       addCap(Bd, ring, [], y1, true, c, k === nL - 1 ? 1 : 2);
       addCap(Bd, ring, [], y0, false, c, 2);
+      const box = boxBase && { ...boxBase, hy: (y1 - y0) / 2 * 0.95 };
       const hull = new Float32Array(ring.length * 6);
       const sh = 0.96; // 충돌체를 살짝 줄여 서로 끼지 않게
       ring.forEach((p, n) => {
         hull.set([(p[0] - cx) * sh, (y0 - cy) * sh, (p[1] - cz) * sh, (p[0] - cx) * sh, (y1 - cy) * sh, (p[1] - cz) * sh], n * 6);
       });
       chunks.push({
-        geo: Bd.build(), center: c, hull,
+        geo: Bd.build(), center: c, hull, box,
         vol: areaAbs * (y1 - y0), i, j, k, top: k === nL - 1,
         half: [Math.sqrt(areaAbs) / 2, (y1 - y0) / 2],
       });

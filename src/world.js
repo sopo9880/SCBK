@@ -150,11 +150,26 @@ export class World {
     this.group.add(this.terrain);
   }
 
-  updateTerrainMesh() {
-    const g = this.grid, pos = this.terrain.geometry.getAttribute('position');
-    for (let k = 0; k < pos.count; k++) pos.setY(k, g.h[k]);
-    pos.needsUpdate = true;
-    this.terrain.geometry.computeVertexNormals();
+  // 바뀐 격자 범위만 위치·법선 갱신
+  updateTerrainMesh(range) {
+    const g = this.grid, n = g.n, geo = this.terrain.geometry;
+    const pos = geo.getAttribute('position'), nor = geo.getAttribute('normal');
+    let [i0, i1, j0, j1] = range || [0, n - 1, 0, n - 1];
+    i0 = Math.max(0, i0 - 1); j0 = Math.max(0, j0 - 1); i1 = Math.min(n - 1, i1 + 1); j1 = Math.min(n - 1, j1 + 1);
+    const c2 = 2 * g.cell, h = g.h;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const k = j * n + i;
+      pos.array[k * 3 + 1] = h[k];
+      const hl = h[j * n + Math.max(0, i - 1)], hr = h[j * n + Math.min(n - 1, i + 1)];
+      const hd = h[Math.max(0, j - 1) * n + i], hu = h[Math.min(n - 1, j + 1) * n + i];
+      let nx = hl - hr, ny = c2, nz = hd - hu;
+      const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+      nor.array[k * 3] = nx; nor.array[k * 3 + 1] = ny; nor.array[k * 3 + 2] = nz;
+    }
+    const a = (j0 * n) * 3, b = ((j1 * n) + n) * 3;
+    pos.clearUpdateRanges(); nor.clearUpdateRanges();
+    pos.addUpdateRange(a, b - a); nor.addUpdateRange(a, b - a);
+    pos.needsUpdate = true; nor.needsUpdate = true;
   }
 
   paintScorch(x, z, r, strength = 0.8) {

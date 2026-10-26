@@ -11,13 +11,15 @@ import { World } from './world.js';
 import { Destruction } from './destruction.js';
 import { FX } from './fx.js';
 import { Arsenal } from './weapons.js';
+import { Cinematic } from './cinematic.js';
 import { sharedUniforms } from './materials.js';
+import { PROF } from './prof.js';
 
 export const QUALITY = {
-  low: { name: '낮음', pixelRatio: 1, shadows: 0, bloom: false, ao: false, texSize: 2048, anisotropy: 4, trees: 2500, maxDynamic: 700, chunkFull: 120, particles: 2500, fxScale: 0.5, shockFracture: 10, msaa: 0 },
-  medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxDynamic: 1400, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
-  high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxDynamic: 2200, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
-  ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxDynamic: 3500, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
+  low: { name: '낮음', pixelRatio: 1, shadows: 0, bloom: false, ao: false, texSize: 2048, anisotropy: 4, trees: 2500, maxLoose: 2500, maxDynamic: 700, chunkFull: 120, particles: 2500, fxScale: 0.5, shockFracture: 10, msaa: 0 },
+  medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxLoose: 4500, maxDynamic: 1400, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
+  high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxLoose: 7000, maxDynamic: 2200, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
+  ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxLoose: 11000, maxDynamic: 3500, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
 };
 
 export const TIMES = {
@@ -41,6 +43,8 @@ export class Game {
     this._initScene();
     this._initContent();
     this._initControls();
+    this.cine = new Cinematic(this);
+    this.storm = 0;
     this._bind();
     this._fpsT = 0; this._fpsN = 0; this.fps = 60;
     this._loop = this._loop.bind(this);
@@ -54,6 +58,7 @@ export class Game {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.shadowMap.enabled = this.Q.shadows > 0;
+    r.info.autoReset = false;
     r.shadowMap.type = THREE.PCFShadowMap;
     this.renderer = r;
   }
@@ -152,6 +157,28 @@ export class Game {
     if (night) { this.sky.visible = false; this.scene.background = new THREE.Color(0x070a14); }
     else { this.sky.visible = true; this.scene.background = null; }
     if (this.stars) this.stars.visible = night;
+    this._base = { sunI: T.sunI, hemi: T.hemi, exp: T.exposure, env: T.env, night: T.night, fog: this.scene.fog.color.clone(), fogD: this.scene.fog.density,
+      turb: u.turbidity.value, cloud: u.cloudCoverage ? u.cloudCoverage.value : 0 };
+    this._stormK = -1;
+  }
+
+  // 폭풍(토네이도) 중 하늘·조명 어둡게
+  _applyWeather(dt) {
+    const want = this.storm || 0;
+    const k0 = this._stormK < 0 ? 0 : this._stormK;
+    const k = k0 + (want - k0) * Math.min(1, dt * 1.2);
+    if (Math.abs(k - this._stormK) < 1e-4) return;
+    this._stormK = k;
+    const B = this._base, u = this.sky.material.uniforms;
+    this.sun.intensity = B.sunI * (1 - 0.82 * k);
+    this.hemi.intensity = B.hemi * (1 - 0.5 * k);
+    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k);
+    this.scene.environmentIntensity = B.env * (1 - 0.6 * k);
+    this.scene.fog.density = B.fogD * (1 + 2.6 * k);
+    this.scene.fog.color.copy(B.fog).lerp(this._stormFog || (this._stormFog = new THREE.Color(0x30353b)), k);
+    if (u.cloudCoverage) u.cloudCoverage.value = B.cloud + (0.95 - B.cloud) * k;
+    u.turbidity.value = B.turb + 8 * k;
+    sharedUniforms.uNight.value = Math.max(B.night, 0.55 * k);
   }
 
   _initContent() {
@@ -167,8 +194,8 @@ export class Game {
     this.D = new Destruction({ scene: this.scene, RAPIER: this.RAPIER, grid: this.grid, buildings: this.data.buildings, quality: this.Q, hooks });
     this.fx = new FX(this.scene, this.camera, this.Q);
     this.arsenal = new Arsenal({
-      scene: this.scene, D: this.D, fx: this.fx, audio: this.audio, world: this.world, grid: this.grid, camera: this.camera, quality: this.Q,
-      onCrater: () => { this.world.updateTerrainMesh(); this.D.rebuildTerrainCollider(); },
+      scene: this.scene, D: this.D, fx: this.fx, audio: this.audio, world: this.world, grid: this.grid, camera: this.camera, quality: this.Q, game: this, hud: this.hud,
+      onCrater: (ranges, deep) => { for (const r of ranges) this.world.updateTerrainMesh(r); if (deep >= 1.5) this.D.scheduleTerrainRebuild(); },
     });
     // 마커 (조준점)
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48), new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.85, depthTest: false, side: THREE.DoubleSide }));
@@ -210,11 +237,12 @@ export class Game {
     this._onDown = (e) => {
       if (e.button !== 0) return;
       this._onMove(e);
+      if (this.cine.active) { this.cine.skip(); return; }
       const hit = this.pick();
       if (!hit) return;
       this.audio.resume();
       const w = this.arsenal.current;
-      if (w === 'laser') { this._holding = true; this.arsenal.holdStart(); }
+      if (this.arsenal.isHold()) { this._holding = true; this.aim = hit.point; this.arsenal.holdStart(hit); }
       else this.arsenal.fire(hit, this.camera.position);
       this.hud.fired(w);
     };
@@ -239,7 +267,8 @@ export class Game {
 
   simulate(seconds, dt = 1 / 30) {
     for (let t = 0; t < seconds; t += dt) {
-      this.arsenal.update(dt, this.aim); this.D.update(dt); this.fx.update(dt, this.camera); this.world.update(dt);
+      PROF.time('weapons', () => this.arsenal.update(dt, this.aim)); PROF.time('physics', () => this.D.update(dt)); PROF.time('fx', () => this.fx.update(dt, this.camera)); this.world.update(dt);
+      if (this.onSimFrame) this.onSimFrame(); else PROF.endFrame();
     }
   }
 
@@ -283,10 +312,16 @@ export class Game {
     sharedUniforms.uTime.value += dt;
     if (this.sky.material.uniforms.time) this.sky.material.uniforms.time.value += dt;
     if (this.stars && this.stars.visible) this.stars.position.copy(this.camera.position);
-    // 흔들림 제거 후 컨트롤 업데이트
+    // 흔들림 제거 후 컨트롤(또는 시네마틱) 업데이트
     this.camera.position.sub(this._shakeOff);
-    this._keyboard(dt);
-    this.controls.update();
+    const cine = this.cine.active;
+    if (cine) this.cine.update(dt);
+    else { this._keyboard(dt); this.controls.update(); }
+    const ts = this.cine.active ? this.cine.timeScale : 1;
+    const dtSim = dt * ts;
+    this._applyWeather(dt);
+    const fade = document.getElementById('cineFade');
+    if (fade) fade.style.opacity = this.cine.active ? String(this.cine.fade || 0) : '0';
     // 타깃을 지면 위로
     const lim = this.grid.span / 2 * 0.92;
     const t = this.controls.target;
@@ -297,7 +332,7 @@ export class Game {
     if (this.camera.position.y < cg + 4) this.camera.position.y = cg + 4;
 
     // 조준
-    if (this._moved || this._holding || this.arsenal.active.length) {
+    if (!cine && (this._moved || this._holding || this.arsenal.active.length)) {
       this._moved = false;
       const hit = this.pick();
       this.aim = hit ? hit.point : null;
@@ -311,10 +346,11 @@ export class Game {
       this.hud.hover(hit && hit.info && (hit.info.b || (hit.info.chunk && hit.info.chunk.b)), this._mx, this._my);
     }
 
-    this.arsenal.update(dt, this.aim);
-    this.D.update(dt);
-    this.fx.update(dt * (this.D.timeScale < 1 ? 0.35 : 1), this.camera);
-    this.world.update(dt);
+    this.marker.visible = this.marker.visible && !cine;
+    PROF.time('weapons', () => this.arsenal.update(dtSim * this.D.timeScale, this.aim));
+    PROF.time('physics', () => this.D.update(dtSim));
+    PROF.time('fx', () => this.fx.update(dtSim * (this.D.timeScale < 1 ? 0.35 : 1), this.camera));
+    PROF.time('world', () => this.world.update(dt));
 
     // 그림자 카메라 따라가기
     if (this.sun.castShadow) {
@@ -341,7 +377,9 @@ export class Game {
     } else this._shakeOff.set(0, 0, 0);
     this.camera.position.add(this._shakeOff);
 
-    this.composer.render(dt);
+    this.renderer.info.reset();
+    PROF.time('render', () => this.composer.render(dt));
+    PROF.endFrame();
 
     this._fpsN++;
     const now = performance.now();
@@ -358,6 +396,7 @@ export class Game {
     window.removeEventListener('blur', this._onBlur);
     this.canvas.removeEventListener('pointermove', this._onMove);
     this.canvas.removeEventListener('pointerdown', this._onDown);
+    if (this.cine.active) this.cine.stop(true);
     this.controls.dispose();
     this.arsenal.clear(); this.audio.laserStop();
     this.fx.dispose(); this.D.dispose(); this.world.dispose();

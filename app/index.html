@@ -10,6 +10,10 @@
 <body>
 <div id="stage"></div>
 <div id="flash"></div>
+<div id="cineFade"></div>
+<div class="letterbox top"></div><div class="letterbox bottom"></div>
+<div id="cineCap" class="cine-cap"></div>
+<div id="cineSkip" class="cine-skip">클릭 · Esc 로 건너뛰기</div>
 
 <!-- 시작 메뉴 -->
 <section id="menu" class="screen">
@@ -47,7 +51,7 @@
     <div class="panel opts">
       <div class="opt">
         <div class="lbl">범위 <b id="radiusVal">600 m</b></div>
-        <input id="radius" type="range" min="300" max="1400" step="100" value="600">
+        <input id="radius" type="range" min="300" max="3000" step="100" value="600">
         <div class="hint" id="radiusHint">반경이 클수록 건물이 많아지고 로딩이 길어져요</div>
       </div>
       <div class="opt">
@@ -114,11 +118,16 @@
   </div>
 
   <div class="dock">
-    <div class="power">
-      <span class="lbl">위력</span>
-      <input id="power" type="range" min="0.5" max="3" step="0.1" value="1">
-      <b id="powerVal">×1.0</b>
+    <div class="dock-row">
+      <div class="power">
+        <span class="lbl">위력</span>
+        <input id="power" type="range" min="0" max="1" step="0.005" value="0.24">
+        <b id="powerVal">×3.0</b>
+        <span id="powerTag" class="ptag" data-lv="1">보통</span>
+      </div>
+      <div id="wopts" class="wopts" hidden></div>
     </div>
+    <div id="wcats" class="wcats"></div>
     <div id="weapons" class="weapons"></div>
     <div id="wdesc" class="wdesc"></div>
   </div>
@@ -126,6 +135,7 @@
   <div id="tip" class="tip" hidden></div>
   <div id="toasts" class="toasts"></div>
   <div id="slowBadge" class="slow-badge" hidden>SLOW MOTION</div>
+  <pre id="perfOverlay" class="perf-overlay" hidden></pre>
 
   <div id="help" class="help" hidden>
     <div class="help-card">
@@ -135,13 +145,15 @@
         <dt>오른쪽 드래그 · Q/E</dt><dd>카메라 회전</dd>
         <dt>휠 · R/F</dt><dd>확대 / 축소</dd>
         <dt>가운데 드래그 · WASD</dt><dd>이동 (Shift = 빠르게)</dd>
-        <dt>1 ~ 9</dt><dd>무기 선택</dd>
-        <dt>[ / ]</dt><dd>위력 조절</dd>
+        <dt>Tab / Shift+Tab</dt><dd>무기 분류 바꾸기</dd>
+        <dt>1 ~ 7</dt><dd>분류 안에서 무기 선택</dd>
+        <dt>[ / ]</dt><dd>위력 조절 (×1 약함 · ×10 강함 · ×100 극강)</dd>
         <dt>T</dt><dd>슬로모션</dd>
         <dt>N</dt><dd>시간대 바꾸기</dd>
         <dt>P</dt><dd>스크린샷 저장</dd>
         <dt>U</dt><dd>UI 숨기기 (사진 찍기 좋게)</dd>
         <dt>H</dt><dd>이 도움말</dd>
+        <dt>F3</dt><dd>성능 정보</dd>
         <dt>Esc</dt><dd>메뉴로</dd>
         <dt>F11</dt><dd>전체 화면</dd>
       </dl>
