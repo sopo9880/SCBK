@@ -241,8 +241,10 @@ export class Destruction {
       return;
     }
     // 작은 조각은 가벼운 파편(간이 물리)으로: Rapier 부하 없이 수만 개까지
-    const toLight = this.useLight && (c.body.light || c.group === GROUP_SMALL);
-    const full = toLight ? this.phys.lightCount >= (this.quality.maxLight || 20000) : this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic);
+    // 정식 물리(Rapier) 예산이 차면 넘치는 조각도 가벼운 파편으로 (먼지로 사라지지 않게)
+    const rapierFull = this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic);
+    const toLight = this.useLight && (c.body.light || c.vol < (this.quality.lightVol || 30) || rapierFull);
+    const full = toLight ? this.phys.lightCount >= (this.quality.maxLight || 20000) : rapierFull;
     if (!force && c.state === FROZEN && full) return;
     // 움직이는 조각이 예산을 넘으면 작은 조각은 물리 대신 먼지로 사라짐
     if (c.state === FIXED && full && c.size < 3.2) {
@@ -1024,7 +1026,7 @@ export class Destruction {
   // 사라졌던 조각을 다시 등장시킴 (화이트홀)
   respawn(c, x, y, z, vx, vy, vz) {
     if (c.state !== GONE) return false;
-    const small = this.useLight && c.group === GROUP_SMALL;
+    const small = this.useLight && (c.vol < (this.quality.lightVol || 30) || this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic));
     if (small ? this.phys.lightCount >= (this.quality.maxLight || 20000) : this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic)) return false;
     c.body = small ? this.phys.light(x, y, z, null, c.mass, c.size * 0.55) : this.phys.chunk(x, y, z, c.shape, DENSITY, c.group, c.mass);
     c.body.setDynamic(true);
