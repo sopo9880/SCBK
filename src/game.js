@@ -16,10 +16,10 @@ import { sharedUniforms } from './materials.js';
 import { PROF } from './prof.js';
 
 export const QUALITY = {
-  low: { name: '낮음', pixelRatio: 1, shadows: 0, bloom: false, ao: false, texSize: 2048, anisotropy: 4, trees: 2500, maxLoose: 2500, maxDynamic: 700, chunkFull: 120, particles: 2500, fxScale: 0.5, shockFracture: 10, msaa: 0 },
-  medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxLoose: 4500, maxDynamic: 1400, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
-  high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxLoose: 7000, maxDynamic: 2200, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
-  ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxLoose: 11000, maxDynamic: 3500, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
+  low: { name: '낮음', pixelRatio: 1, shadows: 0, bloom: false, ao: false, texSize: 2048, anisotropy: 4, trees: 2500, maxLoose: 8000, maxDynamic: 1200, maxLight: 6000, chunkFull: 120, particles: 2500, fxScale: 0.5, shockFracture: 10, msaa: 0 },
+  medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxLoose: 16000, maxDynamic: 2200, maxLight: 12000, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
+  high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxLoose: 26000, maxDynamic: 3500, maxLight: 20000, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
+  ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxLoose: 38000, maxDynamic: 5000, maxLight: 30000, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
 };
 
 export const TIMES = {

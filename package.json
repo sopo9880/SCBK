@@ -10,13 +10,15 @@
     "test": "esbuild test/fracture.test.mjs --bundle --platform=node --format=esm --outfile=test/.out1.mjs --log-level=warning && node test/.out1.mjs && esbuild test/real.test.mjs --bundle --platform=node --format=esm --outfile=test/.out2.mjs --log-level=warning && node test/.out2.mjs && node test/rapier.test.mjs && esbuild test/v12.test.mjs --bundle --platform=node --format=esm --outfile=test/.out3.mjs --log-level=warning && node test/.out3.mjs"
   },
   "author": "WreckEarth",
-  "dependencies": {},
+  "dependencies": {
+    "@dimforge/rapier3d-simd-compat": "^0.21.0"
+  },
   "devDependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "earcut": "^3.2.4",
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
-    "@dimforge/rapier3d-compat": "^0.21.0",
-    "earcut": "^3.2.4",
     "three": "^0.186.1"
   },
   "productName": "WreckEarth",

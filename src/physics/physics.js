@@ -1,6 +1,6 @@
 // 메인 스레드 물리 창구: body 프록시 + 백엔드(워커 / 인라인)
 // 파괴 로직은 프록시의 Rapier 비슷한 API 만 사용하고, 실제 계산은 워커(또는 같은 스레드)에서 일어난다.
-import RAPIER from '@dimforge/rapier3d-compat';
+import RAPIER from '@dimforge/rapier3d-simd-compat';
 import { PhysCore, STRIDE } from './core.js';
 
 /* global __PHYS_WORKER_SRC__ */
@@ -39,13 +39,47 @@ class Body {
   gravityScale() { return this.gs; }
 }
 
+
+// 가벼운 파편: Rapier 를 쓰지 않는 간이 강체 (지면·건물에만 부딪히고 서로는 통과)
+// Body 와 같은 API 라서 파괴 로직·무기 코드가 그대로 동작한다
+let _lightId = -1;
+class LightBody {
+  constructor(phys, x, y, z, q, mass, r) {
+    this.phys = phys; this.id = _lightId--; this.light = true;
+    this.p = { x, y, z }; this.q = { x: q.x, y: q.y, z: q.z, w: q.w }; this.v = { x: 0, y: 0, z: 0 }; this.w = { x: 0, y: 0, z: 0 };
+    this.m = mass; this.r = r; this.inertia = 0.4 * mass * r * r;
+    this.dyn = false; this.sl = false; this.gs = 1; this.alive = true; this.restT = 0;
+  }
+  translation() { return this.p; }
+  rotation() { return this.q; }
+  linvel() { return this.v; }
+  isSleeping() { return this.sl; }
+  mass() { return this.m; }
+  isDynamic() { return this.dyn; }
+  setDynamic(on) {
+    if (this.dyn === on) return;
+    this.dyn = on; this.sl = false; this.restT = 0;
+    if (on) this.phys._light.add(this); else { this.phys._light.delete(this); this.v.x = this.v.y = this.v.z = 0; this.w.x = this.w.y = this.w.z = 0; }
+  }
+  applyImpulse(i) { if (!this.dyn) return; const k = 1 / this.m; this.v.x += i.x * k; this.v.y += i.y * k; this.v.z += i.z * k; this.sl = false; this.restT = 0; }
+  applyTorqueImpulse(t) { if (!this.dyn) return; const k = 1 / this.inertia; this.w.x += t.x * k; this.w.y += t.y * k; this.w.z += t.z * k; this.sl = false; }
+  setLinvel(v) { if (!this.dyn) return; this.v.x = v.x; this.v.y = v.y; this.v.z = v.z; this.sl = false; this.restT = 0; }
+  setAngvel(v) { if (!this.dyn) return; this.w.x = v.x; this.w.y = v.y; this.w.z = v.z; }
+  scaleLinvel(kx, ky, kz) { this.v.x *= kx; this.v.y *= ky; this.v.z *= kz; }
+  setGravityScale(s) { this.gs = s; this.sl = false; }
+  gravityScale() { return this.gs; }
+}
+
 export class Physics {
   constructor(worker) {
     this._id = 1;
     this._cmds = []; this._xfer = [];
     this.bodies = new Map();
     this._dyn = new Set();
-    this.stepMs = 0;
+    this._light = new Set();   // 움직이는 가벼운 파편
+    this.gravity = { x: 0, y: -9.81, z: 0 };
+    this.lightEnv = null;      // { collide(body, h) } 파괴 로직이 지정
+    this.stepMs = 0; this.lightMs = 0;
     this.simDt = 0;          // 마지막 갱신 이후 진행된 시뮬레이션 시간 (소비형)
     this.timeScale = 1;
     this._inflight = false; this._dtAcc = 0;
@@ -110,17 +144,55 @@ export class Physics {
     this.bodies.set(id, b); this._dyn.add(b);
     return b;
   }
+  // 가벼운 파편 만들기 (처음엔 고정)
+  light(x, y, z, q, mass, r) { return new LightBody(this, x, y, z, q || { x: 0, y: 0, z: 0, w: 1 }, mass, r); }
+  get dynCount() { return this._dyn.size; }
+  get lightCount() { return this._light.size; }
+
   remove(bodyOrId) {
+    if (bodyOrId && bodyOrId.light) { bodyOrId.alive = false; this._light.delete(bodyOrId); return; }
     const id = typeof bodyOrId === 'number' ? bodyOrId : bodyOrId.id;
     const b = this.bodies.get(id);
     if (b) { b.alive = false; this._dyn.delete(b); this.bodies.delete(id); }
     this._cmd(['rm', id]);
   }
-  setGravity(gx, gy, gz) { this._cmd(['wgrav', gx, gy, gz]); }
+  setGravity(gx, gy, gz) { this.gravity = { x: gx, y: gy, z: gz }; for (const b of this._light) b.sl = false; this._cmd(['wgrav', gx, gy, gz]); }
+
+  // 가벼운 파편 진행 (메인 스레드, 프레임마다)
+  _stepLight(dt) {
+    if (!this._light.size || dt <= 0) return;
+    const n = dt > 0.034 ? 2 : 1, h = dt / n;
+    const g = this.gravity, env = this.lightEnv;
+    const drag = Math.exp(-0.04 * h);
+    for (const b of this._light) {
+      if (b.sl) continue;
+      const p = b.p, v = b.v, w = b.w, q = b.q;
+      let contact = false;
+      for (let k = 0; k < n; k++) {
+        v.x += g.x * b.gs * h; v.y += g.y * b.gs * h; v.z += g.z * b.gs * h;
+        v.x *= drag; v.y *= drag; v.z *= drag;
+        b.px = p.x; b.py = p.y; b.pz = p.z;
+        p.x += v.x * h; p.y += v.y * h; p.z += v.z * h;
+        // 회전 적분: q += 0.5 * (w, 0) * q * h
+        const wx = w.x * h * 0.5, wy = w.y * h * 0.5, wz = w.z * h * 0.5;
+        const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+        q.x += wx * qw + wy * qz - wz * qy; q.y += wy * qw + wz * qx - wx * qz; q.z += wz * qw + wx * qy - wy * qx; q.w += -wx * qx - wy * qy - wz * qz;
+        const l = 1 / Math.hypot(q.x, q.y, q.z, q.w); q.x *= l; q.y *= l; q.z *= l; q.w *= l;
+        if (env && env.collide(b, h)) contact = true;
+      }
+      const ad = Math.exp(-(contact ? 6 : 0.3) * dt);
+      w.x *= ad; w.y *= ad; w.z *= ad;
+      if (contact && v.x * v.x + v.y * v.y + v.z * v.z < 0.6 && b.gs > 0) { b.restT += dt; if (b.restT > 0.35) { b.sl = true; v.x = v.y = v.z = 0; } }
+      else b.restT = 0;
+    }
+  }
 
   // ---- 진행 ----
   step(dt) {
     const d = Math.min(dt, 0.1) * this.timeScale;
+    const tl = performance.now();
+    this._stepLight(d);
+    this.lightMs = this.lightMs * 0.9 + (performance.now() - tl) * 0.1;
     if (this.mode === 'inline') {
       for (const c of this._cmds) this.core.exec(c);
       this._cmds = []; this._xfer = [];
@@ -167,6 +239,6 @@ export class Physics {
   dispose() {
     if (this.worker) { try { this.worker.postMessage({ type: 'dispose' }); } catch (e) { /* 무시 */ } setTimeout(() => { try { this.worker.terminate(); } catch (e) { /* 무시 */ } }, 500); }
     if (this.core) this.core.free();
-    this.bodies.clear(); this._dyn.clear();
+    this.bodies.clear(); this._dyn.clear(); this._light.clear();
   }
 }
