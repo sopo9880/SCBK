@@ -452,174 +452,172 @@ export const NUKES = {
     },
   },
 
-  // 대륙간 탄도미사일
+  // 대륙간 탄도미사일: 지도 밖 수 km 떨어진 사일로에서 발사 → 하나로 이어진 탄도 궤적 → 재진입 → 착탄
   icbm: {
     fire(A, hit) {
-      const { scene, fx, audio, grid, game, camera } = A.ctx;
+      const { fx, audio, grid, game, camera, world } = A.ctx;
       const S = A.S, p = hit.point;
       const tgt = v3(p.x, grid.sample(p.x, p.z), p.z);
-      // 사일로: 지도 가장자리, 카메라 반대편
       const half = grid.span / 2;
+      // 사일로: 카메라 시선과 비스듬한 방향, 지도 밖 10km 안팎
       const camF = v3().subVectors(tgt, camera.position); camF.y = 0; camF.normalize();
-      const ang = Math.atan2(camF.z, camF.x) + (Math.random() - 0.5) * 1.2;
-      const Ds = Math.min(half * 0.82, Math.max(game ? game.radius * 1.2 : 800, 700));
-      const sx = Math.cos(ang) * Ds, sz = Math.sin(ang) * Ds;
-      const silo = A.spawn(makeSilo(), 1);
-      silo.position.set(sx, grid.sample(sx, sz) - 0.2, sz);
-      const rocket = A.spawn(makeICBM(), 1.2);
+      const ang = Math.atan2(camF.z, camF.x) + (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.5);
+      const Dist = Math.max(half * 2.2, 9000 + Math.random() * 3000);
+      const outerY = world && world.outer ? world.outer.position.y + 1.5 : grid.sample(half, half);
+      const siloPos = v3(tgt.x + Math.cos(ang) * Dist, outerY, tgt.z + Math.sin(ang) * Dist);
+      const toT = v3(tgt.x - siloPos.x, 0, tgt.z - siloPos.z).normalize();
+      const side = v3(-toT.z, 0, toT.x);
+      const silo = A.spawn(makeSilo(), 1.6); silo.position.copy(siloPos);
+      const rocket = A.spawn(makeICBM(), 1.6);
       const ru = rocket.userData;
-      rocket.position.copy(silo.position).add(v3(0, -ru.height * 1.2, 0));
-      const toT = v3(tgt.x - sx, 0, tgt.z - sz).normalize();
+      rocket.position.copy(siloPos).add(v3(0, -ru.height * 1.6, 0));
       const R = nukeRadii(nukeYield(S.P)).cloud;
       const mirv = A.opts.mirv;
       const nW = mirv ? Math.min(10, 3 + Math.round(S.n)) : 1;
-      // 탄두 목표
       const targets = [tgt.clone()];
       for (let i = 1; i < nW; i++) {
         const a = (i / (nW - 1)) * Math.PI * 2 + Math.random() * 0.4, d = Math.min(half * 0.7, R * (0.45 + Math.random() * 0.35));
         const x = tgt.x + Math.cos(a) * d, z = tgt.z + Math.sin(a) * d;
         targets.push(v3(x, grid.sample(x, z), z));
       }
-      const st = { t: 0, pos: rocket.position.clone(), vel: v3(), launched: false, stage: 0, spent: [], warheads: [], phase: 'pad', done: false, reentry: 16 };
-      audio.rumble && audio.rumble(3);
-      const W0 = v3(tgt.x, tgt.y + 3600, tgt.z).addScaledVector(toT, -900); // 재진입 시작점
-      const loop = A.addActive({
+      if (game) game.ensureView(Dist * 3, Dist * 1.2);
+      // 궤적: 수직 발사 → 완만한 탄도 → 가파른 재진입 (3차 베지어, 길이 기준 진행)
+      const H = Dist * 0.42;
+      const P0 = siloPos.clone(), P1 = siloPos.clone().add(v3(0, H * 1.15, 0));
+      const P2 = tgt.clone().addScaledVector(toT, -Dist * 0.18).add(v3(0, H * 1.05, 0)), P3 = tgt.clone();
+      const bez = (a, b, c, d, s, out) => { const u = 1 - s; return out.set(0, 0, 0).addScaledVector(a, u * u * u).addScaledVector(b, 3 * u * u * s).addScaledVector(c, 3 * u * s * s).addScaledVector(d, s * s * s); };
+      const mkCurve = (a, b, c, d) => {
+        const N = 240, tab = [0]; const q = v3(), prev = a.clone(); let L = 0;
+        for (let i = 1; i <= N; i++) { bez(a, b, c, d, i / N, q); L += q.distanceTo(prev); tab.push(L); prev.copy(q); }
+        return { a, b, c, d, L, tab, at(dist, out) { dist = Math.max(0, Math.min(L, dist)); let lo = 0, hi = N; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tab[m] < dist) lo = m; else hi = m; } const s = (lo + (dist - tab[lo]) / Math.max(1e-6, tab[hi] - tab[lo])) / N; return bez(a, b, c, d, s, out); } };
+      };
+      const main = mkCurve(P0, P1, P2, P3);
+      const T_PAD = 2.4, T = 22;                // 게임 시간 (연출과 같은 시계)
+      const prog = (u) => u ** 1.9;              // 천천히 가속해 재진입 때 가장 빠름
+      const U_SEP = [0.07, 0.16], U_REL = 0.56;  // 단 분리, 탄두 분리
+      const st = { t: 0, phase: 'pad', pos: rocket.position.clone(), vel: v3(), prev: siloPos.clone(), stage: 0, spent: [], warheads: [], done: false, rel: null };
+      audio.rumble(3);
+      const trail = (from, to, size, col, life, fire) => {
+        const n = Math.min(14, Math.ceil(from.distanceTo(to) / Math.max(4, size * 0.6)));
+        for (let k = 0; k < n; k++) {
+          const q = from.clone().lerp(to, (k + Math.random()) / n);
+          fx.smoke.emit(q.x, q.y, q.z, (Math.random() - 0.5) * 2, 1, (Math.random() - 0.5) * 2, life * (0.8 + Math.random() * 0.4), size, size * 5, [col, col, col * 1.02, 0.75], [col * 0.95, col * 0.95, col, 0], 0.05, 0.3, 0.05);
+          if (fire) fx.fire.emit(q.x, q.y, q.z, 0, 0, 0, 0.4, size * 0.9, size * 0.3, [1, 0.85, 0.55, 1], [1, 0.3, 0.05, 0], 1, 0);
+        }
+      };
+      const tmp = v3(), tmp2 = v3();
+      A.addActive({
         update(dt) {
           st.t += dt;
           const t = st.t;
-          // 사일로 문
           const open = Math.min(1, t / 2);
           for (const d of silo.userData.doors) d.hinge.rotation.z = d.s * open * 1.9;
-          if (t < 2.4 && Math.random() < dt * 20) fx.dust({ x: sx + (Math.random() - 0.5) * 6, y: silo.position.y + 1, z: sz + (Math.random() - 0.5) * 6 }, 3);
-          // 발사
-          if (t >= 2.4 && st.phase === 'pad') {
-            st.phase = 'boost';
-            st.pos.copy(silo.position).add(v3(0, -ru.height * 0.6, 0)); st.vel.set(0, 28, 0);
-            audio.rocket && audio.rocket(11);
-            for (let i = 0; i < 40; i++) fx.dust({ x: sx + (Math.random() - 0.5) * 30, y: silo.position.y + 2, z: sz + (Math.random() - 0.5) * 30 }, 6);
-          }
-          if (st.phase === 'boost') {
-            const tb = t - 2.4;
-            const ignite = tb > 0.6;
-            if (ignite) {
-              // 가속 + 6초 이후 목표 방향으로 기울이기
-              const pitch = Math.min(0.75, Math.max(0, (tb - 4.5) / 6) * 0.75);
-              const dirv = v3(0, 1, 0).applyAxisAngle(v3(-toT.z, 0, toT.x), -pitch).normalize();
-              const sp = st.vel.length() + (22 + tb * 3) * dt;
-              st.vel.copy(dirv).multiplyScalar(sp);
-            } else st.vel.y -= 9.8 * dt * 0.3;
-            st.pos.addScaledVector(st.vel, dt);
+          if (t < T_PAD) { if (Math.random() < dt * 25) fx.dust({ x: siloPos.x + (Math.random() - 0.5) * 10, y: siloPos.y + 1, z: siloPos.z + (Math.random() - 0.5) * 10 }, 4); return true; }
+          if (st.phase === 'pad') { st.phase = 'flight'; audio.rocket(9); for (let i = 0; i < 50; i++) fx.dust({ x: siloPos.x + (Math.random() - 0.5) * 40, y: siloPos.y + 2, z: siloPos.z + (Math.random() - 0.5) * 40 }, 8); }
+          const u = Math.min(1, (t - T_PAD) / T);
+          // 본체(분리 전)
+          if (!st.rel) {
+            main.at(main.L * prog(u), st.pos);
+            st.vel.subVectors(st.pos, st.prev).divideScalar(Math.max(dt, 1e-4));
             rocket.position.copy(st.pos);
-            rocket.quaternion.setFromUnitVectors(v3(0, 1, 0), st.vel.clone().normalize());
+            if (st.vel.lengthSq() > 1) rocket.quaternion.setFromUnitVectors(v3(0, 1, 0), tmp.copy(st.vel).normalize());
+            const burning = u < 0.3;
+            const back = tmp2.copy(st.vel).normalize().multiplyScalar(-1);
+            const nz = st.pos.clone().addScaledVector(back, 4);
+            trail(st.prev.clone().addScaledVector(back, 4), nz, burning ? 9 : 4, burning ? 0.88 : 0.95, burning ? 45 : 30, burning);
             // 단 분리
-            const sepT = [6.2, 10.5];
-            if (st.stage < 2 && tb > sepT[st.stage]) {
+            while (st.stage < 2 && u > U_SEP[st.stage]) {
               const sg = ru.stages[st.stage];
-              scene.attach(sg);
-              st.spent.push({ obj: sg, vel: st.vel.clone().multiplyScalar(0.8), spin: v3(Math.random(), Math.random(), Math.random()).multiplyScalar(1.5), t: 0 });
+              A.ctx.scene.attach(sg);
+              st.spent.push({ obj: sg, vel: st.vel.clone().multiplyScalar(0.6), spin: v3(Math.random(), Math.random(), Math.random()).multiplyScalar(1.5), t: 0 });
               st.stage++;
-              fx.explosion({ x: sg.position.x, y: sg.position.y, z: sg.position.z }, 4, { smokeColumn: false });
+              fx.explosion({ x: sg.position.x, y: sg.position.y, z: sg.position.z }, 6, { smokeColumn: false });
             }
-            // 화염 + 연기 기둥
-            if (ignite) {
-              const back = st.vel.clone().normalize().multiplyScalar(-1);
-              const nz = st.pos.clone();
-              const cur = ru.stages[st.stage];
-              if (cur) nz.add(v3(0, cur.userData.y0 * 1.2, 0).applyQuaternion(rocket.quaternion));
-              for (let k = 0; k < 3; k++) {
-                fx.fire.emit(nz.x, nz.y, nz.z, back.x * 60 + (Math.random() - 0.5) * 8, back.y * 60 + (Math.random() - 0.5) * 8, back.z * 60 + (Math.random() - 0.5) * 8, 0.35, 3.5, 7, [1, 0.85, 0.55, 1], [1, 0.3, 0.05, 0], 2, 0);
+            // 탄두 분리 (다탄두면 여러 개가 갈라져 각자 표적으로)
+            if (u >= U_REL) {
+              st.rel = { u0: u, t0: t };
+              rocket.visible = false;
+              const tan = st.vel.clone().normalize();
+              for (let i = 0; i < nW; i++) {
+                const to = targets[i];
+                const spread = mirv ? v3((Math.random() - 0.5) * 120, (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 120) : v3();
+                const a = st.pos.clone(), b = a.clone().addScaledVector(tan, Dist * 0.12).add(spread);
+                const c = to.clone().addScaledVector(toT, -Dist * 0.05).add(v3(0, H * 0.35, 0)).add(spread.clone().multiplyScalar(0.5));
+                const cv = mkCurve(a, b, c, to.clone());
+                st.warheads.push({ m: A.spawn(makeWarhead(), 3.5), cv, to, delay: mirv ? i * 0.25 : 0, pos: a.clone(), prev: a.clone(), hit: false });
               }
-              st.sAcc = (st.sAcc || 0) + dt;
-              while (st.sAcc > 0.03) { st.sAcc -= 0.03; fx.smoke.emit(nz.x, nz.y, nz.z, back.x * 10, back.y * 10, back.z * 10, 14 + Math.random() * 6, 5, 22, [0.88, 0.88, 0.88, 0.75], [0.8, 0.8, 0.82, 0], 0.4, 0.2, 0.05); }
             }
-            if (tb > 13.5) { st.phase = 'space'; rocket.visible = false; }
-          }
-          // 버려진 단: 회전하며 추락
-          for (let i = st.spent.length - 1; i >= 0; i--) {
-            const s = st.spent[i]; s.t += dt;
-            s.vel.y -= 9.8 * dt; s.obj.position.addScaledVector(s.vel, dt);
-            s.obj.rotation.x += s.spin.x * dt; s.obj.rotation.z += s.spin.z * dt;
-            if (s.t > 12) { A.remove(s.obj); st.spent.splice(i, 1); }
-          }
-          // 재진입
-          if (st.phase === 'space' && t >= st.reentry) {
-            st.phase = 'reentry';
-            for (let i = 0; i < nW; i++) {
-              const m = A.spawn(makeWarhead(), 4);
-              const from = W0.clone().add(v3((Math.random() - 0.5) * 30, i * 8, (Math.random() - 0.5) * 30));
-              st.warheads.push({ m, from, to: targets[i], t0: t + (mirv ? 0.6 + i * 0.35 : 0), dur: 5.2, hit: false });
-            }
-          }
-          if (st.phase === 'reentry') {
+            st.prev.copy(st.pos);
+          } else {
+            // 탄두: 남은 시간 동안 각자의 궤적으로 내려감 (점점 빨라짐)
             let alive = 0;
             for (const w of st.warheads) {
               if (w.hit) continue;
               alive++;
-              const u = Math.max(0, (t - w.t0) / w.dur);
-              const split = Math.min(1, u * 1.6);
-              const pos = w.from.clone().lerp(w.to, u * u * 0.4 + u * 0.6);
-              // MIRV 는 처음엔 뭉쳐 있다가 갈라짐
-              if (mirv) pos.lerp(W0.clone().lerp(targets[0], u * u * 0.4 + u * 0.6), 1 - split);
-              w.m.position.copy(pos);
-              const dir = w.to.clone().sub(w.from).normalize();
-              w.m.quaternion.setFromUnitVectors(v3(0, -1, 0), dir);
-              // 플라즈마 꼬리
-              if (u > 0) for (let k = 0; k < 2; k++) {
-                fx.fire.emit(pos.x, pos.y, pos.z, -dir.x * 40 + (Math.random() - 0.5) * 6, -dir.y * 40, -dir.z * 40 + (Math.random() - 0.5) * 6, 0.55, 9, 3, [1, 0.7, 0.45, 1], [1, 0.25, 0.1, 0], 1, 0);
-                fx.smoke.emit(pos.x, pos.y, pos.z, 0, 0, 0, 7, 4, 14, [0.9, 0.86, 0.82, 0.6], [0.8, 0.8, 0.8, 0], 0.3, 0, 0.05);
-              }
-              if (u >= 1) { w.hit = true; A.remove(w.m); detonate(A, w.to, { scale: mirv ? 0.55 : 1, light: mirv }); }
+              const uu = Math.max(0, Math.min(1, (u - st.rel.u0) / (1 - st.rel.u0) - w.delay / T));
+              w.cv.at(w.cv.L * uu ** 1.5, w.pos);
+              const dir = tmp.subVectors(w.pos, w.prev);
+              w.m.position.copy(w.pos);
+              if (dir.lengthSq() > 1e-6) w.m.quaternion.setFromUnitVectors(v3(0, -1, 0), dir.clone().normalize());
+              const alt = w.pos.y - w.to.y;
+              trail(w.prev, w.pos, alt < 3500 ? 5 : 2.5, 0.92, 25, alt < 3500);
+              if (alt < 3500) fx.light(w.pos.x, w.pos.y, w.pos.z, 2e4, 900, 0.05, 0xffa060);
+              w.prev.copy(w.pos);
+              if (uu >= 1) { w.hit = true; A.remove(w.m); detonate(A, w.to, { scale: mirv ? 0.55 : 1, light: mirv, pullback: false }); }
             }
-            if (!alive) { st.done = true; }
+            if (!alive) st.done = true;
           }
-          return !(st.done && st.spent.length === 0) && t < 60;
+          for (let i = st.spent.length - 1; i >= 0; i--) {
+            const s = st.spent[i]; s.t += dt;
+            s.vel.y -= 9.8 * dt; s.obj.position.addScaledVector(s.vel, dt);
+            s.obj.rotation.x += s.spin.x * dt; s.obj.rotation.z += s.spin.z * dt;
+            if (s.t > 25) { A.remove(s.obj); st.spent.splice(i, 1); }
+          }
+          return !(st.done && st.spent.length === 0) && t < T_PAD + T + 40;
         },
         dispose() { A.remove(rocket); A.remove(silo); for (const s of st.spent) A.remove(s.obj); for (const w of st.warheads) if (!w.hit) A.remove(w.m); },
       });
       if (!A.opts.cinematic || !game) return;
-      // ---- 카메라 연출 ----
-      const sp = silo.position.clone();
-      const side = v3(-toT.z, 0, toT.x);
+      const lead = () => (st.rel ? (st.warheads.find(w => !w.hit) || st.warheads[0]).pos : st.pos);
+      const leadDir = () => { const w = st.rel ? (st.warheads.find(x => !x.hit) || st.warheads[0]) : null; return w ? v3().subVectors(w.pos, w.prev) : st.vel.clone(); };
+      const tRel = T_PAD + T * U_REL;
+      const sp = siloPos.clone();
       const shots = [
-        { dur: 2.4, caption: '발사 준비', update: (t, u, out) => {
-          out.pos.copy(sp).addScaledVector(side, 46).addScaledVector(toT, -30).add(v3(0, 14 + u * 6, 0));
-          out.look.copy(sp).add(v3(0, 4, 0)); out.fov = 45; out.smooth = 0.2;
+        { dur: T_PAD, caption: `ICBM 발사 준비 · 표적까지 ${(Dist / 1000).toFixed(0)}km`, update: (t, u, out) => {
+          out.pos.copy(sp).addScaledVector(side, 70).addScaledVector(toT, -40).add(v3(0, 18 + u * 8, 0));
+          out.look.copy(sp).add(v3(0, 6, 0)); out.fov = 45; out.smooth = 0.2;
         } },
-        { dur: 4.6, caption: '발사!', update: (t, u, out) => {
-          out.pos.copy(sp).addScaledVector(side, 80).addScaledVector(toT, -50).add(v3(0, 6, 0));
-          out.look.copy(st.pos).add(v3(0, 10, 0)); out.fov = 50 - u * 22; out.smooth = 0.1;
+        { dur: 3.6, caption: '발사!', update: (t, u, out) => {
+          out.pos.copy(sp).addScaledVector(side, 160).addScaledVector(toT, -90).add(v3(0, 8, 0));
+          out.look.copy(st.pos).add(v3(0, 15, 0)); out.fov = 55 - u * 25; out.smooth = 0.08;
         } },
-        { dur: 5.5, caption: '', update: (t, u, out) => {
-          // 로켓 옆에서 나란히 날며 올려다봄 (배기 화염 밖)
-          const fwd = st.vel.clone().normalize();
-          out.pos.copy(st.pos).addScaledVector(side, 70).addScaledVector(fwd, -10).addScaledVector(toT, -20);
-          out.look.copy(st.pos).addScaledVector(fwd, 25); out.fov = 52; out.smooth = 0.08;
+        { dur: 4.5, update: (t, u, out) => {
+          const f = st.vel.lengthSq() > 1 ? st.vel.clone().normalize() : v3(0, 1, 0);
+          out.pos.copy(st.pos).addScaledVector(side, 70).addScaledVector(f, -25).add(v3(0, -6, 0));
+          out.look.copy(st.pos).addScaledVector(f, 40); out.fov = 55; out.smooth = 0.06;
         } },
-        { dur: 3.0, caption: '탄도 비행', update: (t, u, out) => {
-          out.pos.copy(tgt).addScaledVector(toT, 260).add(v3(0, 25, 0));
-          out.look.copy(st.phase === 'boost' ? st.pos : sp.clone().add(v3(0, 3000, 0))); out.fov = 24; out.smooth = 0.3;
+        { dur: Math.max(2, tRel - T_PAD - 3.6 - 4.5), caption: '탄도 비행', update: (t, u, out) => {
+          const f = st.vel.lengthSq() > 1 ? st.vel.clone().normalize() : toT;
+          // 로켓 바로 뒤 위에서: 로켓이 화면 아래쪽, 멀리 표적 도시가 보이게
+          out.pos.copy(st.pos).addScaledVector(f, -42).add(v3(0, 14, 0)).addScaledVector(side, 10);
+          out.look.copy(st.pos).addScaledVector(f, 60).lerp(tgt, 0.05 + 0.25 * u); out.fov = 55; out.smooth = 0.08;
         } },
-        { dur: 1.0, update: (t, u, out) => {
-          out.pos.copy(tgt).addScaledVector(toT, 260).add(v3(0, 25, 0)); out.look.copy(sp).add(v3(0, 3500, 0)); out.fade = u;
+        { dur: Math.max(2, T_PAD + T - tRel - 1.8), caption: mirv ? `재진입 · 탄두 ${nW}개` : '재진입', update: (t, u, out) => {
+          const p0 = lead(), d = leadDir(); if (d.lengthSq() < 1e-6) d.copy(toT); d.normalize();
+          out.pos.copy(p0).addScaledVector(d, -(mirv ? 260 : 130)).add(v3(0, mirv ? 90 : 35, 0));
+          out.look.copy(tgt); out.fov = mirv ? 60 : 50; out.smooth = 0.08;
         } },
-        { dur: 4.8, caption: mirv ? `재진입 · 탄두 ${nW}개` : '재진입', update: (t, u, out) => {
-          const w = st.warheads[0];
-          const wp = w && !w.hit ? w.m.position : tgt;
-          // 표적 너머에서 날아드는 탄두를 마주봄 (발사 연기 기둥을 피함)
-          out.pos.copy(tgt).addScaledVector(toT, 420).addScaledVector(side, 160).add(v3(0, 160, 0));
-          out.look.copy(wp).lerp(tgt, 0.35); out.fov = mirv ? 58 : 44; out.smooth = 0.15; out.fade = Math.max(0, 1 - t * 1.5);
+        { dur: 1.9, update: (t, u, out) => {
+          out.pos.copy(tgt).addScaledVector(toT, 520).addScaledVector(side, 160); out.pos.y = tgt.y + 40;
+          out.look.copy(lead()).lerp(tgt, 0.4); out.fov = 46; out.smooth = 0.1;
         } },
         ...aftermathShots(A, tgt, R * (mirv ? 1.9 : 1), side),
       ];
-      // 재진입 시점을 시네마틱과 맞춤
-      st.reentry = 2.4 + 4.6 + 5.5 + 3.0 + 1.0 - 0.6;
       game.cine.play(shots, {
         onSkip: () => {
-          // 바로 탄두 착탄
-          st.phase = st.phase === 'reentry' ? st.phase : 'reentry';
-          rocket.visible = false;
-          if (!st.warheads.length) { for (let i = 0; i < nW; i++) st.warheads.push({ m: A.spawn(makeWarhead(), 2.2), from: W0.clone(), to: targets[i], t0: st.t - 5.2 + i * 0.25, dur: 5.2, hit: false }); }
-          else for (const w of st.warheads) w.t0 = Math.min(w.t0, st.t - w.dur + 0.05);
+          // 바로 탄두 착탄 직전으로
+          st.t = Math.max(st.t, T_PAD + T - 0.05);
+          if (!st.rel) { st.prev.copy(st.pos); }
         },
       });
     },

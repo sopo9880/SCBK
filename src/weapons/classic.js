@@ -20,16 +20,25 @@ export const CLASSIC = {
     },
   },
 
+  // 미사일: 지도 밖(수평선 쪽)에서 포물선을 그리며 날아와 꽂힘
   missile: {
     fire(A, hit, cam) {
-      const S = A.S, p = hit.point;
-      const from = cam.add(v3(0, -6, 0));
-      const dir = v3(p.x, p.y, p.z).sub(from).normalize();
+      const S = A.S, p = hit.point, { grid } = A.ctx;
+      const tgt = v3(p.x, p.y, p.z);
+      const f = v3(p.x - cam.x, 0, p.z - cam.z); if (f.lengthSq() < 1) f.set(0, 0, -1); f.normalize();
+      const side = v3(-f.z, 0, f.x).multiplyScalar(Math.random() < 0.5 ? 1 : -1);
+      // 화면을 비스듬히 가로질러 오도록: 옆 + 약간 먼 쪽에서
+      const dir = side.clone().multiplyScalar(0.85).addScaledVector(f, 0.5).normalize();
+      const dist = Math.max(1100, grid.span * 0.55);
+      const T = 2.6, g = 40;
+      const from = tgt.clone().addScaledVector(dir, dist); from.y = Math.max(tgt.y, grid.sample(from.x, from.z)) + 140;
+      const vel = v3((tgt.x - from.x) / T, (tgt.y - from.y + 0.5 * g * T * T) / T, (tgt.z - from.z) / T);
       A.addProjectile({
-        mesh: A.spawn(makeMissile(), 1.2), pos: from, vel: dir.multiplyScalar(170), align: 'fwd', trail: { size: 1.1, fire: true },
+        mesh: A.spawn(makeMissile(), 3.2), pos: from, vel, g, align: 'fwd', trail: { size: 2.6, fire: true, every: 0.006 }, ignoreHits: true,
+        onUpdate: (pr) => { if (pr.ignoreHits && pr.pos.distanceTo(tgt) < 260) pr.ignoreHits = false; A.ctx.fx.light(pr.pos.x, pr.pos.y, pr.pos.z, 6000, 120, 0.05, 0xffb060); return true; },
         onHit: (q) => A.blast(q, 18 * S.r, 42 * S.v, { vap: 2 * S.r, crater: [4.5 * S.r, 1.6 * S.r] }),
       });
-      A.ctx.audio.whoosh(0.8);
+      A.ctx.audio.whoosh(T);
     },
   },
 

@@ -79,12 +79,12 @@ export const AIR = {
       const S = A.S, p = hit.point, { D, grid, audio, camera, fx } = A.ctx;
       const tgt = v3(p.x, p.y, p.z);
       const f = camDir(camera, tgt);
-      const half = grid.span / 2 * 0.95;
-      const L = Math.min(900, half * 1.3);
+      // 지도 밖 수평선에서 낮게 날아 들어옴
+      const half = grid.span / 2;
+      const L = Math.max(1600, half * 1.6);
       const start = tgt.clone().addScaledVector(f, -L);
-      start.x = Math.max(-half, Math.min(half, start.x)); start.z = Math.max(-half, Math.min(half, start.z));
-      start.y = skyline(D, grid, start.x, start.z, 30) + 40;
-      const SPD = 150;
+      start.y = Math.max(skyline(D, grid, start.x, start.z, 30), A.ctx.world && A.ctx.world.outer ? A.ctx.world.outer.position.y : 0) + 40;
+      const SPD = 210;
       const st = { phase: 'cruise', pos: start.clone(), vel: v3(tgt.x - start.x, 0, tgt.z - start.z).normalize().multiplyScalar(SPD), hit: false };
       const m = A.spawn(makeCruise(), 2.2);
       audio.rocket(5);
