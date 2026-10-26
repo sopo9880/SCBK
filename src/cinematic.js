@@ -119,10 +119,12 @@ export class Cinematic {
     return out;
   }
 
-  update(dt) {
+  // dt: 실제 시간(카메라 부드럽게 따라가기), tdt: 게임 시간(샷 진행).
+  // 샷 진행을 무기·물리와 같은 시간으로 돌려야 슬로모션 중에도 연출과 사건이 어긋나지 않음
+  update(dt, tdt = dt) {
     if (!this.shots) return;
     let s = this.shots[this.i];
-    this.t += dt;
+    this.t += tdt;
     while (s && this.t >= s.dur) {
       this.t -= s.dur; this.i++;
       s = this.shots[this.i];

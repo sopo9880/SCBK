@@ -156,6 +156,7 @@ export class Physics {
     if (b) { b.alive = false; this._dyn.delete(b); this.bodies.delete(id); }
     this._cmd(['rm', id]);
   }
+  setSolverIterations(n) { this._cmd(['iter', n]); }
   setGravity(gx, gy, gz) { this.gravity = { x: gx, y: gy, z: gz }; for (const b of this._light) b.sl = false; this._cmd(['wgrav', gx, gy, gz]); }
 
   // 가벼운 파편 진행 (메인 스레드, 프레임마다)

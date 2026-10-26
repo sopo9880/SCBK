@@ -7,6 +7,15 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js';
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
+import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { HueSaturationShader } from 'three/examples/jsm/shaders/HueSaturationShader.js';
+import { BrightnessContrastShader } from 'three/examples/jsm/shaders/BrightnessContrastShader.js';
+import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
+import { defaultCfg } from './settings.js';
 import { World } from './world.js';
 import { Destruction } from './destruction.js';
 import { FX } from './fx.js';
@@ -30,9 +39,14 @@ export const TIMES = {
 };
 
 export class Game {
-  constructor({ canvas, phys, grid, data, radius, place, quality, time, audio, hud }) {
+  constructor({ canvas, phys, grid, data, radius, place, quality, time, audio, hud, cfg }) {
     this.canvas = canvas; this.phys = phys; this.grid = grid; this.data = data; this.radius = radius;
-    this.place = place; this.qualityKey = quality; this.Q = QUALITY[quality]; this.timeKey = time;
+    this.cfg = Object.assign(defaultCfg(), cfg || {});
+    this.place = place; this.qualityKey = quality; this.Q = { ...QUALITY[quality] }; this.timeKey = time;
+    this.Q0 = QUALITY[quality];
+    // 도시를 만들 때 정해지는 설정 (나무·파티클 양)
+    this.Q.trees = Math.round(this.Q0.trees * this.cfg.treeMul);
+    this.Q.particles = Math.round(this.Q0.particles * this.cfg.particleMul);
     this.audio = audio; this.hud = hud;
     this.clock = new THREE.Clock();
     this.running = true;
@@ -48,6 +62,7 @@ export class Game {
     this._bind();
     this._fpsT = 0; this._fpsN = 0; this.fps = 60;
     this._loop = this._loop.bind(this);
+    for (const k of Object.keys(this.cfg)) this.applyCfg(k);
     this.renderer.setAnimationLoop(this._loop);
   }
 
@@ -103,19 +118,118 @@ export class Game {
     const size = new THREE.Vector2(); this.renderer.getDrawingBufferSize(size);
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: this.Q.msaa });
     this.composer = new EffectComposer(this.renderer, rt);
-    this.composer.addPass(new RenderPass(scene, camera));
-    if (this.Q.ao) {
-      this.gtao = new GTAOPass(scene, camera, size.x, size.y);
+    this.renderPass = new RenderPass(scene, camera);
+    this.outputPass = new OutputPass();
+    this.gradePass = new ShaderPass(HueSaturationShader);
+    this.bcPass = new ShaderPass(BrightnessContrastShader);
+    this.vigPass = new ShaderPass(VignetteShader); this.vigPass.uniforms.offset.value = 1.0;
+    this._passFlags = {};
+    this._rebuildPasses();
+  }
+
+  // 켜진 후처리만 순서대로 다시 구성 (무거운 패스는 처음 켤 때 만듦)
+  _rebuildPasses() {
+    const c = this.cfg || {}, Q = this.Q0 || this.Q;
+    const size = new THREE.Vector2(); this.renderer.getDrawingBufferSize(size);
+    const want = {
+      ssr: !!c.ssr,
+      ao: c.ao === undefined || c.ao < 0 ? !!Q.ao : !!c.ao,
+      bloom: c.bloom === undefined || c.bloom < 0 ? !!Q.bloom : !!c.bloom,
+      dof: !!c.dof,
+      grade: !!(c.saturation || c.contrast || c.brightness),
+      vig: (c.vignette || 0) > 0,
+      aa: c.aa || 'msaa',
+    };
+    const f = this._passFlags;
+    if (Object.keys(want).every(k => want[k] === f[k])) return;
+    this._passFlags = want;
+    const S = this.scene, cam = this.camera;
+    if (want.ssr && !this.ssr) {
+      this.ssr = new SSRPass({ renderer: this.renderer, scene: S, camera: cam, width: size.x, height: size.y, selects: [] });
+      this.ssr.thickness = 0.4; this.ssr.infiniteThick = false; this.ssr.blur = true; this.ssr.fresnel = true; this.ssr.distanceAttenuation = true;
+    }
+    if (want.ao && !this.gtao) {
+      this.gtao = new GTAOPass(S, cam, size.x, size.y);
       this.gtao.updateGtaoMaterial({ radius: 6, distanceExponent: 1.5, thickness: 6, scale: 1.2, samples: 12 });
       this.gtao.blendIntensity = 0.85;
-      this.composer.addPass(this.gtao);
     }
-    if (this.Q.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.55, 0.45, 1.35);
-      this.composer.addPass(this.bloom);
-    }
-    this.composer.addPass(new OutputPass());
+    if (want.bloom && !this.bloom) this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.55, 0.45, 1.35);
+    if (want.dof && !this.bokeh) { this.bokeh = new BokehPass(S, cam, { focus: 300, aperture: 0.00002, maxblur: 0.006 }); this.bokeh.enabled = false; }
+    if (want.aa === 'fxaa' && !this.fxaa) this.fxaa = new FXAAPass();
+    if (want.aa === 'smaa' && !this.smaa) this.smaa = new SMAAPass();
+    const P = this.composer.passes; P.length = 0;
+    P.push(want.ssr ? this.ssr : this.renderPass);
+    if (want.ao) P.push(this.gtao);
+    if (want.bloom) P.push(this.bloom);
+    if (want.dof) P.push(this.bokeh);
+    P.push(this.outputPass);
+    if (want.grade) P.push(this.gradePass, this.bcPass);
+    if (want.vig) P.push(this.vigPass);
+    if (want.aa === 'fxaa') P.push(this.fxaa); else if (want.aa === 'smaa') P.push(this.smaa);
+    // 다중 샘플링(MSAA)은 렌더 타깃 설정, SSR 은 MSAA 와 함께 못 씀
+    const samples = want.aa === 'msaa' && !want.ssr ? (this.Q0 || this.Q).msaa || 4 : 0;
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
+    const w = window.innerWidth, h = window.innerHeight;
+    this.composer.setSize(w, h);
   }
+
+  // 설정 하나를 바로 반영
+  applyCfg(key) {
+    const c = this.cfg, Q0 = this.Q0, r = this.renderer;
+    switch (key) {
+      case 'renderScale': {
+        r.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q0.pixelRatio) * c.renderScale);
+        r.setSize(window.innerWidth, window.innerHeight, false);
+        this.composer.setPixelRatio(r.getPixelRatio()); this.composer.setSize(window.innerWidth, window.innerHeight);
+        break;
+      }
+      case 'shadows': {
+        const size = c.shadows < 0 ? Q0.shadows : c.shadows;
+        const on = size > 0;
+        if (r.shadowMap.enabled !== on || this.sun.shadow.mapSize.x !== size) {
+          r.shadowMap.enabled = on; this.sun.castShadow = on; this.Q.shadows = size || 1024;
+          if (on) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.6; this.sun.shadow.camera.near = 10; this.sun.shadow.camera.far = 4000; }
+          if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+          this.scene.traverse(o => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; }); });
+        }
+        break;
+      }
+      case 'ssr': case 'ao': case 'bloom': case 'dof': case 'aa': case 'saturation': case 'contrast': case 'brightness': case 'vignette':
+        this._rebuildPasses();
+        if (this.ssr && this.D) this.ssr.selects = [this.D.intact, ...(this.world.water ? [this.world.water] : [])];
+        if (key === 'saturation') this.gradePass.uniforms.saturation.value = c.saturation;
+        if (key === 'contrast') this.bcPass.uniforms.contrast.value = c.contrast;
+        if (key === 'brightness') this.bcPass.uniforms.brightness.value = c.brightness;
+        if (key === 'vignette') this.vigPass.uniforms.darkness.value = c.vignette * 1.6;
+        this.applyCfg('ssrStrength'); this.applyCfg('aoStrength'); this.applyCfg('bloomStrength');
+        break;
+      case 'ssrStrength': if (this.ssr) this.ssr.opacity = c.ssrStrength; break;
+      case 'ssrDist': if (this.ssr) this.ssr.maxDistance = c.ssrDist; break;
+      case 'aoStrength': if (this.gtao) this.gtao.blendIntensity = c.aoStrength; break;
+      case 'bloomStrength': case 'bloomThreshold': case 'bloomRadius':
+        if (this.bloom) { this.bloom.strength = c.bloomStrength; this.bloom.threshold = c.bloomThreshold; this.bloom.radius = c.bloomRadius; }
+        break;
+      case 'glass': sharedUniforms.uGlass.value = c.glass; break;
+      case 'water': if (this.world && this.world.waterMat) { const w = this.world.waterMat; w.roughness = 0.45 - 0.42 * c.water; w.metalness = 0.15 + 0.35 * c.water; w.envMapIntensity = 0.4 + 1.6 * c.water; } break;
+      case 'toneMap': r.toneMapping = { aces: THREE.ACESFilmicToneMapping, agx: THREE.AgXToneMapping, neutral: THREE.NeutralToneMapping, reinhard: THREE.ReinhardToneMapping }[c.toneMap] || THREE.ACESFilmicToneMapping; break;
+      case 'anisotropy': if (this.world && this.world.landTex) { this.world.landTex.anisotropy = Math.min(r.capabilities.getMaxAnisotropy(), c.anisotropy < 0 ? Q0.anisotropy : c.anisotropy); this.world.landTex.needsUpdate = true; } break;
+      case 'clouds': this._stormK = -1; break;
+      case 'fov': if (!this.cine.active) { this.camera.fov = c.fov; this.camera.updateProjectionMatrix(); } this.cine._fov0 = c.fov; break;
+      case 'rotSens': this.controls.rotateSpeed = c.rotSens; this.controls.panSpeed = c.rotSens; break;
+      case 'zoomSens': this.controls.zoomSpeed = 1.2 * c.zoomSens; break;
+      case 'cinematic': case 'autoPull': case 'soundDelay': case 'planet': if (this.arsenal) this.arsenal.opts[key] = c[key]; break;
+      case 'maxDynamic': this.Q.maxDynamic = c.maxDynamic < 0 ? Q0.maxDynamic : c.maxDynamic; this.D.dynBudget = this.Q.maxDynamic; break;
+      case 'maxLight': this.Q.maxLight = c.maxLight < 0 ? Q0.maxLight : c.maxLight; break;
+      case 'maxLoose': this.Q.maxLoose = c.maxLoose < 0 ? Q0.maxLoose : c.maxLoose; break;
+      case 'lightVol': this.Q.lightVol = c.lightVol; this.D.useLight = c.lightVol > 0; break;
+      case 'chunkDetail': this.Q.chunkFull = Math.round(Q0.chunkFull * c.chunkDetail); break;
+      case 'solverIter': this.phys.setSolverIterations && this.phys.setSolverIterations(c.solverIter); break;
+      case 'fxMul': this.Q.fxScale = Q0.fxScale * c.fxMul; break;
+      case 'flash': this.fx.flashMul = c.flash; break;
+      case 'strobe': if (this.arsenal) this.arsenal.opts.strobe = c.strobe; break;
+    }
+  }
+  setCfg(cfg, key) { this.cfg = Object.assign(this.cfg, cfg); this.applyCfg(key); }
 
   setTime(key) {
     this.timeKey = key;
@@ -174,15 +288,15 @@ export class Game {
     const far = dc > near ? (near / dc) ** 1.6 : 1;
     this.sun.intensity = B.sunI * (1 - 0.82 * k) * (1 - 0.55 * d);
     this.hemi.intensity = B.hemi * (1 - 0.5 * k) * (1 - 0.4 * d);
-    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k) * (1 + 0.15 * d);
+    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k) * (1 + 0.15 * d) * (this.cfg.exposure || 1);
     this.scene.environmentIntensity = B.env * (1 - 0.6 * k) * (1 - 0.5 * d);
-    this.scene.fog.density = B.fogD * (1 + 2.6 * k) * (1 + 0.7 * d) * far;
+    this.scene.fog.density = B.fogD * (1 + 2.6 * k) * (1 + 0.7 * d) * far * (this.cfg.fogMul ?? 1);
     const fc = this.scene.fog.color.copy(B.fog).lerp(this._stormFog || (this._stormFog = new THREE.Color(0x30353b)), k);
     if (d > 0) fc.lerp(this._doomFog || (this._doomFog = new THREE.Color(0x5a3422)), d);
     this._frostK = (this._frostK || 0) + ((this.frost || 0) - (this._frostK || 0)) * Math.min(1, dt * 0.8);
     const fr = this._frostK;
     if (fr > 0.001) { fc.lerp(this._frostFog || (this._frostFog = new THREE.Color(0xdde7f0)), fr * 0.8); this.scene.fog.density *= 1 + 1.2 * fr; this.hemi.intensity *= 1 + 0.4 * fr; }
-    if (u.cloudCoverage) u.cloudCoverage.value = B.cloud + (0.95 - B.cloud) * Math.max(k, d);
+    if (u.cloudCoverage) u.cloudCoverage.value = (this.cfg.clouds === false ? 0 : B.cloud) + (0.95 - (this.cfg.clouds === false ? 0 : B.cloud)) * Math.max(k, d);
     u.turbidity.value = B.turb + 8 * k + 14 * d;
     if (u.rayleigh) { if (this._ray0 === undefined) this._ray0 = u.rayleigh.value; u.rayleigh.value = this._ray0 * (1 - 0.8 * d); }
     sharedUniforms.uNight.value = Math.max(B.night, 0.55 * k, 0.3 * d);
@@ -361,22 +475,23 @@ export class Game {
     const k = this._keys; if (!k.size) return;
     const c = this.controls;
     const dist = this.camera.position.distanceTo(c.target);
-    const sp = dist * 0.9 * dt * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.5 : 1);
+    const K = this.cfg;
+    const sp = dist * 0.9 * dt * (K.moveSpeed || 1) * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.5 : 1);
     const fwd = new THREE.Vector3().subVectors(c.target, this.camera.position); fwd.y = 0; fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
     const mv = new THREE.Vector3();
-    if (k.has('KeyW') || k.has('ArrowUp')) mv.add(fwd);
-    if (k.has('KeyS') || k.has('ArrowDown')) mv.sub(fwd);
-    if (k.has('KeyD') || k.has('ArrowRight')) mv.add(right);
-    if (k.has('KeyA') || k.has('ArrowLeft')) mv.sub(right);
+    if (k.has(K.k_fwd) || k.has('ArrowUp')) mv.add(fwd);
+    if (k.has(K.k_back) || k.has('ArrowDown')) mv.sub(fwd);
+    if (k.has(K.k_right) || k.has('ArrowRight')) mv.add(right);
+    if (k.has(K.k_left) || k.has('ArrowLeft')) mv.sub(right);
     if (mv.lengthSq()) { mv.normalize().multiplyScalar(sp); this.camera.position.add(mv); c.target.add(mv); }
-    const rot = (k.has('KeyQ') ? 1 : 0) - (k.has('KeyE') ? 1 : 0);
+    const rot = (k.has(K.k_rotL) ? 1 : 0) - (k.has(K.k_rotR) ? 1 : 0);
     if (rot) {
       const off = new THREE.Vector3().subVectors(this.camera.position, c.target);
       off.applyAxisAngle(new THREE.Vector3(0, 1, 0), rot * dt * 1.4);
       this.camera.position.copy(c.target).add(off);
     }
-    const zoom = (k.has('KeyR') ? 1 : 0) - (k.has('KeyF') ? 1 : 0);
+    const zoom = (k.has(K.k_zoomIn) ? 1 : 0) - (k.has(K.k_zoomOut) ? 1 : 0);
     if (zoom) {
       const off = new THREE.Vector3().subVectors(this.camera.position, c.target);
       off.multiplyScalar(1 - zoom * dt * 1.2);
@@ -386,6 +501,8 @@ export class Game {
 
   _loop() {
     if (!this.running) return;
+    // 프레임 제한
+    if (this.cfg.fpsCap > 0) { const now = performance.now(); if (this._lastF && now - this._lastF < 1000 / this.cfg.fpsCap - 1) return; this._lastF = now; }
     const dt = Math.min(0.05, this.clock.getDelta());
     sharedUniforms.uTime.value += dt;
     if (this.sky.material.uniforms.time) this.sky.material.uniforms.time.value += dt;
@@ -394,7 +511,8 @@ export class Game {
     // 흔들림 제거 후 컨트롤(또는 시네마틱) 업데이트
     this.camera.position.sub(this._shakeOff);
     const cine = this.cine.active;
-    if (cine) this.cine.update(dt);
+    // 샷은 게임 시간(연출 배속 × 슬로모션)으로 진행 → 무기 사건과 항상 맞음
+    if (cine) this.cine.update(dt, dt * this.cine.timeScale * this.D.timeScale);
     else { this._keyboard(dt); this.controls.update(); }
     const ts = this.cine.active ? this.cine.timeScale : 1;
     const dtSim = dt * ts;
@@ -428,13 +546,13 @@ export class Game {
     this.marker.visible = this.marker.visible && !cine;
     PROF.time('weapons', () => this.arsenal.update(dtSim * this.D.timeScale, this.aim));
     PROF.time('physics', () => this.D.update(dtSim));
-    PROF.time('fx', () => this.fx.update(dtSim * (this.D.timeScale < 1 ? 0.35 : 1), this.camera));
+    PROF.time('fx', () => this.fx.update(dtSim * this.D.timeScale, this.camera));
     PROF.time('world', () => this.world.update(dt));
 
     // 그림자 카메라 따라가기
     if (this.sun.castShadow) {
       const dist = this.camera.position.distanceTo(t);
-      const s = Math.max(160, Math.min(1100, dist * 1.25));
+      const s = Math.max(160, Math.min(1100, dist * 1.25)) * (this.cfg.shadowDist || 1);
       const sc = this.sun.shadow.camera;
       if (Math.abs(sc.right - s) > s * 0.1) { sc.left = -s; sc.right = s; sc.top = s; sc.bottom = -s; sc.updateProjectionMatrix(); }
       // 텍셀 단위로 스냅 (흔들림 방지)
@@ -451,11 +569,16 @@ export class Game {
     const sh = this.fx.shake;
     if (sh > 0.001) {
       const dist = this.camera.position.distanceTo(t);
-      const a = sh * sh * Math.min(6, dist * 0.006);
+      const a = sh * sh * Math.min(6, dist * 0.006) * (this.cfg.shake ?? 1);
       this._shakeOff.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a);
     } else this._shakeOff.set(0, 0, 0);
     this.camera.position.add(this._shakeOff);
 
+    // 연출 중 초점 흐림
+    if (this.bokeh) {
+      this.bokeh.enabled = this.cine.active && !!this.cfg.dof;
+      if (this.bokeh.enabled) this.bokeh.uniforms.focus.value = this.camera.position.distanceTo(this.cine._smoothLook);
+    }
     this.renderer.info.reset();
     PROF.time('render', () => this.composer.render(dt));
     PROF.endFrame();

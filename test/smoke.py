@@ -18,7 +18,7 @@ for w in order:
        g._mouse.set(0,0); A.power=1.5; A.opts.cinematic=true; A.opts.realNuke=true;
        A.current=w; const h=g.pick(); g.aim=h.point;
        let mx=0;
-       const step=(s)=>{ for(let t=0;t<s;t+=1/30){ const t0=performance.now(); if(g.cine.active) g.cine.update(1/30); const ts=g.cine.active?g.cine.timeScale:1; g.simulate(ts/30, ts/30); g._applyWeather(1/30); mx=Math.max(mx, performance.now()-t0);} };
+       const step=(s)=>{ for(let t=0;t<s;t+=1/30){ const t0=performance.now(); if(g.cine.active) g.cine.update(1/30, g.cine.timeScale*g.D.timeScale/30); const ts=g.cine.active?g.cine.timeScale:1; g.simulate(ts/30, ts/30); g._applyWeather(1/30); mx=Math.max(mx, performance.now()-t0);} };
        if(A.isHold()){ A.holdStart(h); for(let i=0;i<40;i++){ g.aim={x:h.point.x+i*3,y:h.point.y,z:h.point.z}; step(1/30);} A.holdEnd(); }
        else A.fire(h, g.camera.position);
        step(4);

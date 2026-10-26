@@ -66,7 +66,8 @@
 
     <footer class="menu-foot">
       <span>지도 © OpenStreetMap 기여자 · 지형 AWS Terrain Tiles · 비공식 팬 프로젝트</span>
-      <span class="kbd-hint">우클릭 드래그 회전 · 휠 확대 · WASD 이동 · 1~9 무기</span>
+      <span class="kbd-hint">우클릭 드래그 회전 · 휠 확대 · WASD 이동 · 1~9 무기 · O 설정</span>
+      <button class="link" id="menuSettings">설정</button>
       <span class="foot-actions" id="footActions" hidden><button class="link" id="shotDir">스크린샷 폴더</button><button class="link" id="cacheBtn">지도 캐시 비우기</button></span>
     </footer>
   </div>
@@ -115,6 +116,7 @@
     <button class="icon-btn" id="tReset" title="도시 다시 세우기 (Ctrl+R)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 12a8 8 0 1 0 2.5-5.8M4 4v5h5" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <button class="icon-btn" id="tMute" title="소리 (M)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path id="muteWave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
     <button class="icon-btn" id="tHelp" title="조작법 (H)"><span style="font-weight:800">?</span></button>
+    <button class="icon-btn" id="tSettings" title="설정 (O)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
 
   <div class="dock">

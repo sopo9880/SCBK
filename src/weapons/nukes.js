@@ -167,11 +167,11 @@ export function detonate(A, q, { scale = 1, light = false, kt = null, kind = 'nu
     audio.nuke();
   } else {
     A.addActive(new RealNukeFX(A, q, Rv, light, { kind, skirt: Math.min(N.r5, Math.max(mapR * 1.2, Rv * 1.6)), fireR: N.fire }));
-    const delay = Math.min(6, camDist / 343);
+    const delay = A.opts.soundDelay === false ? 0 : Math.min(6, camDist / 343);
     A.addActive({ t: 0, update(dt) { this.t += dt; if (this.t >= delay) { audio.nuke(); if (Y > 3000) audio.nuke(); return false; } return true; } });
   }
   // 카메라가 버섯구름에 묻히면 자동으로 물러나서 지켜봄
-  if (pullback && game && A.opts.cinematic && !game.cine.active && camDist < Rv * 2.2 && Y > 400) {
+  if (pullback && game && A.opts.cinematic && A.opts.autoPull !== false && !game.cine.active && camDist < Rv * 2.2 && Y > 400) {
     const off = v3().subVectors(camera.position, v3(q.x, q.y, q.z)); off.y = 0;
     if (off.lengthSq() < 1) off.set(1, 0, 0);
     game.cine.play(aftermathShots(A, q, Rv, off, true), {});
@@ -316,7 +316,7 @@ export function aftermathShots(A, q, R, dirWide, auto = false) {
   const base = v3(q.x, q.y, q.z);
   const side = dirWide.clone().normalize();
   return [
-    { dur: 1.6, caption: '', update: (t, u, out) => {
+    { dur: 0.7, caption: '', update: (t, u, out) => {
       out.pos.copy(base).addScaledVector(side, wd).add(v3(0, 45 + wd * 0.03, 0));
       out.look.copy(base).add(v3(0, R * 0.18, 0));
       out.fov = 42; out.timeScale = auto ? 0.6 : 0.35; if (auto) out.fade = Math.max(0, 1 - t * 2.5);
