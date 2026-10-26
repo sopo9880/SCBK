@@ -79,12 +79,12 @@ export const AIR = {
       const S = A.S, p = hit.point, { D, grid, audio, camera, fx } = A.ctx;
       const tgt = v3(p.x, p.y, p.z);
       const f = camDir(camera, tgt);
-      const half = grid.span / 2 * 0.95;
-      const L = Math.min(900, half * 1.3);
+      // 지도 밖 수평선에서 낮게 날아 들어옴
+      const half = grid.span / 2;
+      const L = Math.max(1600, half * 1.6);
       const start = tgt.clone().addScaledVector(f, -L);
-      start.x = Math.max(-half, Math.min(half, start.x)); start.z = Math.max(-half, Math.min(half, start.z));
-      start.y = skyline(D, grid, start.x, start.z, 30) + 40;
-      const SPD = 150;
+      start.y = Math.max(skyline(D, grid, start.x, start.z, 30), A.ctx.world && A.ctx.world.outerHeight ? A.ctx.world.outerHeight(start.x, start.z) : 0) + 40;
+      const SPD = 210;
       const st = { phase: 'cruise', pos: start.clone(), vel: v3(tgt.x - start.x, 0, tgt.z - start.z).normalize().multiplyScalar(SPD), hit: false };
       const m = A.spawn(makeCruise(), 2.2);
       audio.rocket(5);
@@ -137,7 +137,9 @@ export const AIR = {
       const area = 90 * S.r;
       const blds = D.buildingsNear(p.x, p.z, area).filter(b => b.state === 'intact').sort((a, b) => b.height - a.height);
       const f = camDir(camera, v3(p.x, p.y, p.z));
-      const origin = camera.position.clone().addScaledVector(f, 40); origin.y = Math.max(origin.y - 20, skyline(D, grid, origin.x, origin.z) + 30);
+      // 표적 가까이(약 170m)에서 날아오게: 결과가 바로 보이도록
+      const origin = v3(p.x, 0, p.z).addScaledVector(f, -170 - 30 * S.r ** 0.5);
+      origin.y = Math.max(skyline(D, grid, origin.x, origin.z, 40), p.y) + 45;
       const swarm = { c: origin.clone(), v: f.clone().multiplyScalar(45), alive: n };
       audio.buzz(9);
       for (let i = 0; i < n; i++) {
@@ -147,7 +149,7 @@ export const AIR = {
         if (!b) tp.y = grid.sample(tp.x, tp.z);
         const m = A.spawn(makeDrone(), 1.6);
         const off = v3((R() - 0.5) * 40, (R() - 0.5) * 20, (R() - 0.5) * 40);
-        const d = { pos: origin.clone().add(off), vel: f.clone().multiplyScalar(40), ph: R() * 6.28, delay: R() * 1.5, dive: false };
+        const d = { pos: origin.clone().add(off), vel: f.clone().multiplyScalar(40), ph: R() * 6.28, delay: R() * 0.6, dive: false };
         A.addProjectile({
           mesh: m, pos: d.pos, vel: d.vel, align: 'fwd', ignoreHits: true,
           onUpdate: (pr, dt) => {
@@ -172,7 +174,7 @@ export const AIR = {
       const g = cineGame(A); if (!g || !swarm.lead) return;
       const ld = swarm.lead;
       g.cine.play([
-        chase(() => ld.pos, () => ld.vel, { back: 14, up: 4, side: 6, ahead: 50, dur: 3.2, caption: `자폭 드론 ${n}대`, fov: 64 }),
+        chase(() => ld.pos, () => ld.vel, { back: 14, up: 4, side: 6, ahead: 50, dur: 2.2, caption: `자폭 드론 ${n}대`, fov: 64 }),
         orbit(v3(p.x, p.y, p.z), { dist: 260, h: 120, a0: Math.atan2(-f.z, -f.x) - 0.5, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 4.5, look: 20 }),
       ]);
     },
@@ -187,7 +189,7 @@ export const AIR = {
       // 함대는 표적 너머 수평선 쪽 (카메라 반대편이 아니라 옆쪽에서 날아오게)
       const side = v3(-f.z, 0, f.x);
       const fromDir = side.clone().multiplyScalar(R() < 0.5 ? 1 : -1).addScaledVector(f, 0.6).normalize();
-      const ship = tgt.clone().addScaledVector(fromDir, 2600); ship.y = 20;
+      const ship = tgt.clone().addScaledVector(fromDir, 2600); ship.y = tgt.y + 25;
       const salvos = 3, per = Math.min(16, Math.round(6 + 3 * S.n ** 0.6));
       const spread = 40 * S.r;
       const T = 5.5, g = 30;
@@ -213,7 +215,13 @@ export const AIR = {
               shellsAir.push(sh);
               A.addProjectile({
                 mesh: A.spawn(makeShell(), 2), pos: sh.pos, vel: sh.vel, g, align: 'down', trail: { size: 0.9, fire: true, every: 0.02 },
-                onUpdate: (pr) => { if (!sh.wh && pr.vel.y < 0 && pr.pos.y - q.y < 260) { sh.wh = true; if (R() < 0.35) audio.whoosh(1.1); } return true; },
+                ignoreHits: true,
+                onUpdate: (pr) => {
+                  // 수평선 너머에서 쏘므로 표적 근처에서 내려올 때부터 충돌 판정
+                  if (pr.ignoreHits && pr.vel.y < 0 && Math.hypot(pr.pos.x - q.x, pr.pos.z - q.z) < 500) pr.ignoreHits = false;
+                  if (!sh.wh && pr.vel.y < 0 && pr.pos.y - q.y < 260) { sh.wh = true; if (R() < 0.35) audio.whoosh(1.1); }
+                  return true;
+                },
                 onHit: (qq) => { sh.done = true; A.blast(qq, 15 * S.r, 34 * S.v, { vap: 2 * S.r, crater: [4.5 * S.r, 1.8 * S.r], silent: R() > 0.35 }); fx.addShake(0.5); },
               });
               fired++;

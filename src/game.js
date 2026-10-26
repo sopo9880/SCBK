@@ -7,6 +7,16 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js';
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
+import { FXAAPass } from 'three/examples/jsm/postprocessing/FXAAPass.js';
+import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { HueSaturationShader } from 'three/examples/jsm/shaders/HueSaturationShader.js';
+import { BrightnessContrastShader } from 'three/examples/jsm/shaders/BrightnessContrastShader.js';
+import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
+import { defaultCfg } from './settings.js';
+import { PlanetFinale } from './planet.js';
 import { World } from './world.js';
 import { Destruction } from './destruction.js';
 import { FX } from './fx.js';
@@ -16,10 +26,23 @@ import { sharedUniforms } from './materials.js';
 import { PROF } from './prof.js';
 
 export const QUALITY = {
-  low: { name: '낮음', pixelRatio: 1, shadows: 0, bloom: false, ao: false, texSize: 2048, anisotropy: 4, trees: 2500, maxLoose: 2500, maxDynamic: 700, chunkFull: 120, particles: 2500, fxScale: 0.5, shockFracture: 10, msaa: 0 },
-  medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxLoose: 4500, maxDynamic: 1400, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
-  high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxLoose: 7000, maxDynamic: 2200, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
-  ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxLoose: 11000, maxDynamic: 3500, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
+  low: { name: '낮음', pixelRatio: 1, shadows: 0, bloom: false, ao: false, texSize: 2048, anisotropy: 4, trees: 2500, maxLoose: 8000, maxDynamic: 1200, maxLight: 6000, chunkFull: 120, particles: 2500, fxScale: 0.5, shockFracture: 10, msaa: 0 },
+  medium: { name: '보통', pixelRatio: 1, shadows: 2048, bloom: true, ao: false, texSize: 4096, anisotropy: 8, trees: 7000, maxLoose: 16000, maxDynamic: 2200, maxLight: 12000, chunkFull: 180, particles: 5000, fxScale: 0.8, shockFracture: 18, msaa: 4 },
+  high: { name: '높음', pixelRatio: 1.25, shadows: 4096, bloom: true, ao: true, texSize: 4096, anisotropy: 12, trees: 14000, maxLoose: 26000, maxDynamic: 3500, maxLight: 20000, chunkFull: 230, particles: 8000, fxScale: 1, shockFracture: 26, msaa: 4 },
+  ultra: { name: '울트라', pixelRatio: 2, shadows: 4096, bloom: true, ao: true, texSize: 8192, anisotropy: 16, trees: 24000, maxLoose: 38000, maxDynamic: 5000, maxLight: 30000, chunkFull: 300, particles: 12000, fxScale: 1.25, shockFracture: 36, msaa: 4 },
+};
+
+// 종말 날씨 종류: 하늘(지평선/위쪽) 색, 안개 색, 떨어지는 재 색, 불씨 비율, 지평선 불길
+export const DOOM_KINDS = {
+  nuke: { low: [1.0, 0.36, 0.08], high: [0.2, 0.075, 0.045], fog: 0x5a3422, ash: [0.25, 0.45], ember: 0.15, fires: true },
+  impact: { low: [0.9, 0.45, 0.2], high: [0.22, 0.13, 0.08], fog: 0x5c4630, ash: [0.3, 0.45], ember: 0.1, fires: true },
+  fire: { low: [1.0, 0.45, 0.1], high: [0.45, 0.12, 0.04], fog: 0x7a3a18, ash: [0.2, 0.35], ember: 0.55, fires: true },
+  ash: { low: [0.55, 0.45, 0.35], high: [0.12, 0.11, 0.1], fog: 0x4a4540, ash: [0.35, 0.55], ember: 0.04, fires: false },
+  ice: { low: [0.8, 0.9, 1.0], high: [0.35, 0.45, 0.6], fog: 0xc8d8e8, ash: [0.9, 1.0], ember: 0, fires: false, snow: true },
+  void: { low: [0.55, 0.3, 0.9], high: [0.03, 0.0, 0.06], fog: 0x1a1028, ash: [0.4, 0.6], ember: 0.2, emberCol: [0.7, 0.4, 1.0], fires: false },
+  anti: { low: [0.7, 0.4, 1.0], high: [0.12, 0.06, 0.2], fog: 0x241c34, ash: [0.5, 0.7], ember: 0.2, emberCol: [0.8, 0.6, 1.0], fires: true },
+  dust: { low: [0.85, 0.6, 0.35], high: [0.35, 0.25, 0.15], fog: 0x8a6a48, ash: [0.5, 0.6], ember: 0, fires: false },
+  water: { low: [0.4, 0.55, 0.65], high: [0.15, 0.2, 0.28], fog: 0x506070, ash: [0.6, 0.7], ember: 0, fires: false, rain: true },
 };
 
 export const TIMES = {
@@ -30,9 +53,14 @@ export const TIMES = {
 };
 
 export class Game {
-  constructor({ canvas, phys, grid, data, radius, place, quality, time, audio, hud }) {
+  constructor({ canvas, phys, grid, data, radius, place, quality, time, audio, hud, cfg }) {
     this.canvas = canvas; this.phys = phys; this.grid = grid; this.data = data; this.radius = radius;
-    this.place = place; this.qualityKey = quality; this.Q = QUALITY[quality]; this.timeKey = time;
+    this.cfg = Object.assign(defaultCfg(), cfg || {});
+    this.place = place; this.qualityKey = quality; this.Q = { ...QUALITY[quality] }; this.timeKey = time;
+    this.Q0 = QUALITY[quality];
+    // 도시를 만들 때 정해지는 설정 (나무·파티클 양)
+    this.Q.trees = Math.round(this.Q0.trees * this.cfg.treeMul);
+    this.Q.particles = Math.round(this.Q0.particles * this.cfg.particleMul);
     this.audio = audio; this.hud = hud;
     this.clock = new THREE.Clock();
     this.running = true;
@@ -48,6 +76,7 @@ export class Game {
     this._bind();
     this._fpsT = 0; this._fpsN = 0; this.fps = 60;
     this._loop = this._loop.bind(this);
+    for (const k of Object.keys(this.cfg)) this.applyCfg(k);
     this.renderer.setAnimationLoop(this._loop);
   }
 
@@ -103,19 +132,118 @@ export class Game {
     const size = new THREE.Vector2(); this.renderer.getDrawingBufferSize(size);
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: this.Q.msaa });
     this.composer = new EffectComposer(this.renderer, rt);
-    this.composer.addPass(new RenderPass(scene, camera));
-    if (this.Q.ao) {
-      this.gtao = new GTAOPass(scene, camera, size.x, size.y);
+    this.renderPass = new RenderPass(scene, camera);
+    this.outputPass = new OutputPass();
+    this.gradePass = new ShaderPass(HueSaturationShader);
+    this.bcPass = new ShaderPass(BrightnessContrastShader);
+    this.vigPass = new ShaderPass(VignetteShader); this.vigPass.uniforms.offset.value = 1.0;
+    this._passFlags = {};
+    this._rebuildPasses();
+  }
+
+  // 켜진 후처리만 순서대로 다시 구성 (무거운 패스는 처음 켤 때 만듦)
+  _rebuildPasses() {
+    const c = this.cfg || {}, Q = this.Q0 || this.Q;
+    const size = new THREE.Vector2(); this.renderer.getDrawingBufferSize(size);
+    const want = {
+      ssr: !!c.ssr,
+      ao: c.ao === undefined || c.ao < 0 ? !!Q.ao : !!c.ao,
+      bloom: c.bloom === undefined || c.bloom < 0 ? !!Q.bloom : !!c.bloom,
+      dof: !!c.dof,
+      grade: !!(c.saturation || c.contrast || c.brightness),
+      vig: (c.vignette || 0) > 0,
+      aa: c.aa || 'msaa',
+    };
+    const f = this._passFlags;
+    if (Object.keys(want).every(k => want[k] === f[k])) return;
+    this._passFlags = want;
+    const S = this.scene, cam = this.camera;
+    if (want.ssr && !this.ssr) {
+      this.ssr = new SSRPass({ renderer: this.renderer, scene: S, camera: cam, width: size.x, height: size.y, selects: [] });
+      this.ssr.thickness = 0.4; this.ssr.infiniteThick = false; this.ssr.blur = true; this.ssr.fresnel = true; this.ssr.distanceAttenuation = true;
+    }
+    if (want.ao && !this.gtao) {
+      this.gtao = new GTAOPass(S, cam, size.x, size.y);
       this.gtao.updateGtaoMaterial({ radius: 6, distanceExponent: 1.5, thickness: 6, scale: 1.2, samples: 12 });
       this.gtao.blendIntensity = 0.85;
-      this.composer.addPass(this.gtao);
     }
-    if (this.Q.bloom) {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.55, 0.45, 1.35);
-      this.composer.addPass(this.bloom);
-    }
-    this.composer.addPass(new OutputPass());
+    if (want.bloom && !this.bloom) this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.55, 0.45, 1.35);
+    if (want.dof && !this.bokeh) { this.bokeh = new BokehPass(S, cam, { focus: 300, aperture: 0.00002, maxblur: 0.006 }); this.bokeh.enabled = false; }
+    if (want.aa === 'fxaa' && !this.fxaa) this.fxaa = new FXAAPass();
+    if (want.aa === 'smaa' && !this.smaa) this.smaa = new SMAAPass();
+    const P = this.composer.passes; P.length = 0;
+    P.push(want.ssr ? this.ssr : this.renderPass);
+    if (want.ao) P.push(this.gtao);
+    if (want.bloom) P.push(this.bloom);
+    if (want.dof) P.push(this.bokeh);
+    P.push(this.outputPass);
+    if (want.grade) P.push(this.gradePass, this.bcPass);
+    if (want.vig) P.push(this.vigPass);
+    if (want.aa === 'fxaa') P.push(this.fxaa); else if (want.aa === 'smaa') P.push(this.smaa);
+    // 다중 샘플링(MSAA)은 렌더 타깃 설정, SSR 은 MSAA 와 함께 못 씀
+    const samples = want.aa === 'msaa' && !want.ssr ? (this.Q0 || this.Q).msaa || 4 : 0;
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
+    const w = window.innerWidth, h = window.innerHeight;
+    this.composer.setSize(w, h);
   }
+
+  // 설정 하나를 바로 반영
+  applyCfg(key) {
+    const c = this.cfg, Q0 = this.Q0, r = this.renderer;
+    switch (key) {
+      case 'renderScale': {
+        r.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q0.pixelRatio) * c.renderScale);
+        r.setSize(window.innerWidth, window.innerHeight, false);
+        this.composer.setPixelRatio(r.getPixelRatio()); this.composer.setSize(window.innerWidth, window.innerHeight);
+        break;
+      }
+      case 'shadows': {
+        const size = c.shadows < 0 ? Q0.shadows : c.shadows;
+        const on = size > 0;
+        if (r.shadowMap.enabled !== on || this.sun.shadow.mapSize.x !== size) {
+          r.shadowMap.enabled = on; this.sun.castShadow = on; this.Q.shadows = size || 1024;
+          if (on) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.6; this.sun.shadow.camera.near = 10; this.sun.shadow.camera.far = 4000; }
+          if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+          this.scene.traverse(o => { const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach(x => { x.needsUpdate = true; }); });
+        }
+        break;
+      }
+      case 'ssr': case 'ao': case 'bloom': case 'dof': case 'aa': case 'saturation': case 'contrast': case 'brightness': case 'vignette':
+        this._rebuildPasses();
+        if (this.ssr && this.D) this.ssr.selects = [this.D.intact, ...(this.world.water ? [this.world.water] : [])];
+        if (key === 'saturation') this.gradePass.uniforms.saturation.value = c.saturation;
+        if (key === 'contrast') this.bcPass.uniforms.contrast.value = c.contrast;
+        if (key === 'brightness') this.bcPass.uniforms.brightness.value = c.brightness;
+        if (key === 'vignette') this.vigPass.uniforms.darkness.value = c.vignette * 1.6;
+        this.applyCfg('ssrStrength'); this.applyCfg('aoStrength'); this.applyCfg('bloomStrength');
+        break;
+      case 'ssrStrength': if (this.ssr) this.ssr.opacity = c.ssrStrength; break;
+      case 'ssrDist': if (this.ssr) this.ssr.maxDistance = c.ssrDist; break;
+      case 'aoStrength': if (this.gtao) this.gtao.blendIntensity = c.aoStrength; break;
+      case 'bloomStrength': case 'bloomThreshold': case 'bloomRadius':
+        if (this.bloom) { this.bloom.strength = c.bloomStrength; this.bloom.threshold = c.bloomThreshold; this.bloom.radius = c.bloomRadius; }
+        break;
+      case 'glass': sharedUniforms.uGlass.value = c.glass; break;
+      case 'water': if (this.world && this.world.waterMat) { const w = this.world.waterMat; w.roughness = 0.45 - 0.42 * c.water; w.metalness = 0.15 + 0.35 * c.water; w.envMapIntensity = 0.4 + 1.6 * c.water; } break;
+      case 'toneMap': r.toneMapping = { aces: THREE.ACESFilmicToneMapping, agx: THREE.AgXToneMapping, neutral: THREE.NeutralToneMapping, reinhard: THREE.ReinhardToneMapping }[c.toneMap] || THREE.ACESFilmicToneMapping; break;
+      case 'anisotropy': if (this.world && this.world.landTex) { this.world.landTex.anisotropy = Math.min(r.capabilities.getMaxAnisotropy(), c.anisotropy < 0 ? Q0.anisotropy : c.anisotropy); this.world.landTex.needsUpdate = true; } break;
+      case 'clouds': this._stormK = -1; break;
+      case 'fov': if (!this.cine.active) { this.camera.fov = c.fov; this.camera.updateProjectionMatrix(); } this.cine._fov0 = c.fov; break;
+      case 'rotSens': this.controls.rotateSpeed = c.rotSens; this.controls.panSpeed = c.rotSens; break;
+      case 'zoomSens': this.controls.zoomSpeed = 1.2 * c.zoomSens; break;
+      case 'cinematic': case 'autoPull': case 'soundDelay': case 'planet': if (this.arsenal) this.arsenal.opts[key] = c[key]; break;
+      case 'maxDynamic': this.Q.maxDynamic = c.maxDynamic < 0 ? Q0.maxDynamic : c.maxDynamic; this.D.dynBudget = this.Q.maxDynamic; break;
+      case 'maxLight': this.Q.maxLight = c.maxLight < 0 ? Q0.maxLight : c.maxLight; break;
+      case 'maxLoose': this.Q.maxLoose = c.maxLoose < 0 ? Q0.maxLoose : c.maxLoose; break;
+      case 'lightVol': this.Q.lightVol = c.lightVol; this.D.useLight = c.lightVol > 0; break;
+      case 'chunkDetail': this.Q.chunkFull = Math.round(Q0.chunkFull * c.chunkDetail); break;
+      case 'solverIter': this.phys.setSolverIterations && this.phys.setSolverIterations(c.solverIter); break;
+      case 'fxMul': this.Q.fxScale = Q0.fxScale * c.fxMul; break;
+      case 'flash': this.fx.flashMul = c.flash; break;
+      case 'strobe': if (this.arsenal) this.arsenal.opts.strobe = c.strobe; break;
+    }
+  }
+  setCfg(cfg, key) { this.cfg = Object.assign(this.cfg, cfg); this.applyCfg(key); }
 
   setTime(key) {
     this.timeKey = key;
@@ -174,15 +302,15 @@ export class Game {
     const far = dc > near ? (near / dc) ** 1.6 : 1;
     this.sun.intensity = B.sunI * (1 - 0.82 * k) * (1 - 0.55 * d);
     this.hemi.intensity = B.hemi * (1 - 0.5 * k) * (1 - 0.4 * d);
-    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k) * (1 + 0.15 * d);
+    this.renderer.toneMappingExposure = B.exp * (1 - 0.12 * k) * (1 + 0.15 * d) * (this.cfg.exposure || 1);
     this.scene.environmentIntensity = B.env * (1 - 0.6 * k) * (1 - 0.5 * d);
-    this.scene.fog.density = B.fogD * (1 + 2.6 * k) * (1 + 0.7 * d) * far;
+    this.scene.fog.density = B.fogD * (1 + 2.6 * k) * (1 + 0.7 * d) * far * (this.cfg.fogMul ?? 1);
     const fc = this.scene.fog.color.copy(B.fog).lerp(this._stormFog || (this._stormFog = new THREE.Color(0x30353b)), k);
     if (d > 0) fc.lerp(this._doomFog || (this._doomFog = new THREE.Color(0x5a3422)), d);
     this._frostK = (this._frostK || 0) + ((this.frost || 0) - (this._frostK || 0)) * Math.min(1, dt * 0.8);
     const fr = this._frostK;
     if (fr > 0.001) { fc.lerp(this._frostFog || (this._frostFog = new THREE.Color(0xdde7f0)), fr * 0.8); this.scene.fog.density *= 1 + 1.2 * fr; this.hemi.intensity *= 1 + 0.4 * fr; }
-    if (u.cloudCoverage) u.cloudCoverage.value = B.cloud + (0.95 - B.cloud) * Math.max(k, d);
+    if (u.cloudCoverage) u.cloudCoverage.value = (this.cfg.clouds === false ? 0 : B.cloud) + (0.95 - (this.cfg.clouds === false ? 0 : B.cloud)) * Math.max(k, d);
     u.turbidity.value = B.turb + 8 * k + 14 * d;
     if (u.rayleigh) { if (this._ray0 === undefined) this._ray0 = u.rayleigh.value; u.rayleigh.value = this._ray0 * (1 - 0.8 * d); }
     sharedUniforms.uNight.value = Math.max(B.night, 0.55 * k, 0.3 * d);
@@ -201,13 +329,13 @@ export class Game {
       this._dome.material.uniforms.uK.value = Math.min(1, d * 1.05);
       if (this.world && this.world.outer) { const oc = this.world.outer.material.color; if (!this._outer0) this._outer0 = oc.clone(); oc.copy(this._outer0).lerp(this._ashGround || (this._ashGround = new THREE.Color(0x3a2e26)), d * 0.8); }
       // 지평선 곳곳에서 타오르는 불길
-      if (d > 0.4 && this.fx) {
+      if (d > 0.4 && this.fx && (!this._dk || this._dk.fires)) {
         this._hzAcc = (this._hzAcc || 0) + dt * d * 6;
         const p = this.camera.position;
         while (this._hzAcc > 1) {
           this._hzAcc -= 1;
           const a = Math.random() * 6.28, r = 1500 + Math.random() * 9000;
-          const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = this.world.outer ? this.world.outer.position.y : 0;
+          const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = this.world.outerHeight ? this.world.outerHeight(x, z) : 0;
           this.fx.fire.emit(x, y + 40, z, 0, 30, 0, 4, 160, 260, [1, 0.45, 0.1, 0.9], [0.6, 0.1, 0.02, 0], 0.2, 2);
           this.fx.smoke.emit(x, y + 200, z, 0, 40, 0, 14, 300, 900, [0.12, 0.1, 0.09, 0.8], [0.15, 0.13, 0.12, 0], 0.05, 3);
         }
@@ -220,8 +348,9 @@ export class Game {
       while (this._ashAcc > 1) {
         this._ashAcc -= 1;
         const x = p.x + (Math.random() - 0.5) * 260, z = p.z + (Math.random() - 0.5) * 260, y = p.y + 20 + Math.random() * 80;
-        if (Math.random() < 0.15) this.fx.fire.emit(x, y, z, 0, -2, 0, 5, 0.35, 0.2, [1, 0.45, 0.1, 1], [0.6, 0.1, 0.02, 0], 0.2, 0, 0);
-        else { const g = 0.25 + Math.random() * 0.2; this.fx.smoke.emit(x, y, z, (Math.random() - 0.5) * 2, -3 - Math.random() * 2, (Math.random() - 0.5) * 2, 7, 0.5, 0.6, [g, g, g, 0.85], [g, g, g, 0], 0, 0, 0); }
+        const P = this._dk || DOOM_KINDS.nuke;
+        if (Math.random() < P.ember) { const ec = P.emberCol || [1, 0.45, 0.1]; this.fx.fire.emit(x, y, z, 0, -2, 0, 5, 0.35, 0.2, [ec[0], ec[1], ec[2], 1], [ec[0] * 0.6, ec[1] * 0.2, ec[2] * 0.2, 0], 0.2, 0, 0); }
+        else if (!P.snow) { const g = P.ash[0] + Math.random() * (P.ash[1] - P.ash[0]); this.fx.smoke.emit(x, y, z, (Math.random() - 0.5) * 2, -3 - Math.random() * 2, (Math.random() - 0.5) * 2, 7, 0.5, 0.6, [g, g * 0.97, g * 0.94, 0.85], [g, g, g, 0], 0, 0, 0); }
       }
     }
   }
@@ -243,13 +372,23 @@ export class Game {
     return m;
   }
 
+  // 지도 안은 지형, 밖은 바깥 세계 높이
+  groundAt(x, z) {
+    const h = this.grid.span / 2;
+    if (Math.abs(x) < h && Math.abs(z) < h) return this.grid.sample(x, z);
+    return this.world && this.world.outerHeight ? Math.max(this.world.outerHeight(x, z), this.grid.sample(x, z) - 400) : this.grid.sample(x, z);
+  }
+
   // 핵겨울 (0~1)
   setDoom(level, kind = 'nuke') {
+    const P = DOOM_KINDS[kind] || DOOM_KINDS.nuke;
     this.doom = Math.max(this.doom || 0, level);
+    this._dk = P;
     const u = this._doomDome().material.uniforms;
-    if (kind === 'anti') { u.uLow.value.setRGB(0.7, 0.4, 1.0); u.uHigh.value.setRGB(0.12, 0.06, 0.2); } else { u.uLow.value.setRGB(1.0, 0.36, 0.08); u.uHigh.value.setRGB(0.2, 0.075, 0.045); }
-    if (this._doomFog) this._doomFog.set(kind === 'anti' ? 0x241c34 : 0x5a3422);
-    else this._doomFog = new THREE.Color(kind === 'anti' ? 0x241c34 : 0x5a3422);
+    u.uLow.value.setRGB(...P.low); u.uHigh.value.setRGB(...P.high);
+    if (this._doomFog) this._doomFog.set(P.fog); else this._doomFog = new THREE.Color(P.fog);
+    if (P.snow) this.frost = Math.max(this.frost || 0, level);
+    if (P.rain) this.storm = Math.max(this.storm || 0, level * 0.8);
   }
 
   // 거대 폭발을 볼 수 있게 시야·줌 거리 넓히기
@@ -303,6 +442,7 @@ export class Game {
       this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h, false);
       this.composer.setSize(w, h);
+      if (this.planetFX) this.planetFX.resize(w, h);
     };
     window.addEventListener('resize', this._onResize);
     this._mouse = new THREE.Vector2(); this._ray = new THREE.Raycaster();
@@ -315,6 +455,7 @@ export class Game {
     this._onDown = (e) => {
       if (e.button !== 0) return;
       this._onMove(e);
+      if (this.planetFX) { this.endPlanet(); return; }
       if (this.cine.active) { this.cine.skip(); return; }
       const hit = this.pick();
       if (!hit) return;
@@ -361,22 +502,23 @@ export class Game {
     const k = this._keys; if (!k.size) return;
     const c = this.controls;
     const dist = this.camera.position.distanceTo(c.target);
-    const sp = dist * 0.9 * dt * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.5 : 1);
+    const K = this.cfg;
+    const sp = dist * 0.9 * dt * (K.moveSpeed || 1) * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.5 : 1);
     const fwd = new THREE.Vector3().subVectors(c.target, this.camera.position); fwd.y = 0; fwd.normalize();
     const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
     const mv = new THREE.Vector3();
-    if (k.has('KeyW') || k.has('ArrowUp')) mv.add(fwd);
-    if (k.has('KeyS') || k.has('ArrowDown')) mv.sub(fwd);
-    if (k.has('KeyD') || k.has('ArrowRight')) mv.add(right);
-    if (k.has('KeyA') || k.has('ArrowLeft')) mv.sub(right);
+    if (k.has(K.k_fwd) || k.has('ArrowUp')) mv.add(fwd);
+    if (k.has(K.k_back) || k.has('ArrowDown')) mv.sub(fwd);
+    if (k.has(K.k_right) || k.has('ArrowRight')) mv.add(right);
+    if (k.has(K.k_left) || k.has('ArrowLeft')) mv.sub(right);
     if (mv.lengthSq()) { mv.normalize().multiplyScalar(sp); this.camera.position.add(mv); c.target.add(mv); }
-    const rot = (k.has('KeyQ') ? 1 : 0) - (k.has('KeyE') ? 1 : 0);
+    const rot = (k.has(K.k_rotL) ? 1 : 0) - (k.has(K.k_rotR) ? 1 : 0);
     if (rot) {
       const off = new THREE.Vector3().subVectors(this.camera.position, c.target);
       off.applyAxisAngle(new THREE.Vector3(0, 1, 0), rot * dt * 1.4);
       this.camera.position.copy(c.target).add(off);
     }
-    const zoom = (k.has('KeyR') ? 1 : 0) - (k.has('KeyF') ? 1 : 0);
+    const zoom = (k.has(K.k_zoomIn) ? 1 : 0) - (k.has(K.k_zoomOut) ? 1 : 0);
     if (zoom) {
       const off = new THREE.Vector3().subVectors(this.camera.position, c.target);
       off.multiplyScalar(1 - zoom * dt * 1.2);
@@ -384,8 +526,41 @@ export class Game {
     }
   }
 
+  // 행성 시점 마무리 시작 / 끝
+  playPlanet(kind, opts = {}) {
+    if (this.planetFX || this.cfg.planet === false) return false;
+    const now = performance.now();
+    if (this._planetAt && now - this._planetAt < 45000) return false;
+    this._planetAt = now;
+    if (this.cine.active) this.cine.stop(true);
+    const lat = this.place && isFinite(this.place.lat) ? this.place.lat : 37.5, lon = this.place && isFinite(this.place.lon) ? this.place.lon : 127;
+    this.planetFX = new PlanetFinale(this.renderer, kind, { lat, lon, dur: opts.dur || 10 });
+    this.planetFX.resize(window.innerWidth, window.innerHeight);
+    document.body.classList.add('cine');
+    this.fx.flash = 0; if (this.fx.flashEl) this.fx.flashEl.style.opacity = '0';
+    return true;
+  }
+  endPlanet() {
+    if (!this.planetFX) return;
+    this.planetFX.dispose(); this.planetFX = null;
+    const cap = document.getElementById('cineCap'); if (cap) { cap.classList.remove('show'); cap.textContent = ''; }
+    document.body.classList.remove('cine');
+    this.fx.flash = Math.max(this.fx.flash, 0.5);
+    this.camera.fov = this.cfg.fov || 50; this.camera.updateProjectionMatrix();
+  }
+
   _loop() {
     if (!this.running) return;
+    if (this.planetFX) {
+      const dtp = Math.min(0.05, this.clock.getDelta());
+      this.planetFX.update(dtp);
+      this.fx.update(dtp, this.camera);
+      this.planetFX.render();
+      if (this.planetFX.done) this.endPlanet();
+      return;
+    }
+    // 프레임 제한
+    if (this.cfg.fpsCap > 0) { const now = performance.now(); if (this._lastF && now - this._lastF < 1000 / this.cfg.fpsCap - 1) return; this._lastF = now; }
     const dt = Math.min(0.05, this.clock.getDelta());
     sharedUniforms.uTime.value += dt;
     if (this.sky.material.uniforms.time) this.sky.material.uniforms.time.value += dt;
@@ -394,7 +569,8 @@ export class Game {
     // 흔들림 제거 후 컨트롤(또는 시네마틱) 업데이트
     this.camera.position.sub(this._shakeOff);
     const cine = this.cine.active;
-    if (cine) this.cine.update(dt);
+    // 샷은 게임 시간(연출 배속 × 슬로모션)으로 진행 → 무기 사건과 항상 맞음
+    if (cine) this.cine.update(dt, dt * this.cine.timeScale * this.D.timeScale);
     else { this._keyboard(dt); this.controls.update(); }
     const ts = this.cine.active ? this.cine.timeScale : 1;
     const dtSim = dt * ts;
@@ -407,7 +583,7 @@ export class Game {
     t.x = Math.max(-lim, Math.min(lim, t.x)); t.z = Math.max(-lim, Math.min(lim, t.z));
     const gy = this.grid.sample(t.x, t.z);
     t.y += (gy - t.y) * Math.min(1, dt * 4);
-    const cg = this.grid.sample(this.camera.position.x, this.camera.position.z);
+    const cg = this.groundAt(this.camera.position.x, this.camera.position.z);
     if (this.camera.position.y < cg + 4) this.camera.position.y = cg + 4;
 
     // 조준
@@ -428,13 +604,13 @@ export class Game {
     this.marker.visible = this.marker.visible && !cine;
     PROF.time('weapons', () => this.arsenal.update(dtSim * this.D.timeScale, this.aim));
     PROF.time('physics', () => this.D.update(dtSim));
-    PROF.time('fx', () => this.fx.update(dtSim * (this.D.timeScale < 1 ? 0.35 : 1), this.camera));
+    PROF.time('fx', () => this.fx.update(dtSim * this.D.timeScale, this.camera));
     PROF.time('world', () => this.world.update(dt));
 
     // 그림자 카메라 따라가기
     if (this.sun.castShadow) {
       const dist = this.camera.position.distanceTo(t);
-      const s = Math.max(160, Math.min(1100, dist * 1.25));
+      const s = Math.max(160, Math.min(1100, dist * 1.25)) * (this.cfg.shadowDist || 1);
       const sc = this.sun.shadow.camera;
       if (Math.abs(sc.right - s) > s * 0.1) { sc.left = -s; sc.right = s; sc.top = s; sc.bottom = -s; sc.updateProjectionMatrix(); }
       // 텍셀 단위로 스냅 (흔들림 방지)
@@ -451,11 +627,16 @@ export class Game {
     const sh = this.fx.shake;
     if (sh > 0.001) {
       const dist = this.camera.position.distanceTo(t);
-      const a = sh * sh * Math.min(6, dist * 0.006);
+      const a = sh * sh * Math.min(6, dist * 0.006) * (this.cfg.shake ?? 1);
       this._shakeOff.set((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a);
     } else this._shakeOff.set(0, 0, 0);
     this.camera.position.add(this._shakeOff);
 
+    // 연출 중 초점 흐림
+    if (this.bokeh) {
+      this.bokeh.enabled = this.cine.active && !!this.cfg.dof;
+      if (this.bokeh.enabled) this.bokeh.uniforms.focus.value = this.camera.position.distanceTo(this.cine._smoothLook);
+    }
     this.renderer.info.reset();
     PROF.time('render', () => this.composer.render(dt));
     PROF.endFrame();

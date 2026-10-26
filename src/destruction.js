@@ -100,7 +100,9 @@ export class Destruction {
     this._impactIdx = 0;
     this.eaten = [];   // 블랙홀이 삼킨 조각 (화이트홀이 토해냄)
     this._anim = [];
-    this._wakeQ = [];  // 받침이 사라진 자리: 그 위에 멈춰 있던 파편을 다시 움직이게
+    this._wakeQ = [];
+    this.useLight = quality.lightDebris !== false;
+    phys.lightEnv = { collide: (b, h) => this._lightCollide(b, h) };  // 받침이 사라진 자리: 그 위에 멈춰 있던 파편을 다시 움직이게
     if (!grid.h0) grid.h0 = grid.h.slice(); // 시간 역행용 원래 지형
   }
   get timeScale() { return this.phys.timeScale; }
@@ -124,6 +126,7 @@ export class Destruction {
     const geos = [];
     let V = 0, I = 0;
     this.hash = new Map();
+    this.hashN = new Map(); // 숫자 키 (가벼운 파편 충돌용)
     for (const b of this.buildings) {
       let base = Infinity;
       for (const p of b.pts) base = Math.min(base, g.sample(p[0], p[1]));
@@ -147,6 +150,9 @@ export class Destruction {
           const k = x + ',' + z;
           if (!this.hash.has(k)) this.hash.set(k, []);
           this.hash.get(k).push(b);
+          const kn = x * 100003 + z;
+          if (!this.hashN.has(kn)) this.hashN.set(kn, []);
+          this.hashN.get(kn).push(b);
         }
     }
     this.intact = new THREE.BatchedMesh(this.buildings.length + 1, V + 1, I + 1, this.material);
@@ -217,6 +223,7 @@ export class Destruction {
   // ---------- 조각 상태 전환 ----------
   _count(c) {
     const b = c.b;
+    b._cgDirty = true;
     b.released++;
     this.releasedVol += c.vol;
     this.score += Math.round(c.vol * 14);
@@ -233,14 +240,24 @@ export class Destruction {
       if (c.state === DYN && (ix || iy || iz)) c.body.applyImpulse({ x: ix, y: iy, z: iz }, true);
       return;
     }
-    if (!force && c.state === FROZEN && this.dynamic.size >= (this.dynBudget || this.quality.maxDynamic)) return;
+    // 작은 조각은 가벼운 파편(간이 물리)으로: Rapier 부하 없이 수만 개까지
+    // 정식 물리(Rapier) 예산이 차면 넘치는 조각도 가벼운 파편으로 (먼지로 사라지지 않게)
+    const rapierFull = this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic);
+    const toLight = this.useLight && (c.body.light || c.vol < (this.quality.lightVol || 30) || rapierFull);
+    const full = toLight ? this.phys.lightCount >= (this.quality.maxLight || 20000) : rapierFull;
+    if (!force && c.state === FROZEN && full) return;
     // 움직이는 조각이 예산을 넘으면 작은 조각은 물리 대신 먼지로 사라짐
-    if (c.state === FIXED && this.dynamic.size >= (this.dynBudget || this.quality.maxDynamic) && c.size < 3.2) {
+    if (c.state === FIXED && full && c.size < 3.2) {
       this.hooks.onDust && this._dustBudget > 0.5 && (this._dustBudget -= 0.5, this.hooks.onDust({ x: c.x, y: c.y, z: c.z }, c.size));
       this.removeChunk(c);
       return;
     }
     const was = c.state;
+    if (toLight && !c.body.light) {
+      const r = c.body.rotation();
+      const lb = this.phys.light(c.x, c.y, c.z, c.state === FIXED ? null : r, c.mass, c.size * 0.55);
+      this.phys.remove(c.body); c.body = lb;
+    }
     c.body.setDynamic(true);
     c.state = DYN; c.age = 0; c.slowT = 0;
     this.dynamic.add(c); this.loose.add(c); this._lgridDirty = true;
@@ -925,9 +942,9 @@ export class Destruction {
       else if (c.body.isSleeping() || c.slowT > 0.6 || (c.age > 25 && c.air < c.size * 1.5)) this._freeze(c);
     }
     // 예산 초과: 놓여 있거나 바닥 가까운 것부터 고정, 그래도 넘치면 공중의 작은 파편은 먼지로 (공중 고정 금지)
-    if (this.dynamic.size > budget * 1.05) {
-      const arr = [...this.dynamic].filter(c => !c.float).sort((a, b) => (b.slowT - a.slowT) || (a.air - b.air));
-      let over = this.dynamic.size - budget;
+    if (this.phys.dynCount > budget * 1.05) {
+      const arr = [...this.dynamic].filter(c => !c.float && !c.body.light).sort((a, b) => (b.slowT - a.slowT) || (a.air - b.air));
+      let over = this.phys.dynCount - budget;
       for (const c of arr) {
         if (over <= 0) break;
         if (c.slowT > 0.1 || c.air < c.size * 1.2) { this._freeze(c); over--; }
@@ -1009,8 +1026,9 @@ export class Destruction {
   // 사라졌던 조각을 다시 등장시킴 (화이트홀)
   respawn(c, x, y, z, vx, vy, vz) {
     if (c.state !== GONE) return false;
-    if (this.dynamic.size >= (this.dynBudget || this.quality.maxDynamic)) return false;
-    c.body = this.phys.chunk(x, y, z, c.shape, DENSITY, c.group, c.mass);
+    const small = this.useLight && (c.vol < (this.quality.lightVol || 30) || this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic));
+    if (small ? this.phys.lightCount >= (this.quality.maxLight || 20000) : this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic)) return false;
+    c.body = small ? this.phys.light(x, y, z, null, c.mass, c.size * 0.55) : this.phys.chunk(x, y, z, c.shape, DENSITY, c.group, c.mass);
     c.body.setDynamic(true);
     c.body.setLinvel({ x: vx, y: vy, z: vz }, true);
     const m = c.body.mass();
@@ -1114,6 +1132,7 @@ export class Destruction {
       if (b.col0) { b.col = b.col0; b.col0 = null; }
       b.tilt = null; b.crush = null; b.blastDir = undefined;
       if (b.state === 'fractured') {
+        b._cgDirty = true;
         b.released = 0; b.destroyedFlag = false; b.scorch = 0;
         for (const c of b.chunks) if (c.state === FIXED) c.batch.setColorAt(c.inst, b.col);
         this._dirty.delete(b);
@@ -1169,6 +1188,29 @@ export class Destruction {
       if (b.state === 'gone' || b.state === 'fractured') { this._anim.splice(i, 1); continue; }
       a.t += dt;
       const u = Math.min(1, a.t / a.dur), e = u * u * (3 - 2 * u);
+      if (a.grow) {
+        // 크기 바꾸기 (축소·확대 광선): 바닥 중심 기준 균일 배율
+        const sc = 1 + (a.grow - 1) * e;
+        m.makeTranslation(b.cx, b.baseY, b.cz);
+        m.multiply(M2.makeScale(sc, sc, sc));
+        m.multiply(M2.makeTranslation(-b.cx, -b.baseY, -b.cz));
+        this.intact.setMatrixAt(b.inst, m);
+        if (a.onStep) a.onStep(sc, u);
+        if (u >= 1) { this._anim.splice(i, 1); if (a.onDone) a.onDone(); }
+        continue;
+      }
+      if (a.lift) {
+        // 통째로 하늘로 떠올라 사라짐 (반중력·중력 반전 세계 멸망)
+        const k = Math.max(0, (a.t - a.wait) / a.dur);
+        const h = a.lift * k * k, ang = a.spin * k;
+        q.setFromAxisAngle(axis.set(a.ax, 0.3, a.az).normalize(), ang);
+        m.makeTranslation(b.cx, b.baseY + b.height * 0.5 + h, b.cz);
+        m.multiply(M2.makeRotationFromQuaternion(q));
+        m.multiply(M2.makeTranslation(-b.cx, -b.baseY - b.height * 0.5, -b.cz));
+        this.intact.setMatrixAt(b.inst, m);
+        if (k >= 1) { this.intact.setVisibleAt(b.inst, false); b.state = 'gone'; this._anim.splice(i, 1); }
+        continue;
+      }
       const minS = a.keep ? 1 : Math.max(0.06, Math.min(0.5, 6 / b.height)) + (1 - a.sev) * 0.25;
       const sy = 1 - (1 - minS) * e;
       const tilt = (a.keep ? a.sev * 0.12 : a.sev * 0.28) * e;
@@ -1186,6 +1228,23 @@ export class Destruction {
         this._anim.splice(i, 1);
       }
     }
+  }
+  // 건물 크기 바꾸기 (애니메이션). 끝나면 onDone
+  scaleBuilding(b, grow, dur, onStep, onDone) {
+    if (b.state !== 'intact') return false;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._anim.push({ b, t: 0, dur, grow, onStep, onDone });
+    return true;
+  }
+  // 건물 통째로 하늘로 (물리 없이)
+  levitate(b, height = 3000, dur = 8, wait = 0) {
+    if (b.state !== 'intact') return;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._scoreBuilding(b, 1);
+    this._anim.push({ b, t: 0, dur, wait, lift: height * (0.7 + Math.random() * 0.6), spin: (Math.random() - 0.5) * 3, ax: Math.random() - 0.5, az: Math.random() - 0.5 });
+    this._wakeArea(b);
   }
   // 특정 건물에 외부 폭원(q)에서 오는 충격 적용 (조각화 + 날림)
   blastFrom(b, q, power, opts = {}) {
@@ -1208,6 +1267,56 @@ export class Destruction {
     }
   }
 
+  // 가벼운 파편 충돌: 지면 + 온전한 건물(지붕·벽) + 부서진 건물의 남은 조각
+  _lightCollide(lb, h) {
+    const p = lb.p, v = lb.v, r = lb.r;
+    let hit = false;
+    const list = this.hashN.get(Math.floor(p.x / 60) * 100003 + Math.floor(p.z / 60));
+    if (list) for (const bd of list) {
+      if (p.x < bd.minx - r || p.x > bd.maxx + r || p.z < bd.minz - r || p.z > bd.maxz + r) continue;
+      if (p.y - r > bd.baseY + bd.height || p.y + r < bd.baseY) continue;
+      if (bd.state === 'intact' || bd.state === 'flat') {
+        const top = bd.baseY + (bd.state === 'flat' ? bd.flatH : bd.height);
+        if (p.y - r > top || !pointInPoly([p.x, p.z], bd.pts)) continue;
+        if (lb.py - r >= top - 1 || p.y > top - r * 0.5) { p.y = top + r; if (v.y < 0) v.y = -v.y * 0.2; v.x *= 0.8; v.z *= 0.8; }
+        else { p.x = lb.px; p.z = lb.pz; v.x *= -0.3; v.z *= -0.3; }
+        hit = true;
+      } else if (bd.state === 'fractured') {
+        if (bd._cgDirty !== false) this._buildChunkGrid(bd);
+        const cell = bd._cg.get(Math.floor(p.x / 6) * 73856093 ^ Math.floor(p.y / 6) * 19349663 ^ Math.floor(p.z / 6) * 83492791);
+        if (!cell) continue;
+        for (const c of cell) {
+          if (c.state !== FIXED) continue;
+          const cr = c.size * 0.6 + r, dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z, d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 >= cr * cr) continue;
+          const d = Math.sqrt(d2) || 1e-3, push = cr - d;
+          p.x += dx / d * push; p.y += dy / d * push; p.z += dz / d * push;
+          const vn = (v.x * dx + v.y * dy + v.z * dz) / d;
+          if (vn < 0) { v.x -= 1.25 * vn * dx / d; v.y -= 1.25 * vn * dy / d; v.z -= 1.25 * vn * dz / d; v.x *= 0.85; v.z *= 0.85; }
+          hit = true;
+        }
+      }
+    }
+    const gy = this.grid.sample(p.x, p.z);
+    if (p.y - r < gy) { p.y = gy + r; if (v.y < 0) v.y = -v.y * 0.25; v.x *= 0.8; v.z *= 0.8; hit = true; }
+    return hit;
+  }
+  // 부서진 건물의 남은 조각을 6m 칸에 넣어 둠 (칸 경계에 걸치게 주변 칸에도 등록)
+  _buildChunkGrid(bd) {
+    const g = new Map();
+    for (const c of bd.chunks) {
+      if (c.state !== FIXED) continue;
+      const e = c.size * 0.6 + 1.5;
+      for (let x = Math.floor((c.x - e) / 6); x <= Math.floor((c.x + e) / 6); x++)
+        for (let y = Math.floor((c.y - e) / 6); y <= Math.floor((c.y + e) / 6); y++)
+          for (let z = Math.floor((c.z - e) / 6); z <= Math.floor((c.z + e) / 6); z++) {
+            const k = x * 73856093 ^ y * 19349663 ^ z * 83492791;
+            let l = g.get(k); if (!l) { l = []; g.set(k, l); } l.push(c);
+          }
+    }
+    bd._cg = g; bd._cgDirty = false;
+  }
+
   // 받침(조각·건물)이 사라지면 그 위에 고정돼 있던 파편을 깨움 → 공중에 떠 있는 잔해 방지
   _processWake() {
     const q = this._wakeQ;
@@ -1220,7 +1329,7 @@ export class Destruction {
         const lim = (s + c.size) * 0.75 + 0.5;
         if (Math.abs(c.x - x) > lim || Math.abs(c.z - z) > lim) continue;
         if (c.y - this.grid.sample(c.x, c.z) < c.size * 1.2) continue; // 이미 땅바닥
-        if (this.dynamic.size >= (this.dynBudget || this.quality.maxDynamic) && c.size < 3) { this.removeChunk(c); continue; }
+        if (!c.body.light && this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic) && c.size < 3) { this.removeChunk(c); continue; }
         this.release(c, 0, 0, 0, 0, true);
       }
     }

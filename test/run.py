@@ -14,7 +14,7 @@ with sync_playwright() as p:
     logs = []
     pg.on('console', lambda m: logs.append(f'[{m.type}] {m.text}'))
     pg.on('pageerror', lambda e: logs.append(f'[pageerror] {e}'))
-    pg.add_init_script("localStorage.setItem('we.settings', JSON.stringify({radius:500, quality:'medium', time:'noon', physWorker: !!sessionStorage.getItem('W')}))")
+    pg.add_init_script("localStorage.setItem('we.settings', JSON.stringify({radius:500, quality:'" + os.environ.get('QUALITY','medium') + "', time:'noon', physWorker: !!sessionStorage.getItem('W')}))")
     pg.goto(f'http://127.0.0.1:{port}/index.html')
     pg.wait_for_timeout(800)
     pg.screenshot(path=f'{OUT}/menu.png')

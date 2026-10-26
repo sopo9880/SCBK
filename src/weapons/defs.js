@@ -42,6 +42,48 @@ const I = {
   train: '<rect x="3" y="6" width="13" height="10" rx="1.5" fill="currentColor"/><rect x="16" y="9" width="5" height="7" fill="currentColor"/><circle cx="7" cy="18" r="2" fill="currentColor"/><circle cx="13" cy="18" r="2" fill="currentColor"/><path d="M1 21h22" stroke="currentColor" stroke-width="1.5"/>',
   tsar: '<path d="M12 1c3 0 4 2 4 5v8l-4 3-4-3V6c0-3 1-5 4-5z" fill="currentColor"/><path d="M5 18l7 4 7-4" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M10 7h4" stroke="#0005" stroke-width="2"/>',
   antimatter: '<circle cx="12" cy="12" r="2.6" fill="currentColor"/><ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="currentColor" stroke-width="1.5"/><ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="currentColor" stroke-width="1.5" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="currentColor" stroke-width="1.5" transform="rotate(-60 12 12)"/>',
+  chainex: '<rect x="3" y="10" width="5" height="11" fill="currentColor"/><rect x="10" y="6" width="5" height="15" fill="currentColor"/><rect x="17" y="12" width="4" height="9" fill="currentColor"/><path d="M5 8l2-3M12 4l2-3M19 10l1-3" stroke="currentColor" stroke-width="1.6"/>',
+  deepblast: '<path d="M2 12h20" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v14" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="18" r="3.5" fill="currentColor"/><path d="M6 12q6-6 12 0" stroke="currentColor" stroke-width="1.4" fill="none"/>',
+  plasma: '<circle cx="15" cy="12" r="5.5" fill="currentColor"/><path d="M2 12h7M3 8l5 2M3 16l5-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  vacuum: '<circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5M5 5l3.5 3.5M19 19l-3.5-3.5M19 5l-3.5 3.5M5 19l3.5-3.5" stroke="currentColor" stroke-width="1.6"/><path d="M12 5l-1.5 2h3zM12 19l-1.5-2h3z" fill="currentColor"/>',
+  gunship: '<path d="M2 9l9-1 1-4h2l1 4 7 1v2l-7 1-1 3h-4l-1-3-7-1z" fill="currentColor"/><path d="M8 15l-3 7M11 15l-1 7M14 15l1 7" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1.5 1.5"/>',
+  pgm: '<circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="13" r="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v6M12 18v4M2 13h4M18 13h4" stroke="currentColor" stroke-width="1.6"/>',
+  airdrop: '<path d="M5 10a7 6 0 0 1 14 0z" fill="currentColor"/><path d="M5 10l6 7M19 10l-6 7M12 10v7" stroke="currentColor" stroke-width="1.2"/><rect x="8" y="17" width="8" height="4" rx="1" fill="currentColor"/>',
+  mlrs: '<rect x="3" y="15" width="14" height="5" fill="currentColor"/><path d="M5 15l8-9M8 15l8-9M11 15l8-9" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="21" r="1.5" fill="currentColor"/><circle cx="14" cy="21" r="1.5" fill="currentColor"/>',
+  comet: '<circle cx="17" cy="16" r="4" fill="currentColor"/><path d="M14 13L3 3M15 12L7 2M13 14L2 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/><circle cx="20" cy="9" r="1.5" fill="currentColor"/><circle cx="11" cy="20" r="1.5" fill="currentColor"/>',
+  satnet: '<rect x="9" y="2" width="6" height="4" fill="currentColor"/><path d="M5 4h4M15 4h4" stroke="currentColor" stroke-width="2"/><path d="M12 6v8M6 8l3 8M18 8l-3 8" stroke="currentColor" stroke-width="1.4"/><ellipse cx="12" cy="19" rx="8" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>',
+  grb: '<path d="M12 1l2 6 6-3-3 6 6 2-6 2 3 6-6-3-2 6-2-6-6 3 3-6-6-2 6-2-3-6 6 3z" fill="currentColor"/>',
+  junk: '<rect x="4" y="5" width="5" height="4" fill="currentColor" transform="rotate(-20 6 7)"/><rect x="13" y="10" width="7" height="2" fill="currentColor" transform="rotate(25 16 11)"/><circle cx="8" cy="17" r="2.5" fill="currentColor"/><path d="M2 2l3 3M14 4l2 3M11 14l2 3" stroke="currentColor" stroke-width="1.4"/>',
+  cme: '<circle cx="5" cy="5" r="3.5" fill="currentColor"/><path d="M3 21c3-6 6-9 9-9s5 3 9 1M3 17c4-5 7-7 10-7" stroke="currentColor" stroke-width="1.8" fill="none"/>',
+  hurricane: '<circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 3a9 9 0 0 1 9 9c-3-3-6-3-9-3M12 21a9 9 0 0 1-9-9c3 3 6 3 9 3" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  deluge: '<path d="M4 8a5 5 0 0 1 9-3 4 4 0 0 1 7 3z" fill="currentColor"/><path d="M6 11v3M10 11v4M14 11v3M18 11v4" stroke="currentColor" stroke-width="1.6"/><path d="M2 20c3-2 5 0 8-1s5-2 12 0" stroke="currentColor" stroke-width="2" fill="none"/>',
+  rift: '<path d="M2 14h7l2-3 2 5 2-4 2 2h5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 11l1 10M13 16l-1 6" stroke="currentColor" stroke-width="1.6"/>',
+  sandstorm: '<path d="M2 7h14a3 3 0 1 0-3-3M2 12h18a3 3 0 1 1-3 3M2 17h10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  supervolcano: '<path d="M1 21l6-8h10l6 8z" fill="currentColor"/><path d="M6 12c-1-4 2-6 1-10M12 12V2M18 12c1-4-2-6-1-10" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  portal: '<ellipse cx="12" cy="6" rx="7" ry="2.4" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="12" cy="19" rx="7" ry="2.4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9v7M9 13l3 3 3-3" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  shrink: '<rect x="14" y="11" width="6" height="10" fill="currentColor"/><path d="M2 5l9 7M2 5h4M2 5v4" stroke="currentColor" stroke-width="1.8" fill="none"/><rect x="6" y="16" width="3" height="5" fill="currentColor" opacity="0.6"/>',
+  nano: '<circle cx="6" cy="6" r="1.6" fill="currentColor"/><circle cx="12" cy="9" r="1.6" fill="currentColor"/><circle cx="18" cy="6" r="1.6" fill="currentColor"/><circle cx="9" cy="14" r="1.6" fill="currentColor"/><circle cx="15" cy="14" r="1.6" fill="currentColor"/><path d="M3 21h18" stroke="currentColor" stroke-width="2"/><path d="M5 19l2-2 2 2 2-2 2 2 2-2 2 2 2-2" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+  timestop: '<circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 9v8M15 9v8" stroke="currentColor" stroke-width="2.4"/><path d="M10 2h4" stroke="currentColor" stroke-width="2"/>',
+  pendulum: '<path d="M3 3h18M8 3v4" stroke="currentColor" stroke-width="2"/><path d="M14 3l3 12" stroke="currentColor" stroke-width="1.4"/><circle cx="17.5" cy="17.5" r="4" fill="currentColor"/>',
+  hammer: '<rect x="4" y="3" width="14" height="7" rx="1" fill="currentColor"/><path d="M11 10v12" stroke="currentColor" stroke-width="3"/>',
+  marbles: '<circle cx="7" cy="16" r="4" fill="currentColor"/><circle cx="16" cy="17" r="3.5" fill="currentColor" opacity="0.7"/><circle cx="13" cy="7" r="3" fill="currentColor" opacity="0.85"/><circle cx="5.5" cy="14.5" r="1" fill="#fff6"/>',
+  hoover: '<path d="M10 2v10" stroke="currentColor" stroke-width="3"/><path d="M5 20l3-8h4l3 8z" fill="currentColor"/><path d="M4 22h12" stroke="currentColor" stroke-width="2"/><path d="M18 14l3-2M18 18l4 0" stroke="currentColor" stroke-width="1.4"/>',
+  moonfall: '<circle cx="12" cy="9" r="7" fill="currentColor"/><circle cx="9" cy="7" r="1.6" fill="#0004"/><circle cx="14" cy="11" r="1.2" fill="#0004"/><path d="M2 21c4-2 8-2 10 0s6 2 10 0" stroke="currentColor" stroke-width="2" fill="none"/>',
+  planetcrash: '<circle cx="8" cy="15" r="6" fill="currentColor"/><circle cx="18" cy="6" r="4" fill="currentColor" opacity="0.7"/><ellipse cx="18" cy="6" rx="6" ry="1.5" fill="none" stroke="currentColor" stroke-width="1"/><path d="M13 10l2-2" stroke="currentColor" stroke-width="2"/>',
+  sunfall: '<circle cx="12" cy="10" r="6" fill="currentColor"/><path d="M12 1v2M3 10H1M23 10h-2M5 3l1.5 1.5M19 3l-1.5 1.5" stroke="currentColor" stroke-width="1.8"/><path d="M2 21c3-2 5-1 7-2s5 1 7 0 4-2 6 0" stroke="currentColor" stroke-width="2" fill="none"/>',
+  terraform: '<path d="M12 2l4 4v6l-4 3-4-3V6z" fill="currentColor"/><path d="M9 13l-6 9M15 13l6 9M12 15v7" stroke="currentColor" stroke-width="1.6"/><path d="M12 15v7" stroke="currentColor" stroke-width="3" opacity="0.4"/>',
+  tripod: '<ellipse cx="12" cy="6" rx="7" ry="3.5" fill="currentColor"/><path d="M7 8l-5 14M17 8l5 14M12 9v13" stroke="currentColor" stroke-width="1.6"/><path d="M14 7l6 3" stroke="currentColor" stroke-width="1.2" stroke-dasharray="1 1"/>',
+  crustshift: '<path d="M2 10l9-2 2 6 9-2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M2 16l9-2 2 6 9-2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M11 8l2 6" stroke="currentColor" stroke-width="1.4"/>',
+  flashfreeze: '<path d="M6 2h12l-3 8h-6z" fill="currentColor" opacity="0.6"/><path d="M12 10v12M7 15l10 4M17 15l-10 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  megatsunami: '<path d="M2 21V11c3-8 13-10 17-5-4-1-7 1-6 5 2 1 5 0 6-2v12z" fill="currentColor"/>',
+  cityfold: '<path d="M2 20h10V10" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 10c0-5 4-8 10-8" stroke="currentColor" stroke-width="2" fill="none"/><rect x="4" y="14" width="3" height="6" fill="currentColor"/><rect x="15" y="4" width="3" height="5" fill="currentColor" transform="rotate(30 16 6)"/>',
+  robokaiju: '<rect x="2" y="6" width="7" height="9" fill="currentColor"/><rect x="3.5" y="2" width="4" height="4" fill="currentColor"/><path d="M3 15v7M8 15v7" stroke="currentColor" stroke-width="2"/><circle cx="17" cy="12" r="5" fill="currentColor" opacity="0.7"/><path d="M15 17l-1 5M19 17l1 5" stroke="currentColor" stroke-width="2"/>',
+  halfvanish: '<rect x="3" y="6" width="5" height="15" fill="currentColor"/><rect x="10" y="9" width="5" height="12" fill="currentColor" opacity="0.35"/><circle cx="18" cy="8" r="1" fill="currentColor"/><circle cx="20" cy="12" r="0.8" fill="currentColor"/><circle cx="17" cy="14" r="0.7" fill="currentColor"/>',
+  corestop: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke="currentColor" stroke-width="1.6"/>',
+  drillrock: '<circle cx="12" cy="11" r="8" fill="currentColor"/><path d="M12 1v9" stroke="#0006" stroke-width="2"/><path d="M9 21l3-4 3 4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  sharknado: '<path d="M3 4h18M5 8h14M7 12h10M9 16h6M11 20h2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 9l3-3 1 4z" fill="currentColor"/>',
+  megaquake: '<path d="M2 12h6l2-5 2 10 2-7 2 4h6" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><path d="M9 21l3-4 3 4" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  giantape: '<rect x="15" y="3" width="6" height="19" fill="currentColor" opacity="0.5"/><circle cx="10" cy="6" r="3" fill="currentColor"/><path d="M5 10h9l1 7H5z" fill="currentColor"/><path d="M14 11l3-4M6 17l-1 5M12 17l1 5" stroke="currentColor" stroke-width="2"/>',
 };
 
 export const CATEGORIES = [
@@ -52,9 +94,12 @@ export const CATEGORIES = [
   { id: 'special', name: '특수' },
   { id: 'fun', name: '놀이·괴수' },
   { id: 'nuke', name: '핵' },
+  { id: 'end', name: '종말' },
+  { id: 'movie', name: '영화 오마주' },
 ];
 
 const CINE = { key: 'cinematic', label: '연출 카메라', global: true };
+const GIANT = { key: 'giant', label: '거대화 (끄면 충격만)', global: true };
 const REAL = { key: 'realNuke', label: '실감 핵 연출', global: true };
 
 // opt: 무기별 켜고 끄는 옵션 (전역 공유 옵션은 global: true)
@@ -64,12 +109,20 @@ export const WEAPONS = [
   { id: 'cluster', cat: 'blast', name: '집속탄', desc: '공중에서 터져 자탄 수십 개를 흩뿌림' },
   { id: 'thermobaric', cat: 'blast', name: '열압력탄', desc: '연료 구름이 퍼진 뒤 점화, 길고 넓은 압력파' },
   { id: 'napalm', cat: 'blast', name: '네이팜', desc: '불바다가 번지며 건물이 서서히 무너짐' },
+  { id: 'chainex', cat: 'blast', name: '연쇄 폭약', desc: '겨눈 건물부터 옆 건물로 줄줄이 발파', opts: [CINE] },
+  { id: 'deepblast', cat: 'blast', name: '지하 관통 폭발', desc: '땅속 깊이 파고들어 땅이 부풀었다 꺼짐' },
+  { id: 'plasma', cat: 'blast', name: '플라즈마 포', desc: '느린 플라즈마 구가 건물을 꿰뚫어 녹이고 폭발' },
+  { id: 'vacuum', cat: 'blast', name: '진공 폭탄', desc: '주변을 빨아들인 뒤 한꺼번에 터짐' },
   { id: 'railgun', cat: 'blast', name: '레일건', desc: '카메라 방향으로 건물 여러 채를 일렬 관통' },
   { id: 'carpet', cat: 'air', name: '융단폭격', desc: '드래그한 선을 따라 폭격기 편대가 투하', hold: true },
   { id: 'bunker', cat: 'air', name: '벙커버스터', desc: '지붕을 뚫고 1층에서 폭발, 제자리 붕괴' },
   { id: 'cruise', cat: 'air', name: '순항미사일', desc: '지형을 따라 낮게 날아와 솟구친 뒤 내리꽂힘', opts: [CINE] },
   { id: 'drones', cat: 'air', name: '자폭 드론 떼', desc: '수십 대가 흩어져 높은 건물부터 들이받음', opts: [CINE] },
   { id: 'naval', cat: 'air', name: '함포 사격', desc: '수평선 너머 함대의 일제 사격 3연발', opts: [CINE] },
+  { id: 'gunship', cat: 'air', name: '건쉽 기관포', desc: '선회하는 건쉽이 누르는 동안 포탄을 퍼부음', hold: true },
+  { id: 'pgm', cat: 'air', name: '정밀유도탄 편대', desc: '주변 높은 건물마다 한 발씩 동시에 명중', opts: [CINE] },
+  { id: 'airdrop', cat: 'air', name: '공수 낙하 전차', desc: '낙하산으로 떨어진 전차들이 돌아다니며 포격', opts: [CINE] },
+  { id: 'mlrs', cat: 'air', name: '집속 미사일 포대', desc: '지도 밖 발사대에서 로켓 수십 발이 쏟아짐', opts: [CINE] },
   { id: 'laser', cat: 'sky', name: '궤도 레이저', desc: '누르고 끌어서 건물을 잘라내기', hold: true },
   { id: 'meteor', cat: 'sky', name: '운석우', desc: '거대 운석과 파편이 쏟아짐' },
   { id: 'rod', cat: 'sky', name: '신의 지팡이', desc: '궤도에서 텅스텐 막대 낙하, 거대 크레이터' },
@@ -77,6 +130,11 @@ export const WEAPONS = [
   { id: 'mothership', cat: 'sky', name: '외계 모선', desc: '하늘을 덮은 모선이 빔을 쏴 충격파로 쓸어버림', opts: [CINE] },
   { id: 'solar', cat: 'sky', name: '태양 렌즈', desc: '거대 렌즈로 햇빛을 모아 태우기 (누르고 끌기)', hold: true },
   { id: 'lightning', cat: 'sky', name: '번개 폭풍', desc: '먹구름 아래 번개가 높은 건물을 연달아 때림' },
+  { id: 'comet', cat: 'sky', name: '혜성 분열', desc: '혜성이 여러 조각으로 갈라져 줄지어 충돌', opts: [CINE] },
+  { id: 'satnet', cat: 'sky', name: '궤도 폭격 위성망', desc: '위성들의 빔이 원을 그리며 가운데로 모여듦', opts: [CINE] },
+  { id: 'grb', cat: 'sky', name: '감마선 폭발', desc: '하늘에서 쏟아진 방사선에 일대가 타며 무너짐' },
+  { id: 'junk', cat: 'sky', name: '우주 쓰레기 비', desc: '불타는 위성 파편이 넓은 지역에 쏟아짐' },
+  { id: 'cme', cat: 'sky', name: '태양 질량 방출', desc: '오로라가 번지고 전력망이 폭발하며 불탐' },
   { id: 'quake', cat: 'nature', name: '지진', desc: '저층부부터 무너지는 연쇄 붕괴' },
   { id: 'tornado', cat: 'nature', name: '토네이도', desc: 'EF5 초대형 토네이도, 마우스를 따라감' },
   { id: 'sinkhole', cat: 'nature', name: '싱크홀', desc: '땅이 꺼지며 건물이 통째로 빨려 들어감' },
@@ -84,26 +142,55 @@ export const WEAPONS = [
   { id: 'volcano', cat: 'nature', name: '화산', desc: '땅이 솟아 분화, 용암탄·화쇄류·용암류', opts: [CINE] },
   { id: 'landslide', cat: 'nature', name: '산사태', desc: '비탈 위에서 흙더미와 바위가 쏟아져 내려옴', opts: [CINE] },
   { id: 'iceage', cat: 'nature', name: '빙하기', desc: '모든 것이 얼어붙고 얼어붙은 건물이 산산조각', opts: [CINE] },
+  { id: 'hurricane', cat: 'nature', name: '허리케인', desc: '소용돌이 구름과 폭풍우, 위력이 높으면 해일까지', opts: [CINE] },
+  { id: 'deluge', cat: 'nature', name: '대홍수', desc: '비가 쏟아지며 물이 빌딩까지 차오름' },
+  { id: 'rift', cat: 'nature', name: '지각 균열', desc: '표적을 가로지르는 단층이 열려 무너져 내림' },
+  { id: 'sandstorm', cat: 'nature', name: '모래폭풍', desc: '모래벽이 밀려와 시야를 가리고 건물을 깎아냄' },
+  { id: 'supervolcano', cat: 'nature', name: '슈퍼화산', desc: '일대 전체가 분화하고 칼데라가 꺼짐', opts: [CINE] },
   { id: 'blackhole', cat: 'special', name: '블랙홀', desc: '모든 파편을 끌어당겨 삼킴', opts: [{ key: 'absorb', label: '완전 흡수' }] },
   { id: 'whitehole', cat: 'special', name: '화이트홀', desc: '모든 것을 밀어내고 블랙홀이 삼킨 조각을 토해냄', opts: [CINE] },
   { id: 'antigrav', cat: 'special', name: '반중력', desc: '일대가 통째로 떠올랐다가 한꺼번에 내리꽂힘', opts: [CINE] },
   { id: 'gravflip', cat: 'special', name: '중력 반전', desc: '건물이 하늘로 떨어졌다가 중력이 돌아오면 쏟아짐', opts: [CINE] },
   { id: 'rewind', cat: 'special', name: '시간 역행', desc: '부서진 모든 것을 원래대로 되돌림' },
-  { id: 'ball', cat: 'fun', name: '철거 철구', desc: '물리로 굴러가며 들이받음' },
-  { id: 'bowling', cat: 'fun', name: '거대 볼링공', desc: '건물을 핀처럼 쓰러뜨리기', opts: [CINE] },
-  { id: 'domino', cat: 'fun', name: '도미노', desc: '건물을 겨누면 쓰러지며 다음 건물을 연쇄로 넘어뜨림', opts: [CINE] },
-  { id: 'finger', cat: 'fun', name: '신의 손가락', desc: '누르면 집어 들고, 끌다가 놓으면 던짐', hold: true },
-  { id: 'stomp', cat: 'fun', name: '괴수 발', desc: '거대한 발이 쿵쿵 걸으며 짓밟음' },
-  { id: 'kaiju', cat: 'fun', name: '바위 거인', desc: '지평선에서 걸어와 짓밟고 주먹으로 내려침', opts: [CINE] },
-  { id: 'train', cat: 'fun', name: '폭주 기차', desc: '위험물 열차가 도시를 관통하다 연쇄 폭발', opts: [CINE] },
+  { id: 'portal', cat: 'special', name: '포털', desc: '땅의 포털이 삼킨 건물을 하늘의 포털에서 떨어뜨림', opts: [CINE] },
+  { id: 'shrink', cat: 'special', name: '축소·확대 광선', desc: '건물이 작아져 사라지거나, 거대해져 이웃을 짓누름', opts: [{ key: 'enlarge', label: '확대 광선' }] },
+  { id: 'nano', cat: 'special', name: '나노 분해', desc: '나노머신이 퍼지며 건물을 모래처럼 무너뜨림' },
+  { id: 'timestop', cat: 'special', name: '시간 정지', desc: '몇 초간 시간이 멈춤. 그동안 쏜 무기는 한꺼번에 재생' },
+  { id: 'ball', cat: 'fun', name: '철거 철구', desc: '물리로 굴러가며 들이받음', opts: [GIANT] },
+  { id: 'bowling', cat: 'fun', name: '거대 볼링공', desc: '건물을 핀처럼 쓰러뜨리기', opts: [GIANT, CINE] },
+  { id: 'domino', cat: 'fun', name: '도미노', desc: '건물을 겨누면 쓰러지며 다음 건물을 연쇄로 넘어뜨림', opts: [GIANT, CINE] },
+  { id: 'finger', cat: 'fun', name: '신의 손가락', desc: '누르면 집어 들고, 끌다가 놓으면 던짐', hold: true, opts: [GIANT] },
+  { id: 'stomp', cat: 'fun', name: '괴수 발', desc: '거대한 발이 쿵쿵 걸으며 짓밟음', opts: [GIANT] },
+  { id: 'kaiju', cat: 'fun', name: '바위 거인', desc: '지평선에서 걸어와 짓밟고 주먹으로 내려침', opts: [GIANT, CINE] },
+  { id: 'train', cat: 'fun', name: '폭주 기차', desc: '위험물 열차가 도시를 관통하다 연쇄 폭발', opts: [GIANT, CINE] },
+  { id: 'pendulum', cat: 'fun', name: '크레인 진자 철구', desc: '거대 크레인의 철구가 좌우로 휘둘러 쓸어냄', opts: [GIANT] },
+  { id: 'hammer', cat: 'fun', name: '거대 망치', desc: '하늘에서 내려온 망치가 두 번 내리침', opts: [GIANT] },
+  { id: 'marbles', cat: 'fun', name: '거대 구슬 폭포', desc: '유리구슬 수십 개가 쏟아져 굴러다님', opts: [GIANT] },
+  { id: 'hoover', cat: 'fun', name: '거대 진공청소기', desc: '누르는 동안 흡입구가 모든 걸 빨아들임', hold: true, opts: [GIANT] },
   { id: 'nuke', cat: 'nuke', name: '핵폭탄', desc: '바로 떨어지는 핵폭탄 (×1 ≈ 15kt, ×100 ≈ 47Mt)', opts: [REAL, CINE] },
   { id: 'bomber', cat: 'nuke', name: '폭격기 투하', desc: '폭격기가 날아와 투하, 카메라 연출', opts: [REAL, CINE] },
   { id: 'icbm', cat: 'nuke', name: 'ICBM', desc: '사일로에서 발사되는 대륙간 탄도미사일', opts: [{ key: 'mirv', label: '다탄두(MIRV)' }, REAL, CINE] },
   { id: 'tsar', cat: 'nuke', name: '차르 봄바', desc: '낙하산으로 내려오는 초대형 수소폭탄 (×10 ≈ 50Mt)', opts: [REAL, CINE] },
   { id: 'antimatter', cat: 'nuke', name: '반물질 폭탄', desc: '격납이 풀리며 물질이 소멸, 핵의 25배', opts: [REAL, CINE] },
+  { id: 'moonfall', cat: 'end', name: '달 낙하', desc: '달이 다가와 물이 차오르고 떠오르다 충돌 (×1 작은 위성 ~ ×100 진짜 달)', opts: [REAL, CINE] },
+  { id: 'planetcrash', cat: 'end', name: '행성 충돌', desc: '떠돌이 행성이 하늘을 가득 채우며 다가옴', opts: [REAL, CINE] },
+  { id: 'terraform', cat: 'movie', name: '테라포밍 엔진', desc: '하늘에서 내려온 기계가 중력 빔으로 도시를 짓누르고, 마지막에 수호자가 막아냄', opts: [CINE] },
+  { id: 'tripod', cat: 'movie', name: '세 다리 침략자', desc: '땅속에서 솟은 전투기계가 열선을 휘두르며 걸어감', opts: [CINE] },
+  { id: 'crustshift', cat: 'movie', name: '지각 대이동', desc: '땅이 통째로 갈라져 기울고, 지평선에서 해일이 밀려옴', opts: [CINE] },
+  { id: 'flashfreeze', cat: 'movie', name: '순간 결빙', desc: '극저온 소용돌이가 내려와 모든 게 얼어붙고 산산조각', opts: [CINE] },
+  { id: 'megatsunami', cat: 'movie', name: '메가 해일', desc: '먼바다 충돌로 생긴 수백 m 물벽이 빌딩을 넘어옴', opts: [CINE] },
+  { id: 'cityfold', cat: 'movie', name: '도시 접기', desc: '지면이 종이처럼 접혀 반대편 도시를 덮쳐 짓누름', opts: [CINE] },
+  { id: 'robokaiju', cat: 'movie', name: '거대 로봇 대 괴수', desc: '도시 한복판에서 맞붙어 주먹을 주고받다 던져버림', opts: [CINE] },
+  { id: 'halfvanish', cat: 'movie', name: '절반 소멸', desc: '손가락 소리와 함께 건물 절반이 먼지가 되어 흩날림' },
+  { id: 'corestop', cat: 'movie', name: '지구 핵 정지', desc: '자기장이 무너져 오로라와 전자기 폭풍, 사방에 번개' },
+  { id: 'drillrock', cat: 'movie', name: '소행성 시추', desc: '다가오는 소행성 속 핵폭발 — 성공하면 갈라져 비껴감', opts: [{ key: 'drillok', label: '시추 성공' }, CINE] },
+  { id: 'sharknado', cat: 'movie', name: '상어 회오리', desc: '상어가 섞인 토네이도, 상어가 건물에 떨어짐' },
+  { id: 'megaquake', cat: 'movie', name: '지진 대협곡', desc: '단층이 열리며 도시를 가로지르는 거대 협곡' },
+  { id: 'giantape', cat: 'movie', name: '거대 유인원', desc: '가장 높은 빌딩을 기어올라 가슴을 치고 뛰어내림', opts: [CINE] },
+  { id: 'sunfall', cat: 'end', name: '태양 낙하', desc: '해가 커지며 하늘이 불타고 도시가 녹아내림', opts: [CINE] },
 ];
 
-export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false };
+export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false, giant: true, enlarge: false, drillok: true };
 
 export function weaponIcon(id) { return `<svg viewBox="0 0 24 24" width="26" height="26">${I[id]}</svg>`; }
 
@@ -121,3 +208,11 @@ export function powerScale(P) {
 // 슬라이더(0~1) ↔ 위력(1~100) 로그 스케일
 export const sliderToPower = (s) => Math.round(10 ** (s * 2) * 10) / 10;
 export const powerToSlider = (p) => Math.log10(Math.max(1, p)) / 2;
+
+// 놀이·괴수 무기 크기/파괴력: 거대화(물체가 커짐) 또는 충격만(크기는 그대로, 파괴 범위만 커짐)
+export function funScale(A) {
+  const P = Math.max(0.5, Math.min(100, A.power || 3)), giant = A.opts.giant !== false;
+  return giant
+    ? { giant, size: 0.75 * P ** 0.45, hit: 0.75 * P ** 0.45, pw: 0.85 * P ** 0.22 }
+    : { giant, size: 1.2, hit: 0.75 * P ** 0.62, pw: 0.85 * P ** 0.3 };
+}

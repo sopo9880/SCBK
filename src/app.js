@@ -15,6 +15,7 @@ function descFor(wp, P) {
 }
 import { Audio } from './audio.js';
 import { PROF } from './prof.js';
+import { openSettings, defaultCfg } from './settings.js';
 window.__PROF = PROF;
 
 const $ = (s) => document.querySelector(s);
@@ -100,6 +101,9 @@ export function formatScore(n) {
 
 const settings = Object.assign({ radius: 600, quality: 'high', time: 'noon', volume: 0.7, power: 3, wopts: {} }, store.get('settings', {}));
 settings.wopts = Object.assign({}, DEFAULT_OPTS, settings.wopts);
+settings.cfg = Object.assign(defaultCfg(), settings.cfg || {});
+if (settings.physWorker === false) settings.cfg.physWorker = false;
+const CFG_OPTS = ['cinematic', 'autoPull', 'soundDelay', 'planet', 'strobe'];
 const audio = new Audio(); audio.setVolume(settings.volume);
 let game = null, current = null, cachedData = null;
 
@@ -116,6 +120,10 @@ function initMenu() {
   demo.innerHTML = '데모 시티<small>오프라인</small>';
   demo.onclick = () => start({ demo: true, name: '데모 시티', sub: '오프라인 · 절차 생성' });
   pres.appendChild(demo);
+  const mega = document.createElement('button'); mega.className = 'chip demo';
+  mega.innerHTML = '메가 시티 8×8km<small>오프라인 · 고사양</small>';
+  mega.onclick = () => start({ demo: true, mega: true, name: '메가 시티', sub: '오프라인 · 8×8km 절차 생성' });
+  pres.appendChild(mega);
 
   const r = $('#radius'); r.value = settings.radius;
   const showR = () => {
@@ -184,7 +192,7 @@ function initMenu() {
   }
 }
 
-function placeKey(p) { return p.demo ? 'demo' : `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`; }
+function placeKey(p) { return p.demo ? (p.mega ? 'demo-mega' : 'demo') : `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`; }
 
 function renderRecent() {
   const recs = Object.values(store.get('records', {})).sort((a, b) => b.when - a.when).slice(0, 12);
@@ -208,7 +216,7 @@ function saveRecord() {
   const recs = store.get('records', {});
   const k = placeKey(current);
   const prev = recs[k];
-  recs[k] = { place: { name: current.name, sub: current.sub, lat: current.lat, lon: current.lon, demo: current.demo }, best: Math.max(prev ? prev.best : 0, s.score), when: Date.now() };
+  recs[k] = { place: { name: current.name, sub: current.sub, lat: current.lat, lon: current.lon, demo: current.demo, mega: current.mega }, best: Math.max(prev ? prev.best : 0, s.score), when: Date.now() };
   store.set('records', recs);
 }
 
@@ -234,11 +242,11 @@ async function loadAndRun(place, reuse) {
   $('#loadTitle').textContent = place.name;
   $('#steps').innerHTML = STEPS.map(s => `<li>${s}<small></small></li>`).join('');
   $('#loadErr').hidden = true; $('#loadActions').hidden = true;
-  const radius = settings.radius;
+  const radius = place.mega ? 4000 : settings.radius;
   let i = 0;
   try {
     setStep(i, 'run');
-    const phys = await Physics.create({ useWorker: settings.physWorker !== false });
+    const phys = await Physics.create({ useWorker: settings.cfg.physWorker !== false && settings.physWorker !== false });
     setStep(i++, 'done', phys.mode === 'worker' ? '별도 스레드' : '같은 스레드');
 
     let data, grid, proj;
@@ -250,7 +258,7 @@ async function loadAndRun(place, reuse) {
       data = cachedData.makeData();
     } else if (place.demo) {
       setStep(i, 'run');
-      const demo = generateDemoCity(radius);
+      const demo = generateDemoCity(radius, 7, { square: !!place.mega });
       proj = makeProjection(demo.center.lat, demo.center.lon);
       const json = demo.json;
       setStep(i++, 'done', '오프라인');
@@ -290,7 +298,7 @@ async function loadAndRun(place, reuse) {
     }
     const host = $('#stage'); host.innerHTML = '';
     const canvas = document.createElement('canvas'); host.appendChild(canvas);
-    game = new Game({ canvas, phys, grid, data, radius, place, quality: settings.quality, time: settings.time, audio, hud });
+    game = new Game({ canvas, phys, grid, data, radius, place, quality: settings.quality, time: settings.time, audio, hud, cfg: settings.cfg });
     setStep(i++, 'done', `건물 ${data.buildings.length.toLocaleString()}동`);
     setStep(i, 'run'); await tick();
     setStep(i++, 'done');
@@ -314,10 +322,11 @@ const hud = {
   _toastT: 0, _lastScore: 0,
   enter(place, data) {
     $('#placeName').textContent = place.name;
-    $('#placeSub').textContent = `건물 ${data.buildings.length.toLocaleString()}동 · 반경 ${settings.radius >= 1000 ? (settings.radius / 1000).toFixed(1) + 'km' : settings.radius + 'm'} · ${QUALITY[settings.quality].name}`;
+    $('#placeSub').textContent = `건물 ${data.buildings.length.toLocaleString()}동 · ${place.mega ? '8×8km' : '반경 ' + (game.radius >= 1000 ? (game.radius / 1000).toFixed(1) + 'km' : game.radius + 'm')} · ${QUALITY[settings.quality].name}`;
     const rec = store.get('records', {})[placeKey(place)];
     $('#best').textContent = rec ? `이 장소 최고 ${formatScore(rec.best)}` : '';
     game.arsenal.opts = Object.assign({}, settings.wopts);
+    for (const k of CFG_OPTS) game.arsenal.opts[k] = settings.cfg[k];
     game.arsenal.power = settings.power;
     this.buildWeapons();
     this.select(settings.weapon && WEAPONS.find(w => w.id === settings.weapon) ? settings.weapon : game.arsenal.current);
@@ -346,8 +355,9 @@ const hud = {
     const w = $('#weapons'); w.innerHTML = '';
     WEAPONS.filter(x => x.cat === cat).forEach((wp, i) => {
       const b = document.createElement('button');
-      b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} (${i + 1}) — ${wp.desc}`;
-      b.innerHTML = `<kbd>${i + 1}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
+      b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} — ${wp.desc}`;
+      const key = i < 9 ? String(i + 1) : i === 9 ? '0' : '⇧' + (i - 9);
+      b.innerHTML = `<kbd>${key}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
       b.onclick = () => this.select(wp.id);
       w.appendChild(b);
     });
@@ -369,7 +379,9 @@ const hud = {
       b.className = 'wopt' + (settings.wopts[o.key] ? ' on' : '');
       b.textContent = o.label;
       b.onclick = () => {
-        settings.wopts[o.key] = !settings.wopts[o.key]; store.set('settings', settings);
+        settings.wopts[o.key] = !settings.wopts[o.key];
+        if (CFG_OPTS.includes(o.key)) settings.cfg[o.key] = settings.wopts[o.key];
+        store.set('settings', settings);
         game.arsenal.opts[o.key] = settings.wopts[o.key];
         b.classList.toggle('on', settings.wopts[o.key]);
       };
@@ -467,6 +479,23 @@ function initHud() {
   $('#tMute').onclick = mute;
   const help = () => { $('#help').hidden = !$('#help').hidden; };
   $('#tHelp').onclick = help; $('#helpClose').onclick = help;
+  // 설정 페이지
+  const showSettings = (inGame) => openSettings({
+    settings, inGame,
+    save: () => store.set('settings', settings),
+    apply: (key) => {
+      if (key === 'volume') audio.setVolume(settings.volume);
+      if (CFG_OPTS.includes(key)) settings.wopts[key] = settings.cfg[key];
+      if (game) { game.setCfg(settings.cfg, key); if (CFG_OPTS.includes(key)) game.arsenal.opts[key] = settings.cfg[key]; }
+    },
+    extras: {
+      cacheInfo: api.desktop ? () => api.cacheInfo() : null,
+      clearCache: api.desktop ? () => api.clearCache() : null,
+      resetRecords: () => store.set('records', {}),
+    },
+  });
+  $('#tSettings').onclick = () => showSettings(true);
+  $('#menuSettings').onclick = () => showSettings(false);
   $('#retry').onclick = () => start(current);
   $('#toDemo').onclick = () => start({ demo: true, name: '데모 시티', sub: '오프라인 · 절차 생성' });
   $('#toMenu').onclick = toMenu;
@@ -474,26 +503,26 @@ function initHud() {
   window.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' && e.target.type === 'text') return;
     if (e.code === 'F11') { e.preventDefault(); api.toggleFullscreen(); return; }
+    { const st = document.getElementById('settings'); if (st && !st.hidden) { if (e.code === 'Escape') document.getElementById('setClose')?.click(); return; } }
     if (!game || $('#hud').hidden) return;
+    if (game.planetFX) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.endPlanet(); } return; }
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
-    if (/^Digit[1-9]$/.test(e.code)) {
-      const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[+e.code.slice(5) - 1];
+    if (/^Digit[0-9]$/.test(e.code)) {
+      // 1~9, 0 = 10번째, Shift+1~9 = 11번째부터
+      const d = +e.code.slice(5), idx = e.shiftKey ? 10 + d - 1 : d === 0 ? 9 : d - 1;
+      const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[idx];
       if (wp) hud.select(wp.id);
       return;
     }
     if (e.code === 'Tab') { e.preventDefault(); hud.cycleCat(e.shiftKey ? -1 : 1); return; }
+    const K = settings.cfg;
+    const acts = { [K.k_slow]: toggleSlow, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true),
+      [K.k_powDown]: () => { const p = $('#power'); p.value = Math.max(0, +p.value - 0.05); p.oninput(); }, [K.k_powUp]: () => { const p = $('#power'); p.value = Math.min(1, +p.value + 0.05); p.oninput(); } };
+    delete acts[''];
+    if (acts[e.code]) { e.preventDefault(); acts[e.code](); return; }
     switch (e.code) {
-      case 'KeyT': toggleSlow(); break;
-      case 'KeyN': cycleTime(); break;
-      case 'KeyP': shot(); break;
-      case 'KeyM': mute(); break;
-      case 'KeyH': help(); break;
-      case 'KeyU': $('#hud').classList.toggle('hide-ui'); break;
       case 'F3': e.preventDefault(); $('#perfOverlay').hidden = !$('#perfOverlay').hidden; break;
       case 'Escape': if (!$('#help').hidden) help(); else toMenu(); break;
-      case 'BracketLeft': case 'BracketRight': {
-        const p = $('#power'); p.value = Math.max(0, Math.min(1, +p.value + (e.code === 'BracketRight' ? 0.05 : -0.05))); p.oninput(); break;
-      }
       case 'KeyR': if (e.ctrlKey) { e.preventDefault(); reset(); } break;
     }
   });

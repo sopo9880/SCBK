@@ -10,8 +10,14 @@ import { SKY2 } from './sky2.js';
 import { NATURE2 } from './nature2.js';
 import { FUN } from './fun.js';
 import { SPECIAL2 } from './special2.js';
+import { runEnding, ENDINGS } from './endings.js';
+import { NEW1, NEW1_ENDINGS } from './new1.js';
+import { NEW2, NEW2_ENDINGS } from './new2.js';
+import { NEW3, NEW3_ENDINGS } from './new3.js';
+import { MOVIE, MOVIE_ENDINGS } from './movie.js';
+Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS, MOVIE_ENDINGS);
 
-const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2 };
+const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3, ...MOVIE };
 export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
@@ -37,6 +43,12 @@ export class Arsenal {
     this.ctx.audio.resume();
     const h = HANDLERS[this.current];
     if (h && h.fire) h.fire(this, hit, cameraPos.clone());
+    if (hit) runEnding(this, this.current, hit.point);
+  }
+  // 다른 무기를 지금 위력으로 한 번 쏘기 (세계 멸망 결말에서 여러 번 쓸 때)
+  fireAs(id, hit) {
+    const h = HANDLERS[id];
+    if (h && h.fire) h.fire(this, hit, this.ctx.camera.position.clone());
   }
   holdStart(hit) {
     const h = HANDLERS[this.current];
@@ -47,7 +59,8 @@ export class Arsenal {
     if (!this._hold) return;
     const h = HANDLERS[this._hold.id];
     if (h && h.holdEnd) h.holdEnd(this, this._hold.state);
-    this._hold = null;
+    if (this._holdAim) runEnding(this, this._hold.id, this._holdAim);
+    this._hold = null; this._holdAim = null;
   }
 
   spawn(obj, scale = 1) { obj.scale.setScalar(scale); this.ctx.scene.add(obj); return obj; }
@@ -89,7 +102,7 @@ export class Arsenal {
       const dir = step.clone().divideScalar(len || 1);
       const hit = pr.ignoreHits ? null : D.raycast(pr.pos, dir, len + 0.5);
       const ground = grid.sample(pr.pos.x, pr.pos.z);
-      if (hit || pr.pos.y + step.y < ground) {
+      if (hit || (!pr.ignoreHits && pr.pos.y + step.y < ground)) {
         const q = hit ? hit.point : { x: pr.pos.x, y: ground, z: pr.pos.z };
         this.remove(pr.mesh);
         this.projectiles.splice(i, 1);
@@ -114,6 +127,7 @@ export class Arsenal {
     if (this._hold) {
       const h = HANDLERS[this._hold.id];
       if (h && h.holdUpdate) h.holdUpdate(this, this._hold.state, dt, aim);
+      if (aim) this._holdAim = { x: aim.x, y: aim.y, z: aim.z };
     }
     // 지속 효과
     for (let i = this.active.length - 1; i >= 0; i--) {

@@ -300,7 +300,7 @@ export class FX {
     this._updateClouds(dt);
     if (this.flash > 0) {
       this.flash = Math.max(0, this.flash - dt * 0.7);
-      if (this.flashEl) this.flashEl.style.opacity = String(Math.min(1, this.flash * 1.4));
+      if (this.flashEl) this.flashEl.style.opacity = String(Math.min(1, this.flash * 1.4) * (this.flashMul ?? 1));
     }
     this.shake = Math.max(0, this.shake - dt * 1.4);
   }

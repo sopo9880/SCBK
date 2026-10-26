@@ -1,6 +1,6 @@
 // v1.2: 물리 코어(워커와 공용) + 핵 위력 스케일 검사
 import assert from 'node:assert/strict';
-import RAPIER from '@dimforge/rapier3d-compat';
+import RAPIER from '@dimforge/rapier3d-simd-compat';
 import { PhysCore, STRIDE } from '../src/physics/core.js';
 import { nukeYield, nukeRadii, fmtYield } from '../src/weapons/nukes.js';
 

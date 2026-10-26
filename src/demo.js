@@ -16,7 +16,8 @@ export function demoTerrainFn(x, z) {
   return hills + ridge + valley + 30;
 }
 
-export function generateDemoCity(radius = 600, seed = 7) {
+// square: 정사각형 메가 시티 (부도심 여러 개 + 강 두 줄기)
+export function generateDemoCity(radius = 600, seed = 7, { square = false } = {}) {
   const R = rng(seed);
   const proj = makeProjection(DEMO_CENTER.lat, DEMO_CENTER.lon);
   const els = [];
@@ -28,6 +29,9 @@ export function generateDemoCity(radius = 600, seed = 7) {
   };
   const block = 110, street = 14;
   const N = Math.ceil(radius / block) + 1;
+  // 도심(중심) 목록: 메가 시티는 부도심 4곳 추가
+  const centers = square ? [[0, 0, 1], [2300, -1500, 0.8], [-2500, 1900, 0.75], [1900, 2700, 0.7], [-2100, -2300, 0.65]] : [[0, 0, 1]];
+  const river2X = (z) => -1300 + Math.sin(z / 260) * 40;
   // 도로 격자
   for (let k = -N; k <= N; k++) {
     const c = k * block;
@@ -43,14 +47,23 @@ export function generateDemoCity(radius = 600, seed = 7) {
   way({ natural: 'water', name: '데모강' }, river.concat(river2), true);
   // 다리
   way({ highway: 'primary', bridge: 'yes', name: '데모대교' }, [[0, 200], [0, 320]]);
+  if (square) {
+    // 두 번째 강 (남북 방향)
+    const a = [], b = [];
+    for (let z = -N * block; z <= N * block; z += 60) a.push([river2X(z) - 30, z]);
+    for (let z = N * block; z >= -N * block; z -= 60) b.push([river2X(z) + 30, z]);
+    way({ natural: 'water', name: '서강' }, a.concat(b), true);
+  }
 
   for (let bx = -N; bx < N; bx++) for (let bz = -N; bz < N; bz++) {
     const x0 = bx * block + street / 2, z0 = bz * block + street / 2;
     const x1 = x0 + block - street, z1 = z0 + block - street;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    if (Math.hypot(cx, cz) > radius * 1.05) continue;
+    if (square ? Math.max(Math.abs(cx), Math.abs(cz)) > radius : Math.hypot(cx, cz) > radius * 1.05) continue;
     if (z1 > 200 && z0 < 320) continue; // 강
-    const dist = Math.hypot(cx, cz);
+    if (square && Math.abs(cx - river2X(cz)) < 30 + block / 2) continue;
+    let dist = Infinity, wgt = 1;
+    for (const [ux, uz, w] of centers) { const d = Math.hypot(cx - ux, cz - uz) / w; if (d < dist) { dist = d; wgt = w; } }
     const r = R();
     if (r < 0.08) { // 공원
       way({ leisure: 'park', name: '데모공원' }, [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], true);
@@ -64,7 +77,7 @@ export function generateDemoCity(radius = 600, seed = 7) {
       way({ leisure: 'pitch' }, [[x0 + 8, z0 + 8], [x1 - 8, z0 + 8], [x1 - 8, z1 - 8], [x0 + 8, z1 - 8]], true);
       continue;
     }
-    const downtown = Math.max(0, 1 - dist / 380);
+    const downtown = Math.max(0, 1 - dist / 380) * wgt;
     if (downtown > 0.35 && R() < 0.6) { // 고층 타워
       const w = 22 + R() * 18, d = 22 + R() * 18;
       const h = 60 + downtown * 140 * R() + 30;

@@ -293,7 +293,7 @@ export const SKY2 = {
             if (big) mesh.scale.set(1, 1, 1);
             scene.add(mesh); bolts.push({ mesh, t: 0 });
             fx.light(to.x, to.y + 20, to.z, big ? 9e4 : 3e4, big ? 1400 : 700, 0.18, 0xcfe0ff);
-            fx.flash = Math.max(fx.flash, big ? 0.25 : 0.1);
+            fx.flash = Math.max(fx.flash, (big ? 0.25 : 0.1) * (A.opts.strobe === false ? 0.3 : 1));
             const r = (big ? 16 : 7) * S.r;
             D.explode({ x: to.x, y: to.y, z: to.z, r, power: (big ? 38 : 24) * S.v, vaporize: r * 0.25, lift: 0.7, scorch: 0.8, lod: 1 });
             fx.sparks(to, { x: 0, y: 1, z: 0 }, 14);
@@ -301,11 +301,11 @@ export const SKY2 = {
             fx.addShake(big ? 1.2 : 0.35);
             const dd = camera.position.distanceTo(to);
             audio.crack();
-            A.addActive({ t: 0, update(x) { this.t += x; if (this.t > dd / 343) { audio.thunder(); return false; } return true; } });
+            A.addActive({ t: 0, update(x) { this.t += x; if (A.opts.soundDelay === false || this.t > dd / 343) { audio.thunder(); return false; } return true; } });
           }
           for (let i = bolts.length - 1; i >= 0; i--) {
             const b = bolts[i]; b.t += dt;
-            b.mesh.visible = b.t < 0.08 || (b.t > 0.12 && b.t < 0.22);
+            b.mesh.visible = A.opts.strobe === false ? b.t < 0.22 : b.t < 0.08 || (b.t > 0.12 && b.t < 0.22);
             if (b.t > 0.3) { disposeObj(scene, b.mesh); bolts.splice(i, 1); }
           }
           return t < dur;

@@ -59,6 +59,7 @@ export class PhysCore {
         break;
       }
       case 'rm': this._remove(id); break;
+      case 'iter': this.world.integrationParameters.numSolverIterations = Math.max(1, Math.min(8, cmd[1] | 0)); break;
       case 'dyn': {
         const b = this.bodies.get(id); if (!b) break;
         if (cmd[2]) { b.setBodyType(R.RigidBodyType.Dynamic, true); this.dyn.add(id); }
