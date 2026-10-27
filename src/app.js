@@ -16,6 +16,8 @@ function descFor(wp, P) {
 import { Audio } from './audio.js';
 import { PROF } from './prof.js';
 import { openSettings, defaultCfg } from './settings.js';
+import { openControl } from './control.js';
+import { showCountdown, hideCountdown } from './weapons/apocalypse.js';
 window.__PROF = PROF;
 
 const $ = (s) => document.querySelector(s);
@@ -496,6 +498,7 @@ function initHud() {
     },
   });
   $('#tSettings').onclick = () => showSettings(true);
+  $('#tControl').onclick = () => openControlRoom();
   $('#menuSettings').onclick = () => showSettings(false);
   $('#retry').onclick = () => start(current);
   $('#toDemo').onclick = () => start({ demo: true, name: '데모 시티', sub: '오프라인 · 절차 생성' });
@@ -519,7 +522,7 @@ function initHud() {
     }
     if (e.code === 'Tab') { e.preventDefault(); hud.cycleCat(e.shiftKey ? -1 : 1); return; }
     const K = settings.cfg;
-    const acts = { [K.k_slow]: toggleSlow, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true),
+    const acts = { [K.k_slow]: toggleSlow, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true), [K.k_control]: () => openControlRoom(),
       [K.k_powDown]: () => { const p = $('#power'); p.value = Math.max(0, +p.value - 0.05); p.oninput(); }, [K.k_powUp]: () => { const p = $('#power'); p.value = Math.min(1, +p.value + 0.05); p.oninput(); } };
     delete acts[''];
     if (acts[e.code]) { e.preventDefault(); acts[e.code](); return; }
@@ -530,6 +533,33 @@ function initHud() {
     }
   });
   window.addEventListener('beforeunload', saveRecord);
+}
+
+// ---------- 발사 관제실 ----------
+function openControlRoom() {
+  if (!game || game.pilot || game.planetFX || document.getElementById('control')?.hidden === false) return;
+  if (game.cine.active) game.cine.skip();
+  openControl(game, { power: settings.power, onLaunch: launchFromControl });
+}
+function launchFromControl(wep, tgt) {
+  if (!game) return;
+  hud.select(wep);
+  const g = game;
+  let t0 = performance.now(), shown = -1;
+  const step = () => {
+    if (game !== g) { hideCountdown(); return; }
+    const el = document.getElementById('endCount');
+    const left = 3 - (performance.now() - t0) / 1000;
+    if (shown >= 0 && el && el.hidden) { hud.toast('발사 취소', 'info'); return; }
+    if (left > 0) { const n = Math.ceil(left); if (n !== shown) { shown = n; showCountdown('발사', n); g.audio.crack(); } requestAnimationFrame(step); return; }
+    hideCountdown();
+    const top = g.grid.sample(tgt.x, tgt.z) + 3000;
+    const hit = g.D.raycast({ x: tgt.x, y: top, z: tgt.z }, { x: 0, y: -1, z: 0 }, 9000) || { point: { x: tgt.x, y: g.grid.sample(tgt.x, tgt.z), z: tgt.z }, info: null };
+    g.aim = hit.point;
+    g.arsenal.fire(hit, g.camera.position);
+    hud.fired(wep);
+  };
+  requestAnimationFrame(step);
 }
 
 function toMenu() {

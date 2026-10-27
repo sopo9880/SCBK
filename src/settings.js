@@ -84,6 +84,7 @@ export const SCHEMA = [
   { tab: 'keys', key: 'k_help', label: '도움말', type: 'key', def: 'KeyH' },
   { tab: 'keys', key: 'k_ui', label: 'UI 숨기기', type: 'key', def: 'KeyU' },
   { tab: 'keys', key: 'k_settings', label: '설정 열기', type: 'key', def: 'KeyO' },
+  { tab: 'keys', key: 'k_control', label: '발사 관제실', type: 'key', def: 'KeyL' },
   { tab: 'keys', key: 'k_powDown', label: '위력 낮추기', type: 'key', def: 'BracketLeft' },
   { tab: 'keys', key: 'k_powUp', label: '위력 높이기', type: 'key', def: 'BracketRight' },
   { tab: 'keys', key: 'k_fwd', label: '앞으로', type: 'key', def: 'KeyW' },
