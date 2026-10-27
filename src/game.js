@@ -604,7 +604,11 @@ export class Game {
     cam.position.lerp(c.pos, kk);
     const gy = this.groundAt(cam.position.x, cam.position.z);
     if (cam.position.y < gy + 2) cam.position.y = gy + 2;
+    // 조종석에서 기체가 기울면 카메라도 같이 (배면비행)
+    if (c.up) { this._camUp = (this._camUp || new THREE.Vector3(0, 1, 0)).lerp(c.up, kk).normalize(); cam.up.copy(this._camUp); }
+    else { cam.up.set(0, 1, 0); this._camUp = null; }
     cam.lookAt(c.look);
+    cam.up.set(0, 1, 0);
     if (Math.abs(cam.fov - c.fov) > 0.01) { cam.fov = c.fov; cam.updateProjectionMatrix(); }
     if (alive === false) this.endPilot(false);
   }

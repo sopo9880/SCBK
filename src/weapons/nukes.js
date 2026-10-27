@@ -557,7 +557,8 @@ export const NUKES = {
             for (const w of st.warheads) {
               if (w.hit) continue;
               alive++;
-              const uu = Math.max(0, Math.min(1, (u - st.rel.u0) / (1 - st.rel.u0) - w.delay / T));
+              // 탄두마다 분리 시각에서 조금씩 늦게 출발해 같은 시간만큼 날아감 (예전엔 늦게 출발한 탄두가 끝까지 못 가 안 터졌음)
+              const uu = Math.max(0, Math.min(1, (t - st.rel.t0 - w.delay) / (T * (1 - st.rel.u0))));
               w.cv.at(w.cv.L * uu ** 1.5, w.pos);
               const dir = tmp.subVectors(w.pos, w.prev);
               w.m.position.copy(w.pos);

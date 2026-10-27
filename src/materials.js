@@ -64,7 +64,11 @@ ${NOISE}`)
     float floorOn = step(0.86, sw_hash(vec2(cell.y * 1.31, floor(vOrig.x * 0.013) + floor(vOrig.z * 0.017) * 7.0)));
     float lv = 0.5 + 0.7 * sw_hash(cell * 3.7 + 1.3);
     if (cell.y < 0.5) { on = step(0.3, sw_hash(cell + 9.1)); lv = 1.5; swLitCol = vec3(1.0, 0.86, 0.62); }
-    swLit = max(on, floorOn) * lv * w * (1.0 - far * 0.6) * sc;
+    swLit = max(on, floorOn) * lv * w * sc;
+    // 멀리서는 창 하나하나가 안 보이므로, 켜진 창의 평균 밝기로 벽 전체를 은은하게 (멀리서도 불 켜진 도시로 보이게)
+    float flo = sw_hash(vec2(floor(vOrig.y / 3.4), floor(vOrig.x * 0.05) + floor(vOrig.z * 0.05) * 7.0));
+    swLit = mix(swLit, 0.2 * sc * (0.25 + 1.1 * flo * flo), far);
+    if (far > 0.5) swLitCol = mix(swLitCol, vec3(1.0, 0.8, 0.52), far);
   } else if (vKind < 1.5) {
     float nz = sw_fbm(vOrig.xz * 0.35);
     diffuseColor.rgb *= vec3(0.62, 0.62, 0.64) * (0.8 + 0.35 * nz);

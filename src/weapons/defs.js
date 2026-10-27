@@ -121,6 +121,7 @@ const I = {
   dinos: '<path d="M3 14c2-5 6-6 9-5l3-4h4l1 2-3 1-1 4 2 6h-2l-2-4h-4l-1 4H7l1-4c-2 0-4 1-5 0z" fill="currentColor"/>',
   datacrash: '<path d="M5 3v4M5 10v3M9 2v6M9 11v2M13 4v3M13 10v6M17 2v5M17 10v3M17 16v2M5 16v4M9 16v6" stroke="currentColor" stroke-width="2"/>',
   guided: '<path d="M3 21l6-6" stroke="currentColor" stroke-width="2" stroke-dasharray="2 1.6"/><path d="M9 15l8-8 3-3 1 1-3 3-8 8z" fill="currentColor"/><circle cx="18" cy="18" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M18 13v2M18 21v2M13 18h2M21 18h2" stroke="currentColor" stroke-width="1.4"/>',
+  rumbling: '<path d="M2 21h20" stroke="currentColor" stroke-width="2"/><rect x="4" y="9" width="3" height="6" fill="currentColor"/><circle cx="5.5" cy="7.5" r="1.4" fill="currentColor"/><path d="M4.5 15l-1 6M6.5 15l1 6" stroke="currentColor" stroke-width="1.4"/><rect x="10.5" y="7" width="3" height="7" fill="currentColor"/><circle cx="12" cy="5.3" r="1.5" fill="currentColor"/><path d="M11 14l-1 7M13 14l1 7" stroke="currentColor" stroke-width="1.4"/><rect x="17" y="9" width="3" height="6" fill="currentColor"/><circle cx="18.5" cy="7.5" r="1.4" fill="currentColor"/><path d="M17.5 15l-1 6M19.5 15l1 6" stroke="currentColor" stroke-width="1.4"/>',
   superfight: '<circle cx="6" cy="6" r="2.2" fill="currentColor"/><path d="M6 8l2 5-3 5M8 10l4-1" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="18" cy="8" r="2.2" fill="currentColor"/><path d="M18 10l-1 5 2 5M17 12l-4 0" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M12 8l1-3M12 8l2-1" stroke="currentColor" stroke-width="1.4"/>',
 };
 
@@ -260,6 +261,7 @@ export const WEAPONS = [
   { id: 'dinos', cat: 'movie', name: '공룡 떼 질주', desc: '거대한 공룡 무리가 도시를 가로질러 달려감', opts: [CINE] },
   { id: 'datacrash', cat: 'movie', name: '데이터 붕괴', desc: '도시가 깜빡이며 코드 문자로 부서져 흘러내림', opts: [CINE] },
   { id: 'superfight', cat: 'movie', name: '초능력자 대결', desc: '두 초능력자가 건물 사이를 날며 주먹을 주고받고 눈에서 레이저를 쏨', opts: [CINE] },
+  { id: 'rumbling', cat: 'movie', name: '땅울림', desc: '지평선 너머에서 바위 거인 수십이 한 줄로 걸어와 도시를 밟고 지나감', opts: [CINE] },
   { id: 'sunfall', cat: 'end', name: '태양 낙하', desc: '해가 커지며 하늘이 불타고 도시가 녹아내림', opts: [CINE] },
   { id: 'roguehole', cat: 'end', name: '떠돌이 블랙홀 통과', desc: '하늘을 가로지르는 블랙홀이 아래의 도시를 빨아올려 삼킴', opts: [CINE] },
   { id: 'supernova', cat: 'end', name: '초신성', desc: '별 하나가 태양보다 밝아지고 빛의 벽이 밀려와 쓸어버림', opts: [CINE] },

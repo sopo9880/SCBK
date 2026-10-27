@@ -354,3 +354,10 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #vehHud .vh-hp em { display: block; height: 100%; background: #5fd47a; width: 100%; transition: width .2s; }
 #vehHud .vh-hp.low em { background: #ff5a3a; }
 #vehHud .vh-land { position: fixed; left: 50%; top: 62%; transform: translateX(-50%); color: #fff; font: 600 15px/1.4 system-ui, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,.8); white-space: nowrap; }
+
+#vehHud .vh-mode { position: fixed; right: 4vw; bottom: 12vh; color: #ffd27a; font: 700 14px/1.4 system-ui, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+#vehHud .vh-lock { position: fixed; width: 56px; height: 56px; margin: -28px 0 0 -28px; pointer-events: none; }
+#vehHud .vh-lock i { position: absolute; inset: 0; border: 2px solid rgba(255,210,120,.9); border-radius: 4px; transform: rotate(45deg) scale(1.2); transition: transform .2s; }
+#vehHud .vh-lock.locked i { border-color: #ff3a2a; transform: rotate(45deg) scale(0.8); box-shadow: 0 0 10px rgba(255,60,40,.8); }
+#vehHud .vh-lock b { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); color: #ffd27a; font: 800 12px system-ui, sans-serif; text-shadow: 0 1px 3px #000; }
+#vehHud .vh-lock.locked b { color: #ff4a3a; }

@@ -1,6 +1,6 @@
 {
   "name": "wreck-earth",
-  "version": "1.12.0",
+  "version": "1.14.0",
   "description": "지도 위 어디든 진짜 물리로 부수는 게임",
   "main": "electron/main.cjs",
   "scripts": {

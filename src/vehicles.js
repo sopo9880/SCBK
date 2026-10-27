@@ -47,10 +47,10 @@ function makeLightPlane() {
 // 조작은 GTA5 PC 기본 배치를 따름. 넘버패드가 없으면 I/K/J/L 이 8/5/4/6 대신
 export const VEHICLES = [
   { id: 'car', name: '자동차', icon: '🚗', desc: 'W 가속 · S 브레이크/후진 · A/D 핸들 · Space 핸드브레이크 · Shift 부스트 · E 경적 · X 점프', air: false },
-  { id: 'heli', name: '헬기', icon: '🚁', desc: 'W/S 상승/하강 · A/D 좌우 회전 · 넘버패드 8/5(I/K) 앞뒤 · 4/6(J/L) 옆으로 · Space·클릭 로켓 · Q·우클릭 기관포', air: true, pad: true },
+  { id: 'heli', name: '헬기', icon: '🚁', desc: 'W/S 상승/하강 · A/D 좌우 회전 · 넘버패드 8/5(I/K) 앞뒤 · 4/6(J/L) 옆으로 · Space·클릭 로켓 · Q·우클릭 기관포 · Tab 유도 미사일(락온)', air: true, pad: true },
   { id: 'plane', name: '경비행기', icon: '🛩', desc: 'W/S 스로틀 · A/D 방향타 · 넘버패드 8/5(I/K) 기수 내리기/올리기 · 4/6(J/L) 기울이기 · G 바퀴 · Space 연기', air: true, wing: true },
-  { id: 'fighter', name: '전투기', icon: '✈', desc: 'W/S 스로틀 · Shift 애프터버너 · A/D 방향타 · 8/5(I/K) 기수 · 4/6(J/L) 기울이기 · G 바퀴 · Space·클릭 기관포 · Q·우클릭 미사일', air: true, wing: true },
-  { id: 'bomber', name: '폭격기', icon: '🛫', desc: 'W/S 스로틀 · A/D 방향타 · 8/5(I/K) 기수 · 4/6(J/L) 기울이기 · G 바퀴 · Space·클릭 폭탄 · Q·우클릭 융단 투하', air: true, wing: true },
+  { id: 'fighter', name: '전투기', icon: '✈', desc: 'W/S 스로틀 · Shift 애프터버너 · A/D 방향타 · 8/5(I/K) 기수 · 4/6(J/L) 기울이기 · G 바퀴 · Space·클릭 기관포 · Q·우클릭 미사일 · Tab 유도 미사일(락온)', air: true, wing: true },
+  { id: 'bomber', name: '폭격기', icon: '🛫', desc: 'W/S 스로틀 · A/D 방향타 · 8/5(I/K) 기수 · 4/6(J/L) 기울이기 · G 바퀴 · Space·클릭 폭탄 · Q·우클릭 융단 투하 · Tab 유도 폭탄(락온)', air: true, wing: true },
 ];
 const SPEC = {
   // acc: 지상 가속(스로틀 최대), vr: 이륙 속도, rw: 활주로 길이, rwW: 활주로 폭, sink: 부드러운 착륙 한계 강하율(m/s)
@@ -83,16 +83,28 @@ function hud(title, desc) {
   let el = document.getElementById('vehHud');
   if (!el) {
     el = document.createElement('div'); el.id = 'vehHud';
-    el.innerHTML = '<div class="vh-title"></div><div class="vh-box"><div><span>속도</span><b class="vh-spd">0</b><small>km/h</small></div><div><span>고도</span><b class="vh-alt">0</b><small>m</small></div><div class="vh-thr"><span>스로틀</span><i><em></em></i></div><div class="vh-hp"><span>기체</span><i><em></em></i></div></div><div class="vh-land"></div><div class="vh-help"></div><div class="vh-warn"></div>';
+    el.innerHTML = '<div class="vh-title"></div><div class="vh-box"><div><span>속도</span><b class="vh-spd">0</b><small>km/h</small></div><div><span>고도</span><b class="vh-alt">0</b><small>m</small></div><div class="vh-thr"><span>스로틀</span><i><em></em></i></div><div class="vh-hp"><span>기체</span><i><em></em></i></div></div><div class="vh-land"></div><div class="vh-mode"></div><div class="vh-help"></div><div class="vh-warn"></div><div class="vh-lock" hidden><i></i><b></b></div>';
     document.body.appendChild(el);
   }
   el.hidden = false;
   el.querySelector('.vh-title').textContent = title;
   el.querySelector('.vh-help').textContent = desc + ' · V 시점 · C 뒤 보기 · 마우스 둘러보기 · F/Esc 내리기';
-  return { el, spd: el.querySelector('.vh-spd'), alt: el.querySelector('.vh-alt'), thr: el.querySelector('.vh-thr em'), thrBox: el.querySelector('.vh-thr'), hp: el.querySelector('.vh-hp em'), hpBox: el.querySelector('.vh-hp'), land: el.querySelector('.vh-land'), warn: el.querySelector('.vh-warn') };
+  el.querySelector('.vh-mode').textContent = ''; el.querySelector('.vh-lock').hidden = true;
+  return { el, spd: el.querySelector('.vh-spd'), alt: el.querySelector('.vh-alt'), thr: el.querySelector('.vh-thr em'), thrBox: el.querySelector('.vh-thr'), hp: el.querySelector('.vh-hp em'), hpBox: el.querySelector('.vh-hp'), land: el.querySelector('.vh-land'), warn: el.querySelector('.vh-warn'), mode: el.querySelector('.vh-mode'), lock: el.querySelector('.vh-lock') };
 }
 
 const groundAt = (game, x, z) => game.groundAt(x, z);
+// 비행기 자세: 방향(yaw)·기수(pitch)·기울기(roll, + 왼쪽) ↔ 사원수
+const qFromYPR = (yaw, pitch, roll, out = new THREE.Quaternion()) => {
+  const a = new THREE.Quaternion().setFromAxisAngle(UP, yaw), b = new THREE.Quaternion().setFromAxisAngle(v3(1, 0, 0), -pitch), c = new THREE.Quaternion().setFromAxisAngle(v3(0, 0, 1), -roll);
+  return out.copy(a).multiply(b).multiply(c);
+};
+const ypr = (q, st) => {
+  const f = v3(0, 0, 1).applyQuaternion(q), u = v3(0, 1, 0).applyQuaternion(q), r = v3(1, 0, 0).applyQuaternion(q);
+  st.pitch = Math.asin(clamp(f.y, -1, 1));
+  if (Math.abs(f.y) < 0.999) st.yaw = Math.atan2(f.x, f.z);
+  st.roll = Math.atan2(-r.y, u.y);
+};
 
 export function startVehicle(A, id, opts = {}) {
   const { game, D, fx, audio, grid, scene } = A.ctx;
@@ -150,7 +162,12 @@ export function startVehicle(A, id, opts = {}) {
       st.speed = (sp.vmin + sp.vmax) * 0.5; st.thr = 0.5; st.gear = false;
     }
     st.gearG.visible = st.gear;
+    st.q = qFromYPR(st.yaw, st.pitch, st.roll);
   }
+  // 무기 방식 (Tab): 0 일반 · 1 유도(락온)
+  const armed = id === 'heli' || id === 'fighter' || id === 'bomber';
+  st.mode = 0; st.lock = null; st.lockT = 0; st.beepT = 0;
+  const MODES = { heli: ['로켓', '유도 미사일'], fighter: ['기관포·미사일', '유도 미사일'], bomber: ['폭탄', '유도 폭탄'] };
   scene.add(mesh);
   const snd = audio.engine(id === 'car' ? 'car' : id === 'heli' ? 'heli' : SPEC[id].snd);
   const dir = v3();
@@ -159,7 +176,7 @@ export function startVehicle(A, id, opts = {}) {
 
   const crash = (q, power) => {
     if (st.crashed) return;
-    st.crashed = 0.001; st.endT = 0;
+    st.crashed = 0.001; st.endT = 0; st.crashWhy = (new Error().stack || '').split('\n').slice(2, 4).join(' | ');
     mesh.visible = false;
     if (snd) snd.stop(); audio.hornOff();
     const r = power;
@@ -196,6 +213,49 @@ export function startVehicle(A, id, opts = {}) {
       onHit: (q) => A.blast(q, (big ? 26 : 20) * S.r ** 0.7, 45 * S.v, { crater: [6, 3], lift: 0.4, silent: R() > 0.6 }) });
   };
   const aimDir = () => { const d = v3(); game.camera.getWorldDirection(d); return d; };
+  // 유도 무기: 락온한 표적을 쫓아감 (락온이 없으면 똑바로)
+  const fireGuided = (from, d, r, spd, turn, meshObj, scale = 0.7, g = 0) => {
+    const tgt = st.lock && st.lockT >= 0.8 ? st.lock : null;
+    const goal = tgt ? v3(tgt.cx, tgt.baseY + tgt.height * 0.45, tgt.cz) : null;
+    A.addProjectile({ mesh: A.spawn(meshObj || makeMissile(), scale), pos: from.clone(), vel: d.clone().multiplyScalar(spd).add(st.vel.clone().multiplyScalar(0.3)), g, align: 'fwd', trail: { size: 0.9, fire: !g, every: 0.015 },
+      onUpdate: (pr, dt2) => {
+        if (!goal) return true;
+        const want = goal.clone().sub(pr.pos); const L = want.length(); if (L < 1) return true;
+        const v = pr.vel, sp2 = Math.max(spd * 0.6, v.length());
+        const cur = v.clone().normalize(), aim = want.divideScalar(L);
+        const ang = Math.acos(clamp(cur.dot(aim), -1, 1)), k = ang > 1e-4 ? Math.min(1, turn * dt2 / ang) : 1;
+        v.copy(cur.lerp(aim, k).normalize().multiplyScalar(sp2));
+        return true;
+      },
+      onHit: (q) => A.blast(q, r, 40 * S.v, { lift: 0.35, lod: 1 }) });
+    audio.rocket(0.5);
+  };
+  // 락온: 조준 방향 가까이 있는 건물을 0.8초 동안 겨누면 고정
+  const lockEl = H.lock;
+  const updateLock = (dt, aim) => {
+    if (!armed || st.mode !== 1 || st.landed || st.ground) { st.lock = null; st.lockT = 0; lockEl.hidden = true; return; }
+    const o = st.pos; let best = null, bs = 1e9;
+    const cosMax = Math.cos(0.17);
+    for (const b of D.buildings) {
+      if (b.state === 'gone') continue;
+      const x = b.cx - o.x, y = b.baseY + b.height * 0.45 - o.y, z = b.cz - o.z, L = Math.hypot(x, y, z);
+      if (L < 30 || L > 3000) continue;
+      const cs = (x * aim.x + y * aim.y + z * aim.z) / L; if (cs < cosMax) continue;
+      const sc2 = (1 - cs) * 4000 + L * 0.02 - (b === st.lock ? 15 : 0);
+      if (sc2 < bs) { bs = sc2; best = b; }
+    }
+    if (best !== st.lock) { st.lock = best; st.lockT = 0; }
+    if (!best) { lockEl.hidden = true; return; }
+    st.lockT += dt;
+    const locked = st.lockT >= 0.8;
+    st.beepT -= dt; if (st.beepT <= 0) { st.beepT = locked ? 0.5 : 0.18; audio.beep(locked ? 1500 : 900, locked ? 0.12 : 0.05, 0.08); }
+    const pp = v3(best.cx, best.baseY + best.height * 0.45, best.cz).project(game.camera);
+    if (pp.z > 1) { lockEl.hidden = true; return; }
+    lockEl.hidden = false;
+    lockEl.style.left = ((pp.x + 1) / 2 * innerWidth) + 'px'; lockEl.style.top = ((1 - pp.y) / 2 * innerHeight) + 'px';
+    lockEl.classList.toggle('locked', locked);
+    lockEl.querySelector('b').textContent = locked ? 'LOCK' : Math.round(st.lockT / 0.8 * 100) + '%';
+  };
   const damage = (n, why) => {
     st.hp = Math.max(0, st.hp - n); fx.addShake(Math.min(1.2, n / 30)); audio.thud();
     if (why) { H.warn.textContent = why; st.warnT = 1.5; }
@@ -218,7 +278,9 @@ export function startVehicle(A, id, opts = {}) {
         if (mx || my) { st.lookYaw -= mx * 0.0035 * (K.rotSens || 1); st.lookPitch = clamp(st.lookPitch - my * 0.0035 * (K.rotSens || 1), -0.7, 0.9); st.lookIdle = 0; }
         else { st.lookIdle += realDt; if (st.lookIdle > 1.2) { const k = Math.exp(-realDt * 2.5); st.lookYaw = Math.atan2(Math.sin(st.lookYaw), Math.cos(st.lookYaw)) * k; st.lookPitch *= k; } }
       }
-      st.prev = new Set(['KeyV', 'KeyF', 'KeyG', 'Space', 'KeyQ'].filter(has));
+      st.prev = new Set(['KeyV', 'KeyF', 'KeyG', 'Space', 'KeyQ', 'Tab'].filter(has));
+      if (armed && pressed('Tab')) { st.mode = 1 - st.mode; st.lock = null; st.lockT = 0; audio.click(); }
+      if (armed) H.mode.textContent = `무기: ${MODES[id][st.mode]} (Tab 바꾸기)`;
       if (exit && !st.crashed) { if (snd) snd.stop(); audio.hornOff(); p.endPoint = st.pos; return false; }
       if (st.crashed) { st.endT += realDt; p.endPoint = st.pos; return st.endT < 2.5; }
       if (st.warnT > 0) st.warnT -= dt; else H.warn.textContent = '';
@@ -358,7 +420,8 @@ export function startVehicle(A, id, opts = {}) {
         mesh.userData.rotor.rotation.y += dt * 40 * st.rpm; mesh.userData.tail.rotation.x += dt * 50 * st.rpm;
         st.cool -= dt; st.cool2 -= dt;
         if (!dying && !st.landed) {
-          if (fire1 && st.cool <= 0) { st.cool = 0.3; const d = aimDir(); for (const s of [-1, 1]) fireRocket(st.pos.clone().addScaledVector(left, s * 3).add(v3(0, -1.5, 0)), d, 9 * S.r ** 0.6); }
+          if (fire1 && st.cool <= 0 && st.mode === 1) { st.cool = 0.6; fireGuided(st.pos.clone().addScaledVector(left, (st.alt = -(st.alt || 1)) * 3).add(v3(0, -1.5, 0)), aimDir(), 12 * S.r ** 0.6, 240, 3); }
+          else if (fire1 && st.cool <= 0) { st.cool = 0.3; const d = aimDir(); for (const s of [-1, 1]) fireRocket(st.pos.clone().addScaledVector(left, s * 3).add(v3(0, -1.5, 0)), d, 9 * S.r ** 0.6); }
           if (fire2 && st.cool2 <= 0) { st.cool2 = 0.06; fireShell(st.pos.clone().add(v3(0, -2, 0)).addScaledVector(f, 4), aimDir().add(v3((R() - 0.5) * 0.02, (R() - 0.5) * 0.02, (R() - 0.5) * 0.02)).normalize(), 3 * S.r ** 0.4); if (R() < 0.3) audio.buzz(0.05); }
         }
         st.speed = st.vel.length();
@@ -409,17 +472,26 @@ export function startVehicle(A, id, opts = {}) {
           const target = ab ? sp.boost : sp.vmin + st.thr * (sp.vmax - sp.vmin);
           st.speed += (target - st.speed) * dt * 0.4 - Math.sin(st.pitch) * 9.8 * dt * 0.6;
           st.speed = Math.max(0, st.speed);
-          // 기울이면 그쪽으로 선회, 방향타로 살짝 틀고, 손을 떼면 천천히 수평으로
-          st.roll -= clamp(rollIn, -1.3, 1.3) * sp.roll * dt;
-          if (Math.abs(rollIn) < 0.05) st.roll *= Math.exp(-dt * 0.7);
-          st.roll = clamp(st.roll, -1.35, 1.35);
-          const turn = clamp(9.8 * Math.tan(st.roll) / Math.max(25, st.speed) * 2.2, -sp.turn * 1.3, sp.turn * 1.3);
-          st.yaw += turn * dt - clamp(yawIn, -1, 1) * sp.turn * 0.3 * dt;
-          const pin = clamp(pitchIn, -1.3, 1.3) * sp.pitch * dt;
-          st.pitch += pin * Math.cos(st.roll); st.yaw += pin * Math.sin(st.roll) * 0.8;
+          // 자세는 사원수로: 기수·기울기·방향타를 기체 기준 축으로 돌림 → 배면비행·공중제비 가능
+          const q = st.q, tq = new THREE.Quaternion();
+          const ax = (x, y, z, ang) => q.multiply(tq.setFromAxisAngle(v3(x, y, z), ang));
+          ax(1, 0, 0, -clamp(pitchIn, -1.3, 1.3) * sp.pitch * 1.25 * dt);
+          ax(0, 0, 1, clamp(rollIn, -1.3, 1.3) * sp.roll * 1.2 * dt);
+          ax(0, 1, 0, -clamp(yawIn, -1, 1) * sp.turn * 0.3 * dt);
+          ypr(q, st);
+          // 기울인 쪽으로 선회 (거꾸로 뒤집히면 선회 안 함)
+          const turn = clamp(9.8 * Math.sin(st.roll) * Math.cos(st.pitch) / Math.max(25, st.speed) * 2.2, -sp.turn * 1.3, sp.turn * 1.3);
+          q.premultiply(tq.setFromAxisAngle(UP, turn * dt));
+          // 조작이 없으면 날개를 천천히 수평으로 (크게 기울어 있거나 뒤집혀 있을 때는 그대로)
+          if (Math.abs(rollIn) < 0.05 && Math.abs(st.roll) < 1.0) { const fw = v3(0, 0, 1).applyQuaternion(q); q.premultiply(tq.setFromAxisAngle(fw, st.roll * (1 - Math.exp(-dt * 0.7)))); }
           const stalling = st.speed < sp.stall;
-          if (stalling) { st.pitch -= dt * 0.7; H.warn.textContent = '실속! 속도를 올리세요'; st.warnT = 0.2; }
-          st.pitch = clamp(st.pitch, -1.35, 1.2);
+          if (stalling) {
+            // 실속: 기수가 땅 쪽으로 떨어짐
+            const fw = v3(0, 0, 1).applyQuaternion(q), axis = v3().crossVectors(fw, v3(0, -1, 0));
+            if (axis.lengthSq() > 1e-6) q.premultiply(tq.setFromAxisAngle(axis.normalize(), dt * 0.7));
+            H.warn.textContent = '실속! 속도를 올리세요'; st.warnT = 0.2;
+          }
+          q.normalize(); ypr(q, st);
           dirOf();
           const step = st.speed * dt;
           // 부서진 건물의 남은 조각·파편
@@ -440,13 +512,13 @@ export function startVehicle(A, id, opts = {}) {
             } else if (st.gear && sink < sp.sink * 1.8 && rollA < 0.95) {
               damage((sink - sp.sink * 0.6) * 6 + rollA * 30 + 12, '거친 착륙! 튕겼어요');
               if (st.hp <= 0) { crash(touch, sp.crash * S.r ** 0.4); return true; }
-              st.pos.y = g2 + st.gearH + 1.2; st.pitch = Math.max(st.pitch, 0.06); st.roll *= 0.4; st.speed *= 0.85; fx.dust(touch, 4);
+              st.pos.y = g2 + st.gearH + 1.2; st.pitch = Math.max(st.pitch, 0.06); st.roll *= 0.4; st.speed *= 0.85; fx.dust(touch, 4); qFromYPR(st.yaw, st.pitch, st.roll, st.q);
             } else if (!st.gear && sink < 6 && rollA < 0.4 && st.speed < sp.vr * 1.5) {
               st.ground = true; st.belly = true; st.rot = 0; st.pos.y = g2 + st.bellyH; st.roll = 0; damage(40, '바퀴 없이 동체 착륙!');
             } else { crash(touch, sp.crash * S.r ** 0.4); return true; }
           }
           if (st.hp <= 0) { crash(st.pos.clone(), sp.crash * S.r ** 0.4); return true; }
-          const lim = grid.span * 4; if (Math.abs(st.pos.x) > lim || Math.abs(st.pos.z) > lim) st.yaw += dt * 2;
+          const lim = grid.span * 4; if (Math.abs(st.pos.x) > lim || Math.abs(st.pos.z) > lim) { st.q.premultiply(new THREE.Quaternion().setFromAxisAngle(UP, dt * 2)); ypr(st.q, st); }
           // 착륙 도우미
           const agl = st.pos.y - g2 - contactH;
           if (agl < 150 && (st.gear || agl < 60)) {
@@ -457,9 +529,10 @@ export function startVehicle(A, id, opts = {}) {
             H.land.textContent = t;
           }
         }
+        if (st.ground) qFromYPR(st.yaw, st.pitch, st.roll, st.q);
         st.vel.copy(dirOf()).multiplyScalar(st.speed);
         mesh.position.copy(st.pos);
-        mesh.lookAt(st.pos.clone().add(dir)); mesh.rotateZ(-st.roll);
+        mesh.quaternion.copy(st.q);
         if (mesh.userData.prop) mesh.userData.prop.rotation.z += dt * (12 + st.thr * 40);
         if (mesh.userData.flame) mesh.userData.flame.scale.setScalar(ab ? 1.8 : 0.3 + st.thr * 0.7);
         if (st.smoke && R() < 0.9) fx.smoke.emit(st.pos.x - dir.x * 4, st.pos.y - dir.y * 4, st.pos.z - dir.z * 4, 0, 0.5, 0, 6, 1.5, 6, [1, 0.35, 0.5, 0.8], [0.9, 0.6, 0.8, 0], 0.2, 0.1);
@@ -467,11 +540,16 @@ export function startVehicle(A, id, opts = {}) {
         st.cool -= dt; st.cool2 -= dt;
         const air = !st.ground;
         if (id === 'plane') { if (pressed('Space') || (inp.lmb && st.cool <= 0)) { st.cool = 0.4; st.smoke = !st.smoke; } }
-        if (id === 'fighter' && air) {
+        if (id === 'fighter' && air && st.mode === 1) {
+          if (fire1 && st.cool <= 0) { st.cool = 0.9; const side = v3(-dir.z, 0, dir.x).normalize(); fireGuided(st.pos.clone().addScaledVector(side, (st.alt = -(st.alt || 1)) * 4).add(v3(0, -1, 0)), dir, 22 * S.r ** 0.7, 420, 2.6); }
+          if (fire2 && st.cool2 <= 0) { st.cool2 = 0.05; fireShell(st.pos.clone().addScaledVector(dir, 8), dir.clone().add(v3((R() - 0.5) * 0.01, (R() - 0.5) * 0.01, (R() - 0.5) * 0.01)).normalize(), 3.5 * S.r ** 0.4); }
+        } else if (id === 'fighter' && air) {
           if (fire1 && st.cool <= 0) { st.cool = 0.05; fireShell(st.pos.clone().addScaledVector(dir, 8), dir.clone().add(v3((R() - 0.5) * 0.01, (R() - 0.5) * 0.01, (R() - 0.5) * 0.01)).normalize(), 3.5 * S.r ** 0.4); if (R() < 0.3) audio.buzz(0.05); }
           if (fire2 && st.cool2 <= 0) { st.cool2 = 0.8; const side = v3(-dir.z, 0, dir.x).normalize(); fireRocket(st.pos.clone().addScaledVector(side, (R() < 0.5 ? -1 : 1) * 4).add(v3(0, -1, 0)), dir, 22 * S.r ** 0.7); }
         }
-        if (id === 'bomber' && air) {
+        if (id === 'bomber' && air && st.mode === 1) {
+          if (fire1 && st.cool <= 0) { st.cool = 1.2; fireGuided(st.pos.clone().add(v3(0, -4, 0)), dir.clone().add(v3(0, -0.3, 0)).normalize(), 26 * S.r ** 0.7, Math.max(120, st.speed), 1.2, makeBomb(), 1.6, 9.8); }
+        } else if (id === 'bomber' && air) {
           if (fire1 && st.cool <= 0) { st.cool = 0.35; dropBomb(false); }
           if (fire2 && st.cool2 <= 0) { st.cool2 = 3; let k = 0; A.addActive({ t: 0, update(d2) { this.t += d2; while (k < 12 && this.t > k * 0.12) { k++; if (!st.crashed) dropBomb(true); } return k < 12; } }); }
         }
@@ -481,6 +559,7 @@ export function startVehicle(A, id, opts = {}) {
         H.thrBox.hidden = false; H.thr.style.width = (ab ? 100 : st.thr * 100) + '%';
         H.hpBox.hidden = false; H.hp.style.width = st.hp + '%'; H.hpBox.classList.toggle('low', st.hp < 35);
       }
+      updateLock(realDt, id === 'heli' ? aimDir() : dirOf().clone());
       p.endPoint = st.pos;
       return true;
     },
@@ -494,10 +573,19 @@ export function startVehicle(A, id, opts = {}) {
       const fr = f.clone().applyAxisAngle(UP, yawOff);
       const right = v3(-fr.z, 0, fr.x).normalize();
       if (st.lookPitch) fr.applyAxisAngle(right, st.lookPitch);
+      c.up = null;
       if (st.cam === 2) {
         const seat = id === 'car' ? v3(0, 2.3, 0.3) : id === 'heli' ? v3(0, 1.2, 3.5) : id === 'bomber' ? v3(0, 3, 14) : v3(0, 1.2, 2.5);
-        c.pos.copy(st.pos).add(seat.applyAxisAngle(UP, st.yaw));
-        c.look.copy(c.pos).addScaledVector(fr, 100).add(v3(0, id === 'car' ? -4 : 0, 0));
+        if (st.q && id !== 'car' && id !== 'heli') {
+          // 비행기 조종석: 기체와 함께 기울고 뒤집힘
+          c.pos.copy(st.pos).add(seat.applyQuaternion(st.q));
+          const lf = v3(0, 0, 1).applyAxisAngle(UP, yawOff); if (st.lookPitch) lf.applyAxisAngle(v3(1, 0, 0), -st.lookPitch);
+          c.look.copy(c.pos).addScaledVector(lf.applyQuaternion(st.q), 100);
+          c.up = v3(0, 1, 0).applyQuaternion(st.q);
+        } else {
+          c.pos.copy(st.pos).add(seat.applyAxisAngle(UP, st.yaw));
+          c.look.copy(c.pos).addScaledVector(fr, 100).add(v3(0, id === 'car' ? -4 : 0, 0));
+        }
         c.fov = 72;
       } else {
         const far = st.cam === 1 ? 2 : 1;
@@ -510,7 +598,7 @@ export function startVehicle(A, id, opts = {}) {
     },
     click() {},
     abort() { game.endPilot(true); },
-    dispose() { H.el.hidden = true; scene.remove(mesh); if (snd) snd.stop(); audio.hornOff(); if (st.rw) st.rw.dispose(); if (st.pad) st.pad.dispose(); },
+    dispose() { H.el.hidden = true; H.lock.hidden = true; scene.remove(mesh); if (snd) snd.stop(); audio.hornOff(); if (st.rw) st.rw.dispose(); if (st.pad) st.pad.dispose(); },
   };
   p._st = st;
   game.startPilot(p);
