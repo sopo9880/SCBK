@@ -532,7 +532,9 @@ function initHud() {
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
     if (/^Digit[0-9]$/.test(e.code)) {
       // 1~9, 0 = 10번째, Shift+1~9 = 11번째부터
-      const d = +e.code.slice(5), idx = e.shiftKey ? (d === 0 ? 19 : 9 + d) : d === 0 ? 9 : d - 1;
+      // 21번째부터는 Alt+1~9
+      const d = +e.code.slice(5), idx = e.altKey ? (d === 0 ? 29 : 19 + d) : e.shiftKey ? (d === 0 ? 19 : 9 + d) : d === 0 ? 9 : d - 1;
+      if (e.altKey) e.preventDefault();
       const list = WEAPONS.filter(w => w.cat === hud.cat), wp = list[idx];
       if (wp) hud.select(wp.id);
       return;
