@@ -88,7 +88,7 @@ export const MOVIE2 = {
       const S = A.S, p = hit.point, { D, fx, audio, grid, camera, scene, world } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
       const f = camDir(camera, c), dir = sideOf(f);
-      const rw = 14 * S.r ** 0.6, segs = 16, H = rw * 9;
+      const rw = 18 * S.r ** 0.6, segs = 18, H = rw * 8;
       const e = c.clone().addScaledVector(dir, rw * 7);
       const worm = makeWorm(segs); worm.scale.setScalar(1); scene.add(worm);
       const { parts, jaw, petals } = worm.userData;
@@ -106,7 +106,7 @@ export const MOVIE2 = {
           if (this.t < T1) {
             // 땅 밑으로 다가오는 흙먼지 띠
             const q = startTrail.clone().lerp(c, this.t / T1); q.y = grid.sample(q.x, q.z); st.trail.copy(q);
-            for (let i = 0; i < 6; i++) fx.smoke.emit(q.x + (R() - 0.5) * rw * 2, q.y + 1, q.z + (R() - 0.5) * rw * 2, (R() - 0.5) * 6, 6 + R() * 6, (R() - 0.5) * 6, 3, rw * 0.4, rw * 1.6, [0.62, 0.52, 0.4, 0.7], [0.6, 0.55, 0.48, 0], 0.5, 0.3);
+            for (let i = 0; i < 2; i++) fx.smoke.emit(q.x + (R() - 0.5) * rw * 1.5, q.y + 1, q.z + (R() - 0.5) * rw * 1.5, (R() - 0.5) * 4, 4 + R() * 4, (R() - 0.5) * 4, 2, rw * 0.3, rw * 0.8, [0.62, 0.52, 0.4, 0.45], [0.6, 0.55, 0.48, 0], 0.6, 0.2);
             this.acc += dt; if (this.acc > 0.3) { this.acc = 0; A.crater(q.x, q.z, rw * 0.8, 1.2); world.blastTrees(q.x, q.z, rw, rw); D.quake(q.x, q.z, rw * 4, 0.6, 0.3); }
             fx.addShake(dt * 0.5);
             worm.visible = false;
@@ -114,12 +114,12 @@ export const MOVIE2 = {
           }
           worm.visible = true;
           const uh = -0.25 + (this.t - T1) * 0.17;
-          const du = 0.065;
+          const du = 0.042;
           for (let i = 0; i < segs; i++) {
             const u = uh - i * du;
             path(u, tmp); path(u + 0.01, tmp2);
             const part = parts[i];
-            part.position.copy(tmp); part.scale.set(rw, rw * 1.15, rw);
+            part.position.copy(tmp); part.scale.set(rw, rw * 1.5, rw);
             part.quaternion.setFromUnitVectors(UP, tmp2.sub(tmp).normalize());
             part.visible = tmp.y > grid.sample(tmp.x, tmp.z) - rw * 2;
           }
@@ -135,19 +135,19 @@ export const MOVIE2 = {
             A.crater(c.x, c.z, rw * 2, rw * 1.2);
             for (const b of D.buildingsNear(c.x, c.z, rw * 1.8)) { if (b.state === 'intact') D.sinkBuilding(b, b.height + 20, 0.4, R() - 0.5, R() - 0.5, 1.8); else D.vaporizeBuilding(b); }
             for (const ch of D.gather(c.x, c.z, rw * 2.2, 1)) { const pos = D.chunkPos(ch); D.launch(ch, (c.x - pos.x) * 0.5, 25, (c.z - pos.z) * 0.5, 2); }
-            for (let i = 0; i < 60; i++) { const a = R() * 6.28, sp = 10 + R() * 30; fx.smoke.emit(c.x, c.y + 2, c.z, Math.cos(a) * sp, 10 + R() * 25, Math.sin(a) * sp, 4, rw * 0.5, rw * 2, [0.62, 0.52, 0.4, 0.8], [0.6, 0.55, 0.48, 0], 0.5, -2); }
+            for (let i = 0; i < 35; i++) { const a = R() * 6.28, sp = 10 + R() * 30; fx.smoke.emit(c.x, c.y + 2, c.z, Math.cos(a) * sp, 10 + R() * 25, Math.sin(a) * sp, 3, rw * 0.4, rw * 1.3, [0.62, 0.52, 0.4, 0.8], [0.6, 0.55, 0.48, 0], 0.5, -2); }
           }
           if (eatenOnce && uh < 0.3) for (const ch of D.gather(c.x, c.z, rw * 1.5, 2)) { const pos = D.chunkPos(ch); if (Math.hypot(pos.x - c.x, pos.z - c.z) < rw * 1.2) D.removeChunk(ch); }
           if (!dove && uh > 1) {
             dove = true;
             A.blast(e, rw * 2, 30 * S.v, { crater: [rw * 1.6, rw * 1.2], lift: 0.6 }); fx.addShake(1.5);
           }
-          return uh - segs * du < 1.3;
+          return uh - segs * du < 1.35;
         },
         dispose() { disposeObj(scene, worm); },
       });
       const g = cineGame(A); if (!g) return;
-      const low = c.clone().addScaledVector(f, -rw * 14 - 140).add(v3(0, 18, 0));
+      const low = c.clone().addScaledVector(f, -rw * 10 - 120).add(v3(0, 40, 0));
       g.cine.play([
         watch(low, () => st.trail, { dur: T1, fov: 58, caption: '거대 모래벌레', smooth: 0.3 }),
         watch(low.clone().add(v3(0, rw * 1.5, 0)), c.clone().addScaledVector(dir, rw * 3.5).add(v3(0, H * 0.55, 0)), { dur: 7.5, fov: 62, ts: (u) => (u < 0.3 ? 0.55 : 1), smooth: 0.3 }),

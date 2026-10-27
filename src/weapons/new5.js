@@ -87,7 +87,7 @@ export const NEW5 = {
               this.acc = 0;
               for (const ch of D.gather(c.x, c.z, R0 * Math.min(1, 0.4 + this.t / T), 1)) {
                 const pos = D.chunkPos(ch);
-                const d = pos.distanceTo(core);
+                const d = core.distanceTo(pos);
                 if (d < rc + ch.size) { D.removeChunk(ch); vol += ch.vol || 1; continue; }
                 if (R() > 0.35) continue;
                 const sp = 18 + 30 * (1 - Math.min(1, d / R0));

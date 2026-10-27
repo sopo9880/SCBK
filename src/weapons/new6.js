@@ -37,7 +37,8 @@ export const NEW6 = {
           if (close > 0) {
             fx.addShake(dt * 1.5 * close);
             const q = v3(st.pos.x, grid.sample(st.pos.x, st.pos.z), st.pos.z);
-            st.eaten += D.field({ x: st.pos.x, y: st.pos.y, z: st.pos.z, r: Rt * 3 * close + 50, mode: 'gravity', core: size * 1.2, grab: Rt * close, strength: 45 * S.v * close, consume: true }, dt);
+            const fy = q.y + Math.min(st.pos.y - q.y, Rt * 1.2);
+            st.eaten += D.field({ x: q.x, y: fy, z: q.z, r: Rt * 3 * close + 50, mode: 'gravity', core: size * 1.5, grab: Rt * 1.3 * close, strength: 45 * S.v * close, consume: true }, dt);
             this.acc += dt;
             if (this.acc > 0.3 && close > 0.6) {
               this.acc = 0;
@@ -77,7 +78,7 @@ export const NEW6 = {
       let k = 0;
       audio.hum(T0 + 6);
       A.addActive({
-        t: 0, wave: -half * 1.4,
+        t: 0, wave: -half * 1.1,
         update(dt) {
           this.t += dt;
           const u = Math.min(1, this.t / T0);
@@ -85,7 +86,7 @@ export const NEW6 = {
           fx.light(c.x, c.y + 400, c.z, 2e4 * u * u, 6000, 0.05, 0xdfe8ff);
           if (this.t < T0) return true;
           if (!this.flashed) { this.flashed = true; fx.flash = Math.max(fx.flash, 0.95); audio.nuke(); audio.wind(8); }
-          this.wave += dt * 260;
+          this.wave += dt * 450;
           // 빛의 벽이 지나가며 그을리고, 띠 안 건물은 쓰러짐
           while (k < list.length && list[k][0] <= this.wave) {
             const [, off, b] = list[k++];
@@ -104,7 +105,7 @@ export const NEW6 = {
       const view = c.clone().addScaledVector(from, -W * 0.6 - 200).addScaledVector(sd, W * 1.4).add(v3(0, 60, 0));
       g.cine.play([
         watch(c.clone().addScaledVector(from, -200).add(v3(0, 20, 0)), () => star.position, { dur: T0 + 0.5, fov: 60, caption: '초신성', smooth: 0.3 }),
-        watch(view, c.clone().add(v3(0, 20, 0)), { dur: 7, fov: 60, ts: 0.8, smooth: 0.3 }),
+        watch(view, c.clone().add(v3(0, 20, 0)), { dur: 9, fov: 62, ts: 0.8, smooth: 0.3 }),
       ]);
     },
   },
