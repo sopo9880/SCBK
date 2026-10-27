@@ -292,7 +292,7 @@ export const NEW4 = {
       for (let i = 0; i < n; i++) {
         const m = A.spawn(makeHeli(), 1.4);
         const a = Math.atan2(-f0.z, -f0.x) + (i - (n - 1) / 2) * 0.35;
-        helis.push({ m, ang: a + Math.PI, pos: c.clone().add(v3(Math.cos(a) * 900, alt + 40, Math.sin(a) * 900)), vel: v3(), fireT: 1.5 + R(), phase: 0, off: i * (6.28 / n) });
+        helis.push({ m, ang: a + Math.PI, pos: c.clone().add(v3(Math.cos(a) * 480, alt + 40, Math.sin(a) * 480)), vel: v3(), fireT: 0.8 + R() * 0.6, phase: 0, off: i * (6.28 / n) });
       }
       audio.drone(T + 6);
       let phys = 0;
@@ -308,7 +308,7 @@ export const NEW4 = {
               goal = c.clone().add(v3(Math.cos(a) * Ro, alt + 10 * Math.sin(this.t + h.off), Math.sin(a) * Ro));
             } else goal = h.pos.clone().add(h.pos.clone().sub(c).setY(0).normalize().multiplyScalar(400)).add(v3(0, 80, 0));
             const want = goal.sub(h.pos); const dist = want.length();
-            want.normalize().multiplyScalar(Math.min(70, dist * 0.8 + 20));
+            want.normalize().multiplyScalar(Math.min(90, dist * 0.8 + 20));
             h.vel.lerp(want, Math.min(1, dt * 1.2));
             h.pos.addScaledVector(h.vel, dt);
             const gyy = groundY(A, h.pos.x, h.pos.z); if (h.pos.y < gyy + 25) h.pos.y = gyy + 25;
@@ -320,7 +320,7 @@ export const NEW4 = {
             // 로켓 일제 사격
             h.fireT -= dt;
             if (this.t < T && h.fireT <= 0 && h.pos.distanceTo(c) < Ro * 2.5) {
-              h.fireT = 0.9 + R() * 0.6;
+              h.fireT = 0.7 + R() * 0.5;
               const cand = D.buildingsNear(c.x, c.z, Ro * 1.2).filter(b => b.state !== 'gone');
               const tb = cand.length ? cand[Math.floor(R() * cand.length)] : null;
               for (let k = 0; k < 4; k++) {
@@ -400,10 +400,10 @@ export const NEW4 = {
       audio.whoosh(T);
       const g = cineGame(A); if (!g) return;
       const g0 = gl[0];
-      const ground = g0.tgt.clone().addScaledVector(f, -420).addScaledVector(sd, 160).add(v3(0, 30, 0));
+      const ground = g0.tgt.clone().addScaledVector(f, -360).addScaledVector(sd, 140).add(v3(0, 140, 0));
       g.cine.play([
-        chase(() => g0.pos, () => g0.dir, { back: 60, up: 14, side: 10, ahead: 300, dur: T * 0.62, fov: 52, caption: '극초음속 활공체 — 마하 20', smooth: 0.05 }),
-        watch(ground, () => (g0.done ? g0.tgt.clone().add(v3(0, 30, 0)) : g0.pos.clone().lerp(g0.tgt, 0.6)), { dur: T * 0.38 + 3.5, fov: 55, ts: (u) => (u < 0.25 ? 0.35 : 0.8), smooth: 0.15 }),
+        chase(() => g0.pos, () => g0.dir, { back: 28, up: 6, side: 5, ahead: 300, dur: T * 0.8, fov: 52, caption: '극초음속 활공체 — 마하 20', smooth: 0.05 }),
+        watch(ground, () => (g0.done ? g0.tgt.clone().add(v3(0, 30, 0)) : g0.pos.clone().lerp(g0.tgt, 0.6)), { dur: T * 0.2 + 3.5, fov: 55, ts: (u) => (u < 0.28 ? 1 : 0.4), smooth: 0.15 }),
       ]);
     },
   },
@@ -430,8 +430,8 @@ export const NEW4 = {
           // 4초 떠다니다 꼬리에 불, 3초 뒤 추락
           const drift = Math.min(this.t, 7);
           st.pos.copy(start).addScaledVector(head, drift * L * 1.2 / 7);
-          if (this.t > 3.5) st.fire = Math.min(1, (this.t - 3.5) / 4);
-          if (this.t > 6) { const tf = this.t - 6; st.vy = -0.5 * 7 * tf * tf; st.pitch = Math.min(0.42, tf * 0.12); }
+          if (this.t > 2.5) st.fire = Math.min(1, (this.t - 2.5) / 3.5);
+          if (this.t > 4.5) { const tf = this.t - 4.5; st.vy = -0.5 * 14 * tf * tf; st.pitch = Math.min(0.42, tf * 0.12); }
           st.pos.y = start.y + st.vy;
           ship.position.copy(st.pos);
           ship.lookAt(st.pos.clone().add(head)); ship.rotateX(st.pitch);
@@ -468,8 +468,8 @@ export const NEW4 = {
       const low = c.clone().addScaledVector(f, -L * 1.4 - 160).add(v3(0, 14, 0));
       const mid = c.clone().addScaledVector(f, -L * 1.0 - 60).addScaledVector(sd, L * 0.9).add(v3(0, alt * 0.55, 0));
       g.cine.play([
-        watch(low, () => st.pos, { dur: 4, fov: 50, caption: '비행선 추락', smooth: 0.25 }),
-        watch(mid, () => st.pos, { dur: 3.4, fov: 55, smooth: 0.25 }),
+        watch(low, () => st.pos, { dur: 3.2, fov: 50, caption: '비행선 추락', smooth: 0.25 }),
+        watch(mid, () => st.pos, { dur: 3, fov: 55, smooth: 0.25 }),
         watch(low.clone().addScaledVector(sd, -L * 0.4).add(v3(0, 30, 0)), () => (st.crashed ? c.clone().add(v3(0, 20, 0)) : st.pos), { dur: 7, fov: 58, ts: (u) => (u > 0.25 && u < 0.6 ? 0.5 : 1), smooth: 0.3 }),
       ]);
     },
@@ -634,7 +634,7 @@ export const NEW4 = {
           this.cacc += dt;
           while (this.cacc > 0.02) { this.cacc -= 0.02; const a = R() * 6.28, d = Math.sqrt(R()) * R0 * 1.3; fx.smoke.emit(c.x + Math.cos(a) * d, c.y + alt + (R() - 0.5) * 30, c.z + Math.sin(a) * d, (R() - 0.5) * 3, (R() - 0.5), (R() - 0.5) * 3, 6, 40, 90, [0.22, 0.23, 0.26, 0.8], [0.2, 0.2, 0.22, 0], 0.2, 0, 0.3); }
           if (this.t > T) return this.t < T + 4;
-          const rate = 26 * S.n ** 0.6 * Math.min(1, this.t / 1.5);
+          const rate = 34 * S.n ** 0.6 * Math.min(1, this.t / 1.5);
           this.acc += dt * rate;
           while (this.acc > 1) {
             this.acc -= 1;
@@ -666,7 +666,7 @@ export const NEW4 = {
       const f = camDir(camera, c), sd = sideOf(f);
       g.cine.play([
         watch(c.clone().addScaledVector(f, -R0 - 120).addScaledVector(sd, 60).add(v3(0, 22, 0)), c.clone().add(v3(0, 60, 0)), { dur: 5, fov: 62, caption: '거대 우박', smooth: 0.3 }),
-        watch(c.clone().addScaledVector(f, -45).addScaledVector(sd, -35).add(v3(0, 8, 0)), c.clone().add(v3(0, 4, 0)), { dur: 3.5, fov: 55, ts: 0.4 }),
+        watch(c.clone().addScaledVector(f, -90).addScaledVector(sd, -40).add(v3(0, 38, 0)), c.clone().add(v3(0, 6, 0)), { dur: 3.5, fov: 55, ts: 0.4 }),
         orbit(c, { dist: R0 * 1.5 + 100, h: 90, a0: Math.atan2(-f.z, -f.x), a1: Math.atan2(-f.z, -f.x) + 0.5, dur: 4, fov: 55 }),
       ]);
     },
