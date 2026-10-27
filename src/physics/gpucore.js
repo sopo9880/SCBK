@@ -11,6 +11,9 @@ export class GPUCore {
     let adapter = null;
     try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch (e) { return null; }
     if (!adapter) return null;
+    // 소프트웨어(CPU 흉내) WebGPU 는 Rapier 보다 훨씬 느려서 쓰지 않음
+    const soft = adapter.isFallbackAdapter || (adapter.info && adapter.info.isFallbackAdapter) || /swiftshader|llvmpipe|warp|microsoft basic/i.test(((adapter.info && (adapter.info.vendor + ' ' + adapter.info.architecture + ' ' + adapter.info.description)) || ''));
+    if (soft && !globalThis.__allowSoftGPU) { console.warn('소프트웨어 WebGPU 라 GPU 물리를 쓰지 않음'); return null; }
     const lim = adapter.limits;
     // 칸을 나중에 늘릴 수 있게 장치가 허락하는 만큼 큰 버퍼를 요청
     const device = await adapter.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });

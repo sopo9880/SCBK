@@ -350,6 +350,11 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
         return null;
       }
       if (!adapter) return null;
+      const soft = adapter.isFallbackAdapter || adapter.info && adapter.info.isFallbackAdapter || /swiftshader|llvmpipe|warp|microsoft basic/i.test(adapter.info && adapter.info.vendor + " " + adapter.info.architecture + " " + adapter.info.description || "");
+      if (soft && !globalThis.__allowSoftGPU) {
+        console.warn("\uC18C\uD504\uD2B8\uC6E8\uC5B4 WebGPU \uB77C GPU \uBB3C\uB9AC\uB97C \uC4F0\uC9C0 \uC54A\uC74C");
+        return null;
+      }
       const lim = adapter.limits;
       const device = await adapter.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
       capacity = Math.max(1024, Math.min(capacity, Math.floor(lim.maxStorageBufferBindingSize / (MAXP * 64))));
@@ -857,6 +862,11 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
         this._acc -= frameStep;
         frames++;
       }
+      const inflight = this.staging.filter((x) => x.busy).length;
+      if (inflight >= 2) {
+        frames = 0;
+        this.behind = (this.behind || 0) + 1;
+      }
       const nsub = frames * this.substeps;
       const wg = (n) => Math.ceil(n / 64);
       const run = (pass, name, n) => {
@@ -960,6 +970,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
 
   // src/proto/main.js
   window.__proto = async (o = {}) => {
+    globalThis.__allowSoftGPU = true;
     const core = await GPUCore.create(o.cap || 4096);
     if (!core) return "no gpu";
     if (o.k) core._k = o.k;

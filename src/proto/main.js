@@ -1,6 +1,7 @@
 // GPU 물리 단독 시험: 상자 쌓기·무너뜨리기 (화면 없이 수치만)
 import { GPUCore } from '../physics/gpucore.js';
 window.__proto = async (o = {}) => {
+  globalThis.__allowSoftGPU = true;
   const core = await GPUCore.create(o.cap || 4096);
   if (!core) return 'no gpu';
   if (o.k) core._k = o.k;
