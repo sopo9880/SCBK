@@ -19,7 +19,7 @@ export const sharedUniforms = {
 export function makeBuildingMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.0 });
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uNight = sharedUniforms.uNight; sh.uniforms.uGlass = sharedUniforms.uGlass; sh.uniforms.uPower = sharedUniforms.uPower;
+    sh.uniforms.uNight = sharedUniforms.uNight; sh.uniforms.uGlass = sharedUniforms.uGlass; sh.uniforms.uPower = sharedUniforms.uPower; sh.uniforms.uTime = sharedUniforms.uTime;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aOrig; attribute float aKind;
@@ -28,9 +28,9 @@ varying vec3 vOrig; varying vec3 vObjN; varying float vKind;`)
 vOrig = aOrig; vObjN = normal; vKind = aKind;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform float uNight; uniform float uGlass; uniform float uPower;
+uniform float uNight; uniform float uGlass; uniform float uPower; uniform float uTime;
 varying vec3 vOrig; varying vec3 vObjN; varying float vKind;
-float swWin = 0.0; float swLit = 0.0;
+float swWin = 0.0; float swLit = 0.0; vec3 swLitCol = vec3(1.0, 0.78, 0.45);
 ${NOISE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -57,7 +57,14 @@ ${NOISE}`)
     vec3 wall = diffuseColor.rgb * slab * (0.93 + 0.1 * sw_noise(vOrig.xz * 0.7 + vOrig.y * 0.3));
     swWin = mix(w, 0.35, far);
     diffuseColor.rgb = mix(wall, glass, swWin);
-    swLit = step(0.62, sw_hash(cell * 1.7 + 3.1)) * w * (1.0 - far * 0.6) * sc;
+    // 밤 창문: 따뜻한 불빛·하얀 사무실 불빛·TV 처럼 깜빡이는 푸른빛, 층 전체가 켜진 사무실, 1층 상가
+    float hc = sw_hash(cell * 2.3 + 7.7);
+    swLitCol = hc < 0.62 ? vec3(1.0, 0.74, 0.40) : hc < 0.88 ? vec3(0.86, 0.93, 1.0) : vec3(0.45, 0.62, 1.0) * (0.65 + 0.35 * sin(uTime * 7.0 + hc * 60.0));
+    float on = step(0.55, sw_hash(cell * 1.7 + 3.1));
+    float floorOn = step(0.86, sw_hash(vec2(cell.y * 1.31, floor(vOrig.x * 0.013) + floor(vOrig.z * 0.017) * 7.0)));
+    float lv = 0.5 + 0.7 * sw_hash(cell * 3.7 + 1.3);
+    if (cell.y < 0.5) { on = step(0.3, sw_hash(cell + 9.1)); lv = 1.5; swLitCol = vec3(1.0, 0.86, 0.62); }
+    swLit = max(on, floorOn) * lv * w * (1.0 - far * 0.6) * sc;
   } else if (vKind < 1.5) {
     float nz = sw_fbm(vOrig.xz * 0.35);
     diffuseColor.rgb *= vec3(0.62, 0.62, 0.64) * (0.8 + 0.35 * nz);
@@ -71,9 +78,9 @@ roughnessFactor = mix(roughnessFactor, mix(0.4, 0.03, clamp(uGlass * 0.5, 0.0, 1
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
 metalnessFactor = mix(metalnessFactor, clamp(0.55 * uGlass, 0.0, 1.0), swWin);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += vec3(1.0, 0.78, 0.45) * swLit * uNight * 1.6 * uPower;`);
+totalEmissiveRadiance += swLitCol * swLit * uNight * 1.7 * uPower;`);
   };
-  mat.customProgramCacheKey = () => 'sw-building-v2';
+  mat.customProgramCacheKey = () => 'sw-building-v3';
   return mat;
 }
 

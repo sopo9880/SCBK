@@ -277,7 +277,7 @@ export class Game {
     this.hemi.color.set(night ? 0x3a4a78 : key === 'sunset' ? 0xffc9a0 : 0xcfe3ff);
     this.renderer.toneMappingExposure = T.exposure;
     sharedUniforms.uNight.value = T.night;
-    this.scene.fog.color.set(night ? 0x0b1020 : key === 'sunset' ? 0xc7977c : key === 'morning' ? 0xb9c6d2 : 0xa9bfd6);
+    this.scene.fog.color.set(night ? 0x12141f : key === 'sunset' ? 0xc7977c : key === 'morning' ? 0xb9c6d2 : 0xa9bfd6);
     // 환경맵
     const envScene = new THREE.Scene();
     const s2 = new Sky(); s2.scale.setScalar(1000); s2.material.depthTest = false;
