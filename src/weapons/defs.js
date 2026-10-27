@@ -114,6 +114,12 @@ const I = {
   roguehole: '<circle cx="12" cy="12" r="4" fill="currentColor"/><ellipse cx="12" cy="12" rx="10" ry="3" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(15 12 12)"/><path d="M2 21l4-3M7 22l2-3" stroke="currentColor" stroke-width="1.4"/>',
   supernova: '<circle cx="12" cy="12" r="3.5" fill="currentColor"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5M4 4l3.5 3.5M16.5 16.5L20 20M20 4l-3.5 3.5M7.5 16.5L4 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   airloss: '<path d="M3 20a9 9 0 0 1 18 0z" fill="currentColor" opacity="0.4"/><path d="M8 14V4M12 14V2M16 14V4M6 7l2-3 2 3M10 5l2-3 2 3M14 7l2-3 2 3" stroke="currentColor" stroke-width="1.6" fill="none"/>',
+  fortress: '<path d="M12 2l7 10-7 10-7-10z" fill="currentColor"/><ellipse cx="12" cy="12" rx="11" ry="3" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="12" r="1.8" fill="#0006"/>',
+  sandworm: '<path d="M3 22c0-8 3-14 9-16" stroke="currentColor" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="14" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M1 22h22" stroke="currentColor" stroke-width="1.6"/>',
+  climatesat: '<rect x="10" y="3" width="4" height="4" fill="currentColor"/><path d="M5 5h4M15 5h4" stroke="currentColor" stroke-width="2.2"/><path d="M12 7l-6 14M12 7l6 14M12 7v14" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 1.5"/>',
+  psychic: '<circle cx="12" cy="10" r="6" fill="currentColor"/><circle cx="12" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1" opacity="0.6"/><path d="M4 22h16" stroke="currentColor" stroke-width="1.6"/><rect x="5" y="17" width="3" height="3" fill="currentColor" opacity="0.6"/><rect x="16" y="15" width="3" height="3" fill="currentColor" opacity="0.6"/>',
+  dinos: '<path d="M3 14c2-5 6-6 9-5l3-4h4l1 2-3 1-1 4 2 6h-2l-2-4h-4l-1 4H7l1-4c-2 0-4 1-5 0z" fill="currentColor"/>',
+  datacrash: '<path d="M5 3v4M5 10v3M9 2v6M9 11v2M13 4v3M13 10v6M17 2v5M17 10v3M17 16v2M5 16v4M9 16v6" stroke="currentColor" stroke-width="2"/>',
 };
 
 export const CATEGORIES = [
@@ -244,6 +250,12 @@ export const WEAPONS = [
   { id: 'sharknado', cat: 'movie', name: '상어 회오리', desc: '상어가 섞인 토네이도, 상어가 건물에 떨어짐' },
   { id: 'megaquake', cat: 'movie', name: '지진 대협곡', desc: '단층이 열리며 도시를 가로지르는 거대 협곡' },
   { id: 'giantape', cat: 'movie', name: '거대 유인원', desc: '가장 높은 빌딩을 기어올라 가슴을 치고 뛰어내림', opts: [CINE] },
+  { id: 'fortress', cat: 'movie', name: '행성 파괴 요새', desc: '하늘에 나타난 결정형 요새가 빛을 모아 쏘아 일대를 지워버림', opts: [CINE] },
+  { id: 'sandworm', cat: 'movie', name: '거대 모래벌레', desc: '땅속에서 다가와 솟구쳐 일대를 통째로 삼키고 다시 파고듦', opts: [CINE] },
+  { id: 'climatesat', cat: 'movie', name: '기후 위성 오작동', desc: '고장 난 위성이 토네이도·번개·우박·폭염·결빙을 동시에 일으킴', opts: [CINE] },
+  { id: 'psychic', cat: 'movie', name: '초능력 폭주', desc: '공중의 빛이 파편을 띄우다 순식간에 부풀어 모든 걸 지움', opts: [CINE] },
+  { id: 'dinos', cat: 'movie', name: '공룡 떼 질주', desc: '거대한 공룡 무리가 도시를 가로질러 달려감', opts: [CINE] },
+  { id: 'datacrash', cat: 'movie', name: '데이터 붕괴', desc: '도시가 깜빡이며 코드 문자로 부서져 흘러내림', opts: [CINE] },
   { id: 'sunfall', cat: 'end', name: '태양 낙하', desc: '해가 커지며 하늘이 불타고 도시가 녹아내림', opts: [CINE] },
   { id: 'roguehole', cat: 'end', name: '떠돌이 블랙홀 통과', desc: '하늘을 가로지르는 블랙홀이 아래의 도시를 빨아올려 삼킴', opts: [CINE] },
   { id: 'supernova', cat: 'end', name: '초신성', desc: '별 하나가 태양보다 밝아지고 빛의 벽이 밀려와 쓸어버림', opts: [CINE] },
