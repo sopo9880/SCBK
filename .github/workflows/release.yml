@@ -35,19 +35,17 @@ jobs:
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
           } | Out-File -Encoding ascii dist/SHA256SUMS.txt
           Get-Content dist/SHA256SUMS.txt
-      - name: Replace all releases with this build
+      - name: Publish this build (keep earlier releases)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
           VER="v$(node -p "require('./package.json').version")"
-          echo "새 릴리스: $VER"
-          for t in $(gh release list --limit 300 --json tagName -q '.[].tagName'); do
-            echo "릴리스 삭제: $t"; gh release delete "$t" --yes --cleanup-tag
-          done
-          for t in $(git ls-remote --tags origin | sed 's#.*refs/tags/##' | grep -v '\^{}' || true); do
-            echo "태그 삭제: $t"; git push origin ":refs/tags/$t" || true
-          done
+          echo "새 릴리스: $VER (이전 버전은 그대로 둠)"
+          # 같은 버전을 다시 올릴 때만 그 버전 하나를 지우고 새로 만듦
+          if gh release view "$VER" >/dev/null 2>&1; then
+            echo "같은 버전 릴리스 교체: $VER"; gh release delete "$VER" --yes --cleanup-tag
+          fi
           gh release create "$VER" dist/*.exe dist/*.zip dist/SHA256SUMS.txt \
             --target "$GITHUB_SHA" --title "WreckEarth $VER" --notes-file RELEASE_NOTES.md --latest

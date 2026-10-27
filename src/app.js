@@ -17,6 +17,7 @@ import { Audio } from './audio.js';
 import { PROF } from './prof.js';
 import { openSettings, defaultCfg } from './settings.js';
 import { openControl } from './control.js';
+import { startVehicle, openVehiclePicker } from './vehicles.js';
 import { showCountdown, hideCountdown } from './weapons/apocalypse.js';
 window.__PROF = PROF;
 
@@ -85,6 +86,7 @@ const store = {
 const PRESETS = [
   { name: '부산대학교', lat: 35.2335, lon: 129.0805, sub: '부산 금정구' },
   { name: '동아대학교 승학캠퍼스', lat: 35.1160, lon: 128.9675, sub: '부산 사하구' },
+  { name: '연세대학교 신촌캠퍼스', lat: 37.5658, lon: 126.9386, sub: '서울 서대문구' },
   { name: '서울대학교', lat: 37.4600, lon: 126.9520, sub: '서울 관악구' },
   { name: 'KAIST', lat: 36.3720, lon: 127.3620, sub: '대전 유성구' },
   { name: '광화문', lat: 37.5740, lon: 126.9770, sub: '서울 종로구' },
@@ -499,6 +501,7 @@ function initHud() {
   });
   $('#tSettings').onclick = () => showSettings(true);
   $('#tControl').onclick = () => openControlRoom();
+  $('#tVehicle').onclick = () => openVehicles();
   $('#menuSettings').onclick = () => showSettings(false);
   $('#retry').onclick = () => start(current);
   $('#toDemo').onclick = () => start({ demo: true, name: '데모 시티', sub: '오프라인 · 절차 생성' });
@@ -523,7 +526,7 @@ function initHud() {
     }
     if (e.code === 'Tab') { e.preventDefault(); hud.cycleCat(e.shiftKey ? -1 : 1); return; }
     const K = settings.cfg;
-    const acts = { [K.k_slow]: toggleSlow, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true), [K.k_control]: () => openControlRoom(),
+    const acts = { [K.k_slow]: toggleSlow, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true), [K.k_control]: () => openControlRoom(), [K.k_vehicle]: () => openVehicles(),
       [K.k_powDown]: () => { const p = $('#power'); p.value = Math.max(0, +p.value - 0.05); p.oninput(); }, [K.k_powUp]: () => { const p = $('#power'); p.value = Math.min(1, +p.value + 0.05); p.oninput(); } };
     delete acts[''];
     if (acts[e.code]) { e.preventDefault(); acts[e.code](); return; }
@@ -534,6 +537,13 @@ function initHud() {
     }
   });
   window.addEventListener('beforeunload', saveRecord);
+}
+
+// ---------- 탈것 ----------
+function openVehicles() {
+  if (!game || game.pilot || game.planetFX || document.getElementById('control')?.hidden === false) return;
+  if (game.cine.active) game.cine.skip();
+  openVehiclePicker((id) => { if (game && !game.pilot) { game.audio.resume(); startVehicle(game.arsenal, id); } });
 }
 
 // ---------- 발사 관제실 ----------

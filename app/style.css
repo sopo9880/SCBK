@@ -322,3 +322,25 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #qte small { display: block; margin-top: 6px; font-size: 12px; opacity: .85; }
 
 #control .cr-zoom { position: absolute; margin: 8px 10px; font-size: 11px; opacity: .7; background: rgba(4,18,12,.6); padding: 3px 8px; border-radius: 3px; }
+
+/* 탈것 */
+#vehHud { position: fixed; inset: 0; z-index: 40; pointer-events: none; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.85); font-variant-numeric: tabular-nums; }
+#vehHud .vh-title { position: absolute; left: 50%; top: 6vh; transform: translateX(-50%); font-size: 15px; letter-spacing: .3em; font-weight: 700; }
+#vehHud .vh-box { position: absolute; left: 4vw; bottom: 12vh; display: grid; gap: 10px; background: rgba(0,0,0,.35); padding: 12px 16px; border-radius: 10px; }
+#vehHud .vh-box span { display: block; font-size: 11px; letter-spacing: .2em; opacity: .75; }
+#vehHud .vh-box b { font-size: 28px; font-weight: 800; }
+#vehHud .vh-box small { margin-left: 4px; opacity: .7; font-size: 12px; }
+#vehHud .vh-thr i { display: block; width: 140px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.2); overflow: hidden; margin-top: 4px; }
+#vehHud .vh-thr em { display: block; height: 100%; background: #ffb050; }
+#vehHud .vh-help { position: absolute; left: 50%; bottom: 4vh; transform: translateX(-50%); font-size: 12.5px; opacity: .85; white-space: nowrap; max-width: 96vw; overflow: hidden; text-overflow: ellipsis; }
+#vehHud .vh-warn { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); font-size: 26px; font-weight: 800; color: #ff7a5a; }
+#vehPick { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(0,0,0,.45); }
+#vehPick[hidden] { display: none; }
+#vehPick .vp-card { background: rgba(20,24,30,.96); color: #fff; border-radius: 14px; padding: 18px 20px; width: min(560px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+#vehPick h3 { margin: 0 0 12px; font-size: 18px; }
+#vehPick .vp-list { display: grid; gap: 8px; }
+#vehPick .vp-item { display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto auto; column-gap: 10px; text-align: left; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: inherit; border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+#vehPick .vp-item:hover { background: rgba(255,170,80,.18); border-color: #ffb050; }
+#vehPick .vp-ic { grid-row: span 2; font-size: 26px; align-self: center; text-align: center; }
+#vehPick .vp-item small { opacity: .7; font-size: 12px; margin-top: 2px; }
+#vehPick .vp-note { margin: 12px 0 0; font-size: 12px; opacity: .6; }
