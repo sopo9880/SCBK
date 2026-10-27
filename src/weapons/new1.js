@@ -75,7 +75,7 @@ export const NEW1 = {
       const c = v3(mid.cx, mid.baseY, mid.cz);
       g.cine.play([
         watch(v3(first.cx, first.baseY, first.cz).addScaledVector(side, 90).add(v3(0, 30, 0)), v3(first.cx, first.baseY + first.height * 0.4, first.cz), { dur: 1.6, fov: 50, caption: `연쇄 폭약 ${chain.length}채` }),
-        orbit(c, { dist: 260, h: 140, a0: Math.atan2(-f.z, -f.x) - 0.3, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: chain.length * 0.32 + 3, look: 20, fov: 52 }),
+        orbit(c, { dist: 400, h: 240, a0: Math.atan2(-f.z, -f.x) - 0.3, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: chain.length * 0.32 + 3, look: 10, fov: 56 }),
       ]);
     },
   },
@@ -275,46 +275,80 @@ export const NEW1 = {
           while (this.dropped < n && along > -120 + this.dropped * 50) {
             this.dropped++;
             const m = A.spawn(makeTank(), 2.2), ch = A.spawn(makeChute(), 2.2);
-            const t = { m, ch, pos: plane.position.clone().add(v3(0, -8, 0)), vy: 0, landed: false, dir: v3(R() - 0.5, 0, R() - 0.5).normalize(), fireT: 1 + R(), life: 14 + R() * 4 };
+            const t = { m, ch, pos: plane.position.clone().add(v3(0, -8, 0)), vy: 0, landed: false, dir: v3(R() - 0.5, 0, R() - 0.5).normalize(), drive: 1.5 + R(), tgt: null, shots: 0, cool: 0.6 + R() * 0.6, yaw: 0, recoil: 0, life: 20 + R() * 4, e: A.summon(m) };
             tanks.push(t);
           }
           for (const t of tanks) {
-            if (!t.m.parent) continue;
+            if (!t.m.parent || t.e.captured) continue;
             const gy = grid.sample(t.pos.x, t.pos.z);
             if (!t.landed) {
-              t.vy = Math.max(-14, t.vy - 9.8 * dt); t.pos.y += t.vy * dt;
+              // 자유 낙하 뒤 지면 90m 위에서 낙하산이 펴짐
+              const open = t.pos.y < gy + 90;
+              t.vy = open ? Math.min(-9, t.vy + 40 * dt) : Math.max(-60, t.vy - 9.8 * dt); t.pos.y += t.vy * dt;
+              t.ch.visible = open;
               if (t.pos.y <= gy) { t.landed = true; t.pos.y = gy; A.remove(t.ch); fx.dust(t.pos, 6); audio.thud(); D.explode({ x: t.pos.x, y: gy + 2, z: t.pos.z, r: 10, power: 20, lift: -0.5, lod: 1 }); }
               t.ch.position.copy(t.pos);
             } else {
               t.life -= dt;
-              t.pos.addScaledVector(t.dir, 9 * dt); t.pos.y = gy;
-              // 앞을 막는 건물은 들이받음
-              D.explode({ x: t.pos.x + t.dir.x * 5, y: gy + 2, z: t.pos.z + t.dir.z * 5, r: 6, power: 10, lift: 0.1, lod: 1, lodBudget: 0 });
-              t.fireT -= dt;
-              if (t.fireT <= 0) {
-                t.fireT = 1.1 + R() * 0.6;
-                const bs = D.buildingsNear(t.pos.x, t.pos.z, 200).filter(b => b.state === 'intact');
-                const b = bs[Math.floor(R() * bs.length)];
-                if (b) {
-                  const q = v3(b.cx, b.baseY + b.height * (0.3 + R() * 0.5), b.cz);
-                  t.m.userData.tur.rotation.y = Math.atan2(q.x - t.pos.x, q.z - t.pos.z) - Math.atan2(t.dir.x, t.dir.z);
-                  fx.explosion(t.pos.clone().add(v3(0, 3, 0)), 2, { smokeColumn: false });
-                  A.blast(q, 10 * S.r, 28 * S.v, { vap: 1.5, smokeColumn: false, silent: R() > 0.4 });
+              // 잠깐 달리다 멈춰서 포격
+              if (t.drive > 0) {
+                t.drive -= dt;
+                t.pos.addScaledVector(t.dir, 14 * dt); t.pos.y = gy;
+                D.explode({ x: t.pos.x + t.dir.x * 5, y: gy + 2, z: t.pos.z + t.dir.z * 5, r: 6, power: 10, lift: 0.1, lod: 1, lodBudget: 0 });
+              } else {
+                // 표적: 가까운 온전한 건물, 3발 쏘면 다음 건물
+                if (!t.tgt || t.tgt.state === 'gone' || t.shots >= 3) {
+                  const bs = D.buildingsNear(t.pos.x, t.pos.z, 240).filter(b => b.state === 'intact' || b.state === 'fractured').sort((a, b) => Math.hypot(a.cx - t.pos.x, a.cz - t.pos.z) - Math.hypot(b.cx - t.pos.x, b.cz - t.pos.z));
+                  t.tgt = bs[Math.min(bs.length - 1, Math.floor(R() * 3))] || null; t.shots = 0;
+                  if (!t.tgt) {
+                    // 가까이에 건물이 없으면 가장 가까운 건물 쪽으로 달려감
+                    const far = D.buildingsNear(t.pos.x, t.pos.z, 900).filter(b => b.state === 'intact').sort((a, b) => Math.hypot(a.cx - t.pos.x, a.cz - t.pos.z) - Math.hypot(b.cx - t.pos.x, b.cz - t.pos.z))[0];
+                    if (far) { t.dir.set(far.cx - t.pos.x, 0, far.cz - t.pos.z).normalize(); t.drive = Math.min(6, Math.max(1, (Math.hypot(far.cx - t.pos.x, far.cz - t.pos.z) - 150) / 14)); }
+                    else { t.drive = 2; t.dir.applyAxisAngle(v3(0, 1, 0), (R() - 0.5) * 2); }
+                  }
+                }
+                if (t.tgt) {
+                  const b = t.tgt;
+                  const want = Math.atan2(b.cx - t.pos.x, b.cz - t.pos.z) - Math.atan2(t.dir.x, t.dir.z);
+                  let d = want - t.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+                  t.yaw += Math.sign(d) * Math.min(Math.abs(d), dt * 1.4);       // 포탑이 천천히 돎
+                  t.cool -= dt;
+                  if (Math.abs(d) < 0.04 && t.cool <= 0) {
+                    t.cool = 1.3 + R() * 0.5; t.shots++; t.recoil = 1;
+                    const wy = t.yaw + Math.atan2(t.dir.x, t.dir.z), fwd = v3(Math.sin(wy), 0, Math.cos(wy));
+                    const muzzle = t.pos.clone().add(v3(0, 4.9, 0)).addScaledVector(fwd, 12.5);
+                    const q = v3(b.cx + (R() - 0.5) * 6, b.baseY + Math.max(3, (b.flatH || b.height) * (0.2 + R() * 0.5)), b.cz + (R() - 0.5) * 6);
+                    const dir = q.clone().sub(muzzle).normalize();
+                    fx.explosion(muzzle, 2.2, { smokeColumn: false }); fx.light(muzzle.x, muzzle.y, muzzle.z, 3000, 60, 0.15, 0xffc070);
+                    audio.boom(1, camera.position.distanceTo(muzzle));
+                    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.6, 6, 4), glowMat(0xffd080, 1));
+                    A.addProjectile({ mesh: A.spawn(shell, 1), pos: muzzle.clone().addScaledVector(dir, 2), vel: dir.multiplyScalar(320), trail: { size: 0.6, fire: true, every: 0.01 },
+                      onHit: (hq) => A.blast(hq, 11 * S.r, 30 * S.v, { vap: 1.5, smokeColumn: false, silent: R() > 0.5, lod: 1 }) });
+                  }
                 }
               }
+              t.recoil = Math.max(0, t.recoil - dt * 4);
+              t.m.userData.tur.rotation.y = t.yaw;
+              t.m.userData.tur.position.z = -0.5 * t.recoil;
               if (t.life < 0) { A.blast(t.pos, 8, 20, { smokeColumn: false }); A.remove(t.m); continue; }
             }
             t.m.position.copy(t.pos);
             t.m.quaternion.setFromUnitVectors(v3(0, 0, 1), t.dir);
           }
-          return this.t < 30 && (this.dropped < n || tanks.some(t => t.m.parent));
+          return this.t < 40 && (this.dropped < n || tanks.some(t => t.m.parent && !t.e.gone));
         },
         dispose() { A.remove(plane); for (const t of tanks) { A.remove(t.m); A.remove(t.ch); } },
       });
       const g = cineGame(A); if (!g) return;
+      // 포탑 뒤에서 표적 건물을 보는 시점
+      const tk = () => tanks.find(t => t.landed && t.m.parent && t.drive <= 0) || tanks[0];
+      const behind = () => { const t = tk(); if (!t) return v3(p.x, p.y + 60, p.z); const wy = t.yaw + Math.atan2(t.dir.x, t.dir.z); return t.pos.clone().add(v3(-Math.sin(wy) * 26, 9, -Math.cos(wy) * 26)); };
+      const tgtOf = () => { const t = tk(); if (!t) return v3(p.x, p.y, p.z); if (t.tgt) return v3(t.tgt.cx, t.tgt.baseY + Math.min(30, t.tgt.height * 0.4), t.tgt.cz); const wy = t.yaw + Math.atan2(t.dir.x, t.dir.z); return t.pos.clone().add(v3(Math.sin(wy) * 60, 6, Math.cos(wy) * 60)); };
       g.cine.play([
-        watch(v3(p.x, p.y, p.z).addScaledVector(f, -260).add(v3(0, 90, 0)), () => plane.position, { dur: 6.5, fov: 48, caption: `공수 낙하 전차 ${n}대`, smooth: 0.3 }),
-        orbit(v3(p.x, p.y, p.z), { dist: 200, h: 70, a0: Math.atan2(-f.z, -f.x), a1: Math.atan2(-f.z, -f.x) + 0.8, dur: 6, look: 10 }),
+        watch(v3(p.x, p.y, p.z).addScaledVector(f, -260).add(v3(0, 90, 0)), () => plane.position, { dur: 5.5, fov: 48, caption: `공수 낙하 전차 ${n}대`, smooth: 0.3 }),
+        watch(v3(p.x, p.y, p.z).addScaledVector(f, -150).addScaledVector(side, 60).add(v3(0, 25, 0)), () => (tanks[0] ? tanks[0].pos : v3(p.x, p.y, p.z)), { dur: 4, fov: 50, smooth: 0.25 }),
+        watch(behind, tgtOf, { dur: 7, fov: 55, caption: '포격', smooth: 0.15 }),
+        watch(() => { const q = tgtOf(); const t = tk(); const away = t ? q.clone().sub(t.pos).setY(0).normalize() : f; return q.clone().addScaledVector(v3(-away.z, 0, away.x), 90).addScaledVector(away, -30).add(v3(0, 20, 0)); }, tgtOf, { dur: 5, fov: 52, smooth: 0.3 }),
       ]);
     },
   },

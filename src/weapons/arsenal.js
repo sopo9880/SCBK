@@ -20,11 +20,23 @@ import { NEW5, NEW5_ENDINGS } from './new5.js';
 import { NEW6, NEW6_ENDINGS } from './new6.js';
 import { MOVIE2, MOVIE2_ENDINGS } from './movie2.js';
 import { GUIDED, GUIDED_ENDINGS } from './guided.js';
-Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS, MOVIE_ENDINGS, NEW4_ENDINGS, NEW5_ENDINGS, NEW6_ENDINGS, MOVIE2_ENDINGS, GUIDED_ENDINGS);
+import { MOVIE3, MOVIE3_ENDINGS } from './movie3.js';
+Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS, MOVIE_ENDINGS, NEW4_ENDINGS, NEW5_ENDINGS, NEW6_ENDINGS, MOVIE2_ENDINGS, GUIDED_ENDINGS, MOVIE3_ENDINGS);
 
-const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3, ...MOVIE, ...NEW4, ...NEW5, ...NEW6, ...MOVIE2, ...GUIDED };
+const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3, ...MOVIE, ...NEW4, ...NEW5, ...NEW6, ...MOVIE2, ...GUIDED, ...MOVIE3 };
 export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+// ×75 이상에서 한 발짜리 무기는 "일제 사격"으로: [발 수, 퍼지는 반경(m), 걸리는 시간(초)]
+const BURST = {
+  bomb: [24, 480, 4], missile: [22, 480, 4], bunker: [16, 450, 4], railgun: [18, 420, 3], elevator: [3, 300, 5], strafe: [2, 300, 6], rod: [12, 480, 3.5],
+  plasma: [8, 420, 4], napalm: [10, 480, 4], minefield: [5, 420, 3], demolition: [12, 480, 6], cruise: [12, 480, 5],
+  tornado: [4, 380, 4], sinkhole: [6, 420, 4], airship: [6, 420, 5], dustex: [5, 420, 3], hail: [3, 380, 3],
+  thermobaric: [6, 420, 3], deepblast: [6, 420, 3], vacuum: [6, 420, 3], landslide: [3, 380, 4],
+  soccer: [24, 420, 6], bowling: [14, 420, 5], domino: [14, 420, 5], marbles: [5, 380, 4], ball: [10, 420, 5], top: [8, 420, 4],
+  shrink: [12, 420, 4], portal: [5, 380, 4], jenga: [12, 420, 5], sharknado: [5, 380, 4], sandworm: [5, 420, 8], giantape: [3, 380, 6],
+  geyser: [6, 420, 4], pendulum: [6, 420, 4], methane: [5, 420, 4], blocks: [5, 380, 4], wildfire: [4, 420, 3], psychic: [5, 420, 4],
+  tripod: [5, 400, 5], superfight: [2, 300, 4], stomp: [6, 420, 4], train: [3, 380, 4], dinos: [2, 380, 3], datacrash: [4, 400, 3], voxel: [5, 420, 4], melt: [5, 420, 4],
+};
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
 
 export class Arsenal {
@@ -38,6 +50,7 @@ export class Arsenal {
     this._hold = null;
     this._crater = [];
     this._tmp = v3();
+    this.summons = new Set();   // 소환한 물체 (진공청소기가 빨아들일 수 있음)
   }
 
   get S() { return powerScale(this.power); }
@@ -49,6 +62,7 @@ export class Arsenal {
     this._newShot(hit && hit.point);
     const h = HANDLERS[this.current];
     if (h && h.fire) h.fire(this, hit, cameraPos.clone());
+    if (hit && this.S.P >= 75 && BURST[this.current]) this._burst(this.current, hit.point);
     if (hit) runEnding(this, this.current, hit.point);
   }
   // 다른 무기를 지금 위력으로 한 번 쏘기 (세계 멸망 결말에서 여러 번 쓸 때)
@@ -68,6 +82,26 @@ export class Arsenal {
     if (h && h.holdEnd) h.holdEnd(this, this._hold.state);
     if (this._holdAim) runEnding(this, this._hold.id, this._holdAim);
     this._hold = null; this._holdAim = null;
+  }
+
+  // 일제 사격: 표적 주변에 같은 무기를 여러 번 (연출·결말 없이)
+  _burst(id, p) {
+    const [n, rad, dur] = BURST[id];
+    const half = this.ctx.grid.span / 2 * 0.9, r = Math.min(rad, half);
+    const pts = [];
+    for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 * 3.7, d = r * Math.sqrt((i + 1) / n); pts.push({ x: Math.max(-half, Math.min(half, p.x + Math.cos(a) * d)), z: Math.max(-half, Math.min(half, p.z + Math.sin(a) * d)) }); }
+    let k = 0;
+    const self = this;
+    this.addActive({ t: 0, update(dt) {
+      this.t += dt;
+      while (k < n && this.t >= 0.6 + (k / n) * dur) {
+        const q = pts[k++], gy = self.ctx.grid.sample(q.x, q.z);
+        const hit = self.ctx.D.raycast({ x: q.x, y: gy + 2500, z: q.z }, { x: 0, y: -1, z: 0 }, 6000) || { point: { x: q.x, y: gy, z: q.z }, info: null };
+        const cine = self.opts.cinematic; self.opts.cinematic = false; self._noEnding = true;
+        try { const h = HANDLERS[id]; if (h && h.fire) h.fire(self, hit, self.ctx.camera.position.clone()); } finally { self.opts.cinematic = cine; self._noEnding = false; }
+      }
+      return k < n;
+    } });
   }
 
   // 새 발사: 기다리던 세계 멸망 카운트다운·행성 장면은 취소
@@ -101,6 +135,9 @@ export class Arsenal {
       runEnding(this, this._lastId || 'bomb', this._lastPoint, true);
     }
   }
+
+  // 소환물 등록: 빨려 들어가면 e.captured = true (무기는 그때부터 움직임·파괴를 멈춤), 다 빨려 들어가면 e.gone = true
+  summon(obj) { const e = { obj, captured: false, gone: false }; this.summons.add(e); return e; }
 
   spawn(obj, scale = 1) { obj.scale.setScalar(scale); this.ctx.scene.add(obj); return obj; }
   remove(obj) {
@@ -189,6 +226,7 @@ export class Arsenal {
     for (const p of this.projectiles) this.remove(p.mesh);
     for (const a of this.active) if (a.dispose) a.dispose();
     this.projectiles = []; this.active = [];
+    this.summons.clear();
     this.holdEnd();
   }
 }

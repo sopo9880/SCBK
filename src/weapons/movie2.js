@@ -2,7 +2,7 @@
 // 행성 파괴 요새, 거대 모래벌레, 기후 위성 오작동, 초능력 폭주, 공룡 떼 질주, 데이터 붕괴
 import * as THREE from 'three';
 import { makeFortress, makeWorm, makeDino, makeClimateSat, glyphTexture, glow } from './models4.js';
-import { cineGame, watch, orbit, chase, camDir } from './cam.js';
+import { cineGame, watch, orbit, chase, camDir, clearSpot } from './cam.js';
 import { fxBlast, over, mapPoint, copies } from './endings.js';
 import { worldEnd, wipeMap, crustCollapse } from './apocalypse.js';
 
@@ -150,7 +150,7 @@ export const MOVIE2 = {
       const low = c.clone().addScaledVector(f, -rw * 10 - 120).add(v3(0, 40, 0));
       g.cine.play([
         watch(low, () => st.trail, { dur: T1, fov: 58, caption: '거대 모래벌레', smooth: 0.3 }),
-        watch(low.clone().add(v3(0, rw * 1.5, 0)), c.clone().addScaledVector(dir, rw * 3.5).add(v3(0, H * 0.55, 0)), { dur: 7.5, fov: 62, ts: (u) => (u < 0.3 ? 0.55 : 1), smooth: 0.3 }),
+        watch(clearSpot(A, c.clone().lerp(e, 0.5).add(v3(0, 10, 0)), { dist: rw * 10 + 180, h: 90, a0: Math.atan2(-f.z, -f.x) }), c.clone().addScaledVector(dir, rw * 3.5).add(v3(0, H * 0.45, 0)), { dur: 7.5, fov: 62, ts: (u) => (u < 0.3 ? 0.55 : 1), smooth: 0.3 }),
       ]);
     },
   },
@@ -245,7 +245,7 @@ export const MOVIE2 = {
         const h = (kind ? 32 : 20) * S.r ** 0.4 * (0.8 + R() * 0.4);
         const m = A.spawn(makeDino(kind, cols[i % cols.length]), h);
         const lat = (R() - 0.5) * 2 * W;
-        herd.push({ m, h, kind, pos: c.clone().addScaledVector(dir, -620 - R() * 260).addScaledVector(f, lat), sp: (kind ? 16 : 26) * (0.85 + R() * 0.3), ph: R() * 6.28, hit: new Set() });
+        herd.push({ m, h, kind, pos: c.clone().addScaledVector(dir, -620 - R() * 260).addScaledVector(f, lat), sp: (kind ? 16 : 26) * (0.85 + R() * 0.3), ph: R() * 6.28, hit: new Set(), e: A.summon(m) });
       }
       audio.rumble(18); audio.roar(2);
       A.addActive({
@@ -253,6 +253,7 @@ export const MOVIE2 = {
         update(dt) {
           this.t += dt;
           for (const d of herd) {
+            if (d.e.captured) continue;
             d.pos.addScaledVector(dir, d.sp * dt);
             const gy = grid.sample(d.pos.x, d.pos.z);
             const bob = Math.abs(Math.sin(this.t * d.sp * 0.25 + d.ph)) * d.h * 0.04;

@@ -77,7 +77,13 @@ export const SPECIAL2 = {
           const fall = (Math.sqrt(45 * 45 + 2 * 39 * H) - 45) / 39;
           if (!st.landed && t - st.slamAt > fall * 0.9) {
             st.landed = true;
-            fx.ring(c, r * 2.2, 1.4, 0xd8c0a0, 0.6); fx.addShake(3); audio.boom(3, camera.position.distanceTo(c)); audio.crumble(80);
+            fx.ring(c, r * 2.2, 1.4, 0xd8c0a0, 0.6); fx.ring(c, r * 3.5, 2.2, 0xfff0d8, 0.45); fx.addShake(3.5);
+            audio.boom(3, 30); audio.boom(3, camera.position.distanceTo(c)); audio.thud(); audio.crumble(120);
+            fx.flash = Math.max(fx.flash, 0.25);
+            fx.explosion(c.clone().add(v3(0, 4, 0)), r * 0.45, { ring: true, smokeColumn: false });
+            // 땅을 따라 사방으로 퍼지는 먼지벽
+            for (let i = 0; i < Math.round(220 * A.ctx.quality.fxScale); i++) { const a = R() * 6.28, d = r * (0.6 + R() * 0.5), sp = 30 + R() * 50; const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.smoke.emit(x, grid.sample(x, z) + 2, z, Math.cos(a) * sp, 4 + R() * 8, Math.sin(a) * sp, 4 + R() * 3, 8, 30, [0.66, 0.62, 0.56, 0.75], [0.6, 0.58, 0.55, 0], 0.9, 0.3); }
+            D.ringPush(c, 0, r * 2.5, 30 * S.v, 0.45);
             for (let i = 0; i < 70; i++) { const a = R() * 6.28, d = R() * r * 1.2; const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.dust({ x, y: grid.sample(x, z), z }, 10); }
             D.explode({ x: c.x, y: c.y + 2, z: c.z, r: r * 1.8, inner: r * 0.95, power: 22 * S.v, lift: 0.15, lod: 1 });
             A.crater(c.x, c.z, r * 0.9, 3 * S.r ** 0.5);
@@ -98,7 +104,7 @@ export const SPECIAL2 = {
         watch(low, c.clone().add(v3(0, 20, 0)), { dur: T_CH, fov: 50, caption: '반중력' }),
         watch(low, () => c.clone().add(v3(0, H * 0.7, 0)), { dur: T_UP, fov: 54, smooth: 0.2 }),
         orbit(c.clone().add(v3(0, H * 0.8, 0)), { dist: r * 1.7, h: 10, a0: Math.atan2(-f.z, -f.x) - 0.2, a1: Math.atan2(-f.z, -f.x) + 0.5, dur: T_HOVER, fov: 56, ts: 0.35 }),
-        watch(() => c.clone().addScaledVector(f, -r * 2.4).addScaledVector(side, -r * 0.8).add(v3(0, r * 0.35, 0)), c, { dur: 2.6, fov: 50, ts: (u) => (u < 0.4 ? 0.6 : 1) }),
+        watch(() => c.clone().addScaledVector(f, -r * 2.4).addScaledVector(side, -r * 0.8).add(v3(0, r * 0.35, 0)), c, { dur: 3.2, fov: 54, ts: (u) => (u < 0.2 ? 0.8 : u < 0.55 ? 0.3 : 1), caption: '쾅' }),
       ]);
     },
   },

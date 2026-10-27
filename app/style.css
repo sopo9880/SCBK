@@ -310,3 +310,15 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #control .cr-status { margin: auto 10px 10px; padding: 8px; font-size: 13px; text-align: center; border: 1px dashed rgba(120,255,180,.35); border-radius: 4px; }
 #control .cr-status.ready { color: #ffb38a; border-color: #ffb38a; animation: crBlink 1s steps(2) infinite; }
 @media (max-width: 900px) { #control { grid-template-columns: 1fr; overflow: auto; } #control .cr-live { min-height: 160px; } }
+
+#tsLabel { position: fixed; left: 50%; top: 14vh; transform: translateX(-50%); z-index: 45; padding: 8px 16px; border-radius: 20px; background: rgba(20,30,60,.7); color: #cfe0ff; font-size: 14px; letter-spacing: .05em; pointer-events: none; animation: crBlink 1.6s steps(2) infinite; }
+
+#qte { position: fixed; left: 50%; bottom: 16vh; transform: translateX(-50%); z-index: 55; width: min(520px, 80vw); text-align: center; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.8); pointer-events: none; }
+#qte b { display: block; letter-spacing: .25em; font-size: 15px; color: #ffd38a; margin-bottom: 8px; }
+#qte .qbar { position: relative; height: 18px; border: 2px solid rgba(255,255,255,.75); border-radius: 10px; background: rgba(0,0,0,.45); overflow: hidden; }
+#qte .zone { position: absolute; top: 0; bottom: 0; background: rgba(90,230,130,.55); }
+#qte .zone.hit { background: rgba(120,255,150,.9); }
+#qte .cur { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 8px #fff; }
+#qte small { display: block; margin-top: 6px; font-size: 12px; opacity: .85; }
+
+#control .cr-zoom { position: absolute; margin: 8px 10px; font-size: 11px; opacity: .7; background: rgba(4,18,12,.6); padding: 3px 8px; border-radius: 3px; }

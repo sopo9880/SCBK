@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { makeBomb, makeMissile, makeBomber } from './models.js';
 import { makeHeli, makeJet, makeGlider, makeAirship, makeSilo, makeMine, makeIceberg, makeClimateSat, lumpy, glow, std } from './models4.js';
-import { cineGame, watch, orbit, chase, camDir } from './cam.js';
+import { cineGame, watch, orbit, chase, camDir, clearSpot } from './cam.js';
 import { fxBlast, over, mapPoint, flood, liftAll, rain, copies } from './endings.js';
 import { worldEnd, wipeMap, crustCollapse } from './apocalypse.js';
 import { boltMesh } from './storms.js';
@@ -41,7 +41,7 @@ function empStrike(A, c, { alt = 400, R0 = 400, planes = 3, big = false } = {}) 
   fx.light(burst.x, burst.y, burst.z, big ? 6e5 : 6e4, R0 * 6, 1.4, 0x9fd4ff);
   audio.crack(); audio.buzz(3);
   // 높은 건물 지붕으로 번개 줄기
-  const tall = D.buildingsNear(c.x, c.z, R0).filter(b => b.state === 'intact').sort((a, b) => b.height - a.height).slice(0, Math.round(10 + R0 / 40));
+  const tall = D.buildingsNear(c.x, c.z, R0).filter(b => b.state === 'intact').sort((a, b) => b.height - a.height).slice(0, Math.round(10 + R0 / (big ? 8 : 40)));
   const bolts = [];
   let bi = 0, blasts = 0;
   A.addActive({
@@ -53,18 +53,18 @@ function empStrike(A, c, { alt = 400, R0 = 400, planes = 3, big = false } = {}) 
       shell.material.opacity = 0.55 * (1 - u);
       sharedUniforms.uPower.value = Math.max(0, 1 - this.t / 0.6);
       this.acc += dt;
-      while (this.acc > 0.09 && bi < tall.length) {
-        this.acc -= 0.09;
+      while (this.acc > (big ? 0.03 : 0.09) && bi < tall.length) {
+        this.acc -= big ? 0.03 : 0.09;
         const b = tall[bi++];
         const top = v3(b.cx, b.baseY + b.height + 1, b.cz);
         const m = boltMesh(v3(burst.x + (R() - 0.5) * 60, burst.y - 10, burst.z + (R() - 0.5) * 60), top);
         scene.add(m); bolts.push({ m, t: 0 });
         fx.sparks(top, UP, 16); fx.light(top.x, top.y, top.z, 3000, 120, 0.3, 0xbfe0ff);
         // 변압기·전력망 폭발
-        if (blasts < (big ? 18 : 8) && R() < 0.6) { blasts++; A.blast(top, 6 + R() * 6, 18, { lift: 0.3, scorch: 0.6, silent: R() > 0.3, lod: 1 }); fx.column(top, 3, 8); }
+        if (blasts < (big ? 90 : 8) && R() < (big ? 0.9 : 0.6)) { blasts++; A.blast(top, big ? 14 + R() * 10 : 6 + R() * 6, big ? 30 : 18, { lift: 0.3, scorch: 0.6, silent: R() > 0.3, lod: 1 }); fx.column(top, 3, 8); }
       }
       for (let i = bolts.length - 1; i >= 0; i--) { const bo = bolts[i]; bo.t += dt; if (bo.t > 0.22) { disposeObj(scene, bo.m); bolts.splice(i, 1); } }
-      return this.t < 3 || bolts.length > 0;
+      return this.t < 3 || bi < tall.length || bolts.length > 0;
     },
     dispose() { disposeObj(scene, shell); for (const bo of bolts) disposeObj(scene, bo.m); },
   });
@@ -144,8 +144,8 @@ export const NEW4 = {
       const f = camDir(camera, v3(first.cx, first.baseY, first.cz)), sd = sideOf(f);
       const H = first.height, ext = Math.max(first.maxx - first.minx, first.maxz - first.minz);
       const ctr = v3(first.cx, first.baseY, first.cz);
-      const wide = ctr.clone().addScaledVector(f, -(H * 1.6 + ext + 90)).addScaledVector(sd, H * 0.5).add(v3(0, H * 0.45 + 12, 0));
-      const base = ctr.clone().addScaledVector(f, -(ext * 0.5 + 45)).addScaledVector(sd, -ext * 0.4).add(v3(0, 4, 0));
+      const wide = clearSpot(A, ctr.clone().add(v3(0, H * 0.3, 0)), { dist: H * 1.6 + ext + 90, h: H * 0.35 + 20, a0: Math.atan2(-f.z, -f.x) + 0.3 });
+      const base = clearSpot(A, ctr.clone().add(v3(0, 3, 0)), { dist: ext * 1.2 + 55, h: 14, a0: Math.atan2(-f.z, -f.x) - 0.4 });
       g.cine.play([
         watch(wide, ctr.clone().add(v3(0, H * 0.45, 0)), { dur: T0 - 0.6, fov: 48, caption: '철거 발파', smooth: 0.3 }),
         watch(base, ctr.clone().add(v3(0, H * 0.5, 0)), { dur: 1.6, fov: 62, ts: (u) => (u < 0.4 ? 1 : 0.35) }),
@@ -197,8 +197,8 @@ export const NEW4 = {
       const g = cineGame(A); if (!g) return;
       const a0 = Math.atan2(camera.position.z - c.z, camera.position.x - c.x);
       g.cine.play([
-        orbit(c, { dist: R0 * 1.4 + 70, h: 30 + R0 * 0.25, a0, a1: a0 + 0.35, dur: 1.4, fov: 52, caption: '지뢰밭' }),
-        orbit(c, { dist: R0 * 1.6 + 90, h: 45 + R0 * 0.4, a0: a0 + 0.35, a1: a0 + 1.1, dur: 2 + n * 0.035, fov: 55, ts: 0.65, cut: false }),
+        orbit(c, { dist: R0 * 1.4 + 70, h: 70 + R0 * 0.5, a0, a1: a0 + 0.35, dur: 1.4, fov: 52, caption: '지뢰밭' }),
+        orbit(c, { dist: R0 * 1.6 + 90, h: 95 + R0 * 0.6, a0: a0 + 0.35, a1: a0 + 1.1, dur: 2 + n * 0.035, fov: 55, ts: 0.65, cut: false }),
       ]);
     },
   },
@@ -213,7 +213,7 @@ export const NEW4 = {
       const st = { planes: null };
       A.addProjectile({
         mesh: bomb, pos: c.clone().add(v3(0, 900, 0)), vel: v3(0, -160, 0), align: 'down', ignoreHits: true,
-        onUpdate(pr) { if (pr.pos.y < c.y + 400) { st.planes = empStrike(A, c, { alt: 400, R0, planes: Math.round(2 + 2 * S.n ** 0.5) }); return false; } return true; },
+        onUpdate(pr) { if (pr.pos.y < c.y + 400) { st.planes = empStrike(A, c, { alt: 400, R0, planes: S.P >= 75 ? 14 : Math.round(2 + 2 * S.n ** 0.5), big: S.P >= 75 }); return false; } return true; },
       });
       audio.whoosh(2);
       const g = cineGame(A); if (!g) return;
@@ -222,6 +222,7 @@ export const NEW4 = {
       const plane = () => (st.planes && st.planes[0] && st.planes[0].pos) || c.clone().add(v3(0, 400, 0));
       g.cine.play([
         watch(low, c.clone().add(v3(0, 380, 0)), { dur: 3.4, fov: 64, caption: 'EMP', smooth: 0.25 }),
+        watch(c.clone().addScaledVector(f, -R0 * 1.1 - 120).addScaledVector(sd, R0 * 0.4).add(v3(0, R0 * 0.45 + 90, 0)), c.clone().add(v3(0, 30, 0)), { dur: 3, fov: 58, caption: '전력망 붕괴', smooth: 0.3 }),
         chase(plane, () => (st.planes && st.planes[0] ? st.planes[0].vel : v3(1, -0.3, 0)), { back: 70, up: 20, ahead: 60, dur: 4.5, fov: 60 }),
         orbit(c, { dist: R0 * 1.2 + 150, h: 140, a0: Math.atan2(-f.z, -f.x), a1: Math.atan2(-f.z, -f.x) + 0.5, dur: 4, fov: 55 }),
       ]);
@@ -262,7 +263,7 @@ export const NEW4 = {
               while (br.k < br.pts.length && br.k * stepL < reach) {
                 const q = br.pts[br.k++];
                 fx.explosion(q, 7 * S.r ** 0.4, { smokeColumn: false });
-                if (br.k % 3 === 0 && phys < 60) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: 13 * S.r ** 0.4, power: 20 * S.v, lift: 0.4, scorch: 0.6, lod: 2 }); A.ctx.world.paintScorch(q.x, q.z, 12, 0.7); }
+                if (br.k % 2 === 0 && phys < 200) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: 16 * S.r ** 0.5, power: 24 * S.v, lift: 0.4, scorch: 0.6, lod: 2 }); A.ctx.world.paintScorch(q.x, q.z, 12, 0.7); }
                 if (br.k % 4 === 0) audio.boom(1, camera.position.distanceTo(q));
               }
             }
@@ -285,7 +286,7 @@ export const NEW4 = {
     fire(A, hit) {
       const S = A.S, p = hit.point, { D, fx, audio, grid, camera } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
-      const n = Math.max(2, Math.min(6, Math.round(2 + S.n ** 0.6)));
+      const n = Math.max(2, Math.min(S.P >= 75 ? 14 : 6, Math.round(2 + S.n ** (S.P >= 75 ? 1 : 0.6))));
       const Ro = 150 * S.r ** 0.3, alt = 55 + S.r * 10, T = 10 * S.t;
       const f0 = camDir(camera, c);
       const helis = [];
@@ -328,7 +329,7 @@ export const NEW4 = {
                 const from = h.pos.clone().add(v3((k % 2 ? 3 : -3), -1.5, 0));
                 const dir = tgt.clone().sub(from).normalize();
                 A.addProjectile({ mesh: A.spawn(makeMissile(), 0.55), pos: from, vel: dir.multiplyScalar(230), align: 'fwd', delay: k * 0.08, trail: { size: 0.8, fire: true, every: 0.015 },
-                  onHit(q) { if (phys < 70) { phys++; A.blast(q, 7 * S.r ** 0.5, 26 * S.v, { lift: 0.3, silent: phys % 2 === 0, lod: 1 }); } else fxBlast(A, q, 7, { silent: true, smoke: false }); } });
+                  onHit(q) { if (phys < 160) { phys++; A.blast(q, 8 * S.r ** 0.6, 30 * S.v, { lift: 0.3, silent: phys % 2 === 0, lod: 1 }); } else fxBlast(A, q, 7, { silent: true, smoke: false }); } });
               }
               audio.rocket(0.6);
             }
@@ -353,19 +354,19 @@ export const NEW4 = {
   hypersonic: {
     fire(A, hit) {
       const S = A.S, p = hit.point, { fx, audio, grid, camera, game } = A.ctx;
-      const n = Math.max(1, Math.min(4, Math.round(S.n ** 0.6)));
+      const n = S.P >= 75 ? 16 : Math.max(1, Math.min(4, Math.round(S.n ** 0.6)));
       const f = camDir(camera, v3(p.x, p.y, p.z)), sd = sideOf(f);
       const T = 7;
       const gl = [];
       if (game) game.ensureView(30000, 3000);
       for (let i = 0; i < n; i++) {
-        const tgt = i === 0 ? v3(p.x, grid.sample(p.x, p.z), p.z) : mapPoint(A, 0.9, v3(p.x, 0, p.z), 0.12);
+        const tgt = i === 0 ? v3(p.x, grid.sample(p.x, p.z), p.z) : mapPoint(A, 0.9, v3(p.x, 0, p.z), S.P >= 75 ? 0.5 : 0.12);
         const back = f.clone().multiplyScalar(-1).applyAxisAngle(UP, (R() - 0.5) * 0.8);
         const P0 = tgt.clone().addScaledVector(back, -16000).add(v3(0, 11000, 0));
         const P1 = tgt.clone().addScaledVector(back, -8000).addScaledVector(sd, 3500 * (R() < 0.5 ? 1 : -1)).add(v3(0, 6500, 0));
         const P2 = tgt.clone().addScaledVector(back, -2500).addScaledVector(sd, -1500).add(v3(0, 3200, 0));
         const m = A.spawn(makeGlider(), 3);
-        gl.push({ m, P: [P0, P1, P2, tgt], t: -i * 1.2, pos: P0.clone(), dir: v3(0, -1, 0), done: false, tgt });
+        gl.push({ m, P: [P0, P1, P2, tgt], t: -i * (S.P >= 75 ? 0.35 : 1.2), pos: P0.clone(), dir: v3(0, -1, 0), done: false, tgt });
       }
       const bez = (P, u, out) => { const a = 1 - u; return out.set(0, 0, 0).addScaledVector(P[0], a * a * a).addScaledVector(P[1], 3 * a * a * u).addScaledVector(P[2], 3 * a * u * u).addScaledVector(P[3], u * u * u); };
       const tmp = v3();
@@ -470,7 +471,7 @@ export const NEW4 = {
       g.cine.play([
         watch(low, () => st.pos, { dur: 3.2, fov: 50, caption: '비행선 추락', smooth: 0.25 }),
         watch(mid, () => st.pos, { dur: 3, fov: 55, smooth: 0.25 }),
-        watch(low.clone().addScaledVector(sd, -L * 0.4).add(v3(0, 30, 0)), () => (st.crashed ? c.clone().add(v3(0, 20, 0)) : st.pos), { dur: 7, fov: 58, ts: (u) => (u > 0.25 && u < 0.6 ? 0.5 : 1), smooth: 0.3 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 8, 0)), { dist: L * 1.4 + 200, h: 100, a0: Math.atan2(-f.z, -f.x) - 0.4 }), () => (st.crashed ? c.clone().add(v3(0, 20, 0)) : st.pos), { dur: 7, fov: 58, ts: (u) => (u > 0.25 && u < 0.6 ? 0.5 : 1), smooth: 0.3 }),
       ]);
     },
   },
@@ -480,7 +481,7 @@ export const NEW4 = {
     fire(A, hit) {
       const S = A.S, p = hit.point, { D, fx, audio, grid, camera } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
-      const passes = Math.max(1, Math.min(4, Math.round(1 + S.n ** 0.5)));
+      const passes = Math.max(1, Math.min(S.P >= 75 ? 8 : 4, Math.round(1 + S.n ** (S.P >= 75 ? 0.9 : 0.5))));
       const f0 = camDir(camera, c);
       const runs = [];
       for (let i = 0; i < passes; i++) {
@@ -516,15 +517,16 @@ export const NEW4 = {
                 const h2 = D.raycast(v3(gp.x, r.pos.y, gp.z), v3(0, -1, 0), 400);
                 const q = h2 ? h2.point : v3(gp.x, grid.sample(gp.x, gp.z), gp.z);
                 fx.sparks(q, UP, 3); if (shots % 3 === 0) fx.dust(q, 1.5);
-                if (shots % 5 === 0 && phys < 120) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: 4.5 * S.r ** 0.4, power: 22 * S.v, lift: 0.25, lod: 2 }); }
+                if (shots % (S.P >= 75 ? 3 : 5) === 0 && phys < (S.P >= 75 ? 320 : 120)) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: 4.5 * S.r ** (S.P >= 75 ? 0.7 : 0.4), power: 22 * S.v, lift: 0.25, lod: 2 }); }
               }
               if (shots % 12 === 0) audio.buzz(0.15);
             }
             // 폭탄 한 발
             if (!r.bombed && s > -120) {
               r.bombed = true;
+              for (let bk = 1; bk < (S.P >= 75 ? 5 : 1); bk++) A.addProjectile({ mesh: A.spawn(makeBomb(), 1.4), pos: r.pos.clone().add(v3(0, -3, 0)).addScaledVector(r.dir, -bk * 25), vel: r.dir.clone().multiplyScalar(sp * 0.6), g: 30, align: 'fwd', onHit: (q) => A.blast(q, 28 * S.r ** 0.7, 50 * S.v, { crater: [8, 3], lift: 0.4, silent: true }) });
               A.addProjectile({ mesh: A.spawn(makeBomb(), 1.4), pos: r.pos.clone().add(v3(0, -3, 0)), vel: r.dir.clone().multiplyScalar(sp * 0.6), g: 30, align: 'fwd',
-                onHit: (q) => A.blast(q, 22 * S.r ** 0.6, 45 * S.v, { crater: [6, 3], lift: 0.4 }) });
+                onHit: (q) => A.blast(q, 28 * S.r ** 0.7, 50 * S.v, { crater: [8, 3], lift: 0.4 }) });
             }
           }
           return live > 0;
@@ -536,7 +538,7 @@ export const NEW4 = {
       const r0 = runs[0], sd = sideOf(r0.dir);
       g.cine.play([
         chase(() => r0.pos, () => r0.dir, { back: 45, up: 8, side: 12, ahead: 120, dur: (half - 250) / sp, fov: 58, caption: '전투기 기총소사' }),
-        watch(c.clone().addScaledVector(sd, 130).addScaledVector(r0.dir, 60).add(v3(0, 12, 0)), () => (r0.m.visible === false ? c : r0.pos.clone().lerp(c, 0.5)), { dur: 4.5, fov: 60, ts: 0.5, smooth: 0.15 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 4, 0)), { dist: 190, h: 60, a0: Math.atan2(-r0.dir.z, -r0.dir.x) + 0.6 }), () => (r0.m.visible === false ? c : r0.pos.clone().lerp(c, 0.5)), { dur: 4.5, fov: 60, ts: 0.5, smooth: 0.15 }),
       ]);
     },
   },
@@ -582,9 +584,9 @@ export const NEW4 = {
             if (k >= 1 && !land[j]) {
               land[j] = true;
               const q = v3(pts[j].x, gyy, pts[j].z);
-              const r = (14 + hs[j] * 0.006) * S.r ** 0.4;
+              const r = (14 + hs[j] * 0.006) * S.r ** (S.P >= 75 ? 0.8 : 0.4);
               const inside = Math.abs(q.x) < half * 0.98 && Math.abs(q.z) < half * 0.98;
-              if (inside && phys < 40 && j % 2 === 0) { phys++; A.blast(q, r, 40 * S.v, { lift: 0.5, crater: [r * 0.35, r * 0.15], silent: j % 4 !== 0 }); }
+              if (inside && phys < 80) { phys++; A.blast(q, r * 1.4, 50 * S.v, { lift: 0.5, crater: [r * 0.4, r * 0.18], silent: j % 4 !== 0 }); D.lineBlast(v3(q.x, q.y + 8, q.z).addScaledVector(dir, -H / N), v3(q.x, q.y + 8, q.z), rad * 4, 40 * S.v); }
               else if (inside || hs[j] < H * 0.6) fxBlast(A, q, r * 1.2, { silent: j % 3 !== 0, smoke: j % 2 === 0 });
               if (!inside && A.ctx.world && A.ctx.world.ravageOuter) A.ctx.world.ravageOuter(q.x, q.z, 0, r * 2, 1);
               fx.addShake(0.25);
@@ -605,7 +607,7 @@ export const NEW4 = {
       const g = cineGame(A); if (!g) return;
       const foot = c.clone().addScaledVector(dir, -160).addScaledVector(sd, 90).add(v3(0, 10, 0));
       const sideCam = c.clone().addScaledVector(sd, H * 0.55).addScaledVector(dir, H * 0.3).add(v3(0, H * 0.18, 0));
-      const along = c.clone().addScaledVector(sd, 160).addScaledVector(dir, 200).add(v3(0, 45, 0));
+      const along = clearSpot(A, c.clone().addScaledVector(dir, Math.min(half * 0.6, H * 0.3)), { dist: 280, h: 130, a0: Math.atan2(sd.z, sd.x) });
       g.cine.play([
         watch(foot, c.clone().add(v3(0, H * 0.5, 0)), { dur: T0 + 0.6, fov: 70, caption: '우주 엘리베이터 붕괴', smooth: 0.3 }),
         watch(sideCam, () => c.clone().addScaledVector(dir, H * 0.3).add(v3(0, H * 0.15, 0)), { dur: 6, fov: 60, smooth: 0.3 }),
@@ -642,7 +644,7 @@ export const NEW4 = {
             const sz = (0.5 + R() ** 2 * 1.6) * S.r ** 0.6;
             const pos = v3(c.x + Math.cos(a) * d, c.y + alt, c.z + Math.sin(a) * d);
             const vel = v3(6, -70 - sz * 12, 3);
-            if (sz > 2 && balls < 26 && R() < 0.5) {
+            if (sz > 2 && balls < (S.P >= 75 ? 60 : 26) && R() < 0.5) {
               balls++;
               const m = new THREE.Mesh(iceGeo, iceMat); m.castShadow = true; m.scale.setScalar(sz); scene.add(m);
               D.addBall(pos, vel, sz, m, { life: 25 });
@@ -653,7 +655,7 @@ export const NEW4 = {
               onHit(q) {
                 fx.sparks(q, UP, 4); fx.dust(q, sz);
                 for (let i = 0; i < 4; i++) fx.smoke.emit(q.x, q.y + 0.5, q.z, (R() - 0.5) * 10, 3 + R() * 5, (R() - 0.5) * 10, 1, sz * 0.4, sz * 0.2, [0.95, 0.98, 1, 0.9], [0.9, 0.95, 1, 0], 1.2, -6);
-                if (sz > 1.1 && phys < 140) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: sz * 2.4, power: 14 + sz * 4, lift: 0.15, lod: 2 }); }
+                if (sz > 1.1 && phys < 220) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: sz * 3.2, power: (16 + sz * 8) * S.v, lift: 0.2, lod: 2 }); }
                 if (R() < 0.3) world.paintFrost(q.x, q.z, sz * 5, 0.25);
               } });
           }
@@ -1050,7 +1052,7 @@ export const NEW4 = {
       const g = cineGame(A); if (!g) return;
       const f = camDir(camera, c), sd = sideOf(f);
       g.cine.play([
-        watch(c.clone().addScaledVector(f, -R0 - 150).addScaledVector(sd, 60).add(v3(0, 30, 0)), c.clone().add(v3(0, 8, 0)), { dur: ign - 0.3, fov: 55, caption: '메탄 분출', smooth: 0.3 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 6, 0)), { dist: R0 + 170, h: 75, a0: Math.atan2(-f.z, -f.x) + 0.3 }), c.clone().add(v3(0, 8, 0)), { dur: ign - 0.3, fov: 55, caption: '메탄 분출', smooth: 0.3 }),
         watch(c.clone().addScaledVector(f, -R0 * 1.6 - 200).addScaledVector(sd, -80).add(v3(0, 60, 0)), c.clone().add(v3(0, 25, 0)), { dur: 4.5, fov: 60, ts: (u) => (u < 0.4 ? 0.45 : 1), smooth: 0.3 }),
       ]);
     },

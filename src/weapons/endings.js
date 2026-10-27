@@ -195,6 +195,8 @@ export function runEnding(A, id, point, force = false) {
       if (this.phase === 0) {
         // 무기 자체 연출이 끝날 때까지 (너무 길면 12초에서 끊음)
         if (game && game.pilot) return true;       // 직접 조종 중에는 끝날 때까지 기다림
+        if (A._timestop) return true;              // 시간 정지 중에는 재개될 때까지
+        if (fn.when) { const ok = fn.when(A); if (ok === undefined) return true; if (!ok) return false; }   // 결과에 따라 결말이 없을 수도 (소행성 시추 성공 등)
         if (this.t >= minDelay && (!game || !game.cine.active || this.t > minDelay + 12)) { this.phase = 1; this.n = 0; }
         return true;
       }

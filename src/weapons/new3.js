@@ -146,21 +146,37 @@ export const NEW3 = {
   timestop: {
     fire(A) {
       const { D, hud, audio } = A.ctx;
-      const dur = 6 + A.S.t * 3;
-      const prev = D.timeScale;
+      // 이미 멈춰 있으면 다시 흐르게
+      if (A._timestop) { A._timestop.resume(); return; }
+      const prev = D.timeScale === 0.015 ? 1 : D.timeScale;
       D.timeScale = 0.015;
       document.body.classList.add('timestop');
+      let lab = document.getElementById('tsLabel');
+      if (!lab) { lab = document.createElement('div'); lab.id = 'tsLabel'; lab.textContent = '시간 정지 중 — 시간 정지를 다시 쓰면 재개'; document.body.appendChild(lab); }
+      lab.hidden = false;
       audio.rewind(0.8);
-      if (hud) hud.toast(`시간 정지 ${dur.toFixed(0)}초 — 지금 마음껏 쏘세요`, 'info');
-      A.addActive({
+      if (hud) hud.toast('시간 정지 — 마음껏 쏜 뒤 다시 누르면 한꺼번에 재생', 'info');
+      const st = {
         real: 0,
+        resume() {
+          if (A._timestop !== st) return;
+          A._timestop = null;
+          if (D.timeScale === 0.015) D.timeScale = prev;
+          document.body.classList.remove('timestop');
+          lab.hidden = true;
+          audio.whoosh(1); A.ctx.fx.addShake(0.8);
+          if (hud) hud.toast('시간 재개', 'info');
+        },
+      };
+      A._timestop = st;
+      A.addActive({
         update(dt) {
-          // 무기 시간도 멈춰 있으므로 실제 시간으로 되돌려 계산
-          this.real += dt / Math.max(0.001, D.timeScale);
-          if (this.real >= dur) { D.timeScale = prev === 0.015 ? 1 : prev; document.body.classList.remove('timestop'); audio.whoosh(1); return false; }
+          if (A._timestop !== st) return false;
+          st.real += dt / Math.max(0.001, D.timeScale);
+          if (st.real > 180) st.resume();   // 안전장치: 3분 뒤 자동 재개
           return true;
         },
-        dispose() { if (D.timeScale === 0.015) D.timeScale = 1; document.body.classList.remove('timestop'); },
+        dispose() { st.resume(); },
       });
     },
   },
@@ -299,6 +315,30 @@ export const NEW3 = {
       const r = 70 * (G.giant ? L.sc : G.hit * 0.8);
       L.eaten += D.field({ x: mouth.x, y: mouth.y, z: mouth.z, r, mode: 'gravity', core: 14 * L.sc, grab: r * 0.6, strength: 60 * G.pw, consume: true }, dt);
       for (let i = 0; i < 6; i++) { const a = R() * 6.28, d = r * (0.4 + R() * 0.6); const x = mouth.x + Math.cos(a) * d, z = mouth.z + Math.sin(a) * d; fx.smoke.emit(x, grid.sample(x, z) + 1, z, (mouth.x - x) * 1.2, 12, (mouth.z - z) * 1.2, 1, 6, 1, [0.6, 0.58, 0.55, 0.5], [0.6, 0.58, 0.55, 0], 0, 0); }
+      // 소환한 물체도 빨아들임: 물리 공(철구·볼링공·축구공·자기장 구 등)
+      const core = 14 * L.sc;
+      for (const b of [...D.balls]) {
+        const t = b.body.translation();
+        const dx = mouth.x - t.x, dy = mouth.y - t.y, dz = mouth.z - t.z, d = Math.hypot(dx, dy, dz);
+        if (d > r * 1.4) continue;
+        if (d < core + b.radius) { D.removeBall(b); L.eaten++; fx.sparks(mouth, { x: 0, y: 1, z: 0 }, 10); A.ctx.audio.thud(); continue; }
+        const sp = 25 + 60 * (1 - d / (r * 1.4));
+        b.body.setLinvel({ x: dx / d * sp, y: dy / d * sp + 4, z: dz / d * sp }, true);
+      }
+      // 움직이는 소환물(팽이·블록·공룡·전차 등): 끌려와 작아지며 사라짐
+      for (const e of A.summons) {
+        const o = e.obj;
+        if (!e.captured) {
+          if (!o.parent || o.position.distanceTo(mouth) > r * 1.2) continue;
+          e.captured = true; e.t = 0; e.p0 = o.position.clone(); e.s0 = o.scale.clone();
+        }
+        e.t += dt;
+        const u = Math.min(1, e.t / 0.9);
+        o.position.lerpVectors(e.p0, mouth, u * u);
+        o.scale.copy(e.s0).multiplyScalar(Math.max(0.03, 1 - u * 0.97));
+        o.rotation.y += dt * 8;
+        if (u >= 1) { e.gone = true; o.visible = false; A.summons.delete(e); L.eaten++; fx.sparks(mouth, { x: 0, y: 1, z: 0 }, 10); }
+      }
       fx.addShake(dt * 0.4);
     },
     holdEnd(A, L) {
@@ -449,20 +489,9 @@ export const NEW3 = {
 
 export const NEW3_ENDINGS = {
   // 멈춘 시간에 금이 가고, 시간이 다시 흐르는 순간 세계가 한꺼번에 부서짐
-  timestop: (A, c) => {
-    const { D } = A.ctx; const dur = 6 + A.S.t * 3;
-    A.addActive({
-      real: 0,
-      update(dt) {
-        this.real += dt / Math.max(0.001, D.timeScale);
-        if (this.real < dur + 0.3) return true;
-        crustCollapse(A, c, { level: 1, cracks: 10 });
-        wipeMap(A, c, 'void', { dur: 5 });
-        worldEnd(A, c, 'void', { delay: 1, planetKind: 'shatter' });
-        return false;
-      },
-    });
-  },
+  // 시간이 다시 흐르는 순간 멈춰 있던 세계가 한꺼번에 부서짐
+  timestop: (A, c) => { crustCollapse(A, c, { level: 1, cracks: 10 }); wipeMap(A, c, 'void', { dur: 5 }); worldEnd(A, c, 'void', { delay: 1, planetKind: 'shatter' }); },
+
   portal: (A, c) => { liftAll(A, c, 6); worldEnd(A, c, 'void', { delay: 2, planetKind: 'void' }); },
   shrink: (A, c) => { wipeMap(A, c, A.opts.enlarge ? 'nuke' : 'void', { dur: 8 }); worldEnd(A, c, 'void', { delay: 3, planetKind: A.opts.enlarge ? 'shatter' : 'void' }); },
   nano: (A, c) => { wipeMap(A, c, 'nuke', { dur: 16 }); worldEnd(A, c, 'ash', { delay: 5, planetKind: 'ash' }); },

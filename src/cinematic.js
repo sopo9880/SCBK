@@ -41,6 +41,7 @@ export class Cinematic {
     this._snap = s.cut !== false;
     if (s.enter) s.enter();
     this._solveOcclusion(s);
+    this._evLift = 0; if (s.cut !== false || !this._evLiftCur) this._evLiftCur = 0; else this._evLift = this._evLiftCur;
     if (this.capEl) { this.capEl.textContent = s.caption || ''; this.capEl.classList.toggle('show', !!s.caption); }
   }
   skip() {
@@ -95,10 +96,14 @@ export class Cinematic {
     this._rot = 0; this._lift = 0; this._pull = 0;
     if (!this.game.D || !this.game.D.raycast || s.noAvoid) return;
     const smp = [];
+    const g = this.game;
     for (const u of [0.02, 0.5, 0.95]) {
       const o = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: null, timeScale: 1, smooth: 0, fade: 0 };
       try { s.update(u * s.dur, u, o); } catch (e) { return; }
       smp.push(o);
+      // 폭발은 대개 바라보는 곳 아래 지면에서 일어나므로 그 지점도 보여야 함
+      const gy = g.groundAt ? g.groundAt(o.look.x, o.look.z) : g.grid.sample(o.look.x, o.look.z);
+      if (o.look.y - gy > 8 && o.look.y - gy < 400 && !s.chase) smp.push({ pos: o.pos, look: new THREE.Vector3(o.look.x, gy + 3, o.look.z) });
     }
     if (!Cinematic._cands) {
       const c = [];
@@ -142,6 +147,23 @@ export class Cinematic {
     return out;
   }
 
+  // 연출 중 폭발이 일어났는데 건물·언덕에 가려 안 보이면, 보일 때까지 카메라를 부드럽게 올림
+  noteEvent(p) {
+    if (!this.shots || !p) return;
+    const s = this.shots[this.i]; if (!s || s.noAvoid || s.chase) return;
+    const cam = this.game.camera.position;
+    const q = new THREE.Vector3(p.x, p.y + 2, p.z);
+    const base = this._fix || cam;
+    if (q.distanceTo(base) > 6000) return;
+    const test = new THREE.Vector3();
+    if (this._clear(q, test.copy(base))) return;
+    for (const L of [15, 30, 60, 100, 160, 240, 340]) {
+      if (L <= this._evLift) continue;
+      test.copy(base); test.y += L - (this._evLiftCur || 0);
+      if (this._clear(q, test)) { this._evLift = L; return; }
+    }
+  }
+
   // dt: 실제 시간(카메라 부드럽게 따라가기), tdt: 게임 시간(샷 진행).
   // 샷 진행을 무기·물리와 같은 시간으로 돌려야 슬로모션 중에도 연출과 사건이 어긋나지 않음
   update(dt, tdt = dt) {
@@ -157,6 +179,8 @@ export class Cinematic {
     const out = { pos: this._pos, look: this._look, fov: null, timeScale: 1, smooth: 0, fade: 0 };
     s.update(this.t, clamp01(this.t / s.dur), out);
     if (this._rot || this._lift || this._pull) this._apply(out.pos, out.look, this._rot, this._lift, out.pos, this._pull);
+    this._evLiftCur += (this._evLift - this._evLiftCur) * Math.min(1, dt * 2.5);
+    out.pos.y += this._evLiftCur;
     this.timeScale = out.timeScale; this.fade = out.fade;
     const cam = this.game.camera;
     const k = this._snap ? 1 : out.smooth > 0 ? 1 - Math.exp(-dt * (1 / out.smooth)) : 1;

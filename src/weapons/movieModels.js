@@ -79,6 +79,51 @@ export function makeTripod() {
   return sh(g);
 }
 
+// 세 다리 침략자 (새 디자인): 넓고 납작한 원반 머리 + 늘어진 촉수 + 앞쪽 열선 팔.
+// 다리는 걸음마다 관절을 다시 계산하므로 머리와 따로 만들어 둠 (legs: [{thigh, shin, foot}])
+export function makeTripodParts() {
+  const hull = std(0x6f7468, { metalness: 0.75, roughness: 0.32 }), dark = std(0x2a2c26, { metalness: 0.6 }), joint = std(0x3c3f37, { metalness: 0.8 });
+  const head = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 14, 0, Math.PI * 2, 0, Math.PI / 2), hull); top.scale.set(30, 7, 30); head.add(top);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(30, 2.2, 10, 64), dark); rim.rotation.x = Math.PI / 2; head.add(rim);
+  const bot = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), dark); bot.scale.set(28, 9, 28); head.add(bot);
+  // 위쪽 등줄기와 아래쪽 발광 고리
+  for (let i = 0; i < 6; i++) { const r = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 26), joint); r.rotation.y = i / 6 * Math.PI; r.position.y = 5.5; head.add(r); }
+  const glowRing = new THREE.Mesh(new THREE.TorusGeometry(16, 0.9, 8, 48), glow(0x8affc8, 0.85)); glowRing.rotation.x = Math.PI / 2; glowRing.position.y = -7.5; head.add(glowRing);
+  // 앞쪽 "눈" 두 개
+  for (const s2 of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(2.2, 12, 8), glow(0x9ff0ff, 1)); e.position.set(s2 * 6, -1.5, 28); head.add(e); }
+  // 열선 팔 (앞쪽 아래에서 뻗어나온 마디 팔 + 덮개 + 발광 끝)
+  const arm = new THREE.Group(); arm.position.set(0, -6, 22); head.add(arm);
+  const a1 = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 14, 8), joint); a1.rotation.x = Math.PI / 2 + 0.5; a1.position.set(0, -3, 6); arm.add(a1);
+  const cowl = new THREE.Mesh(new THREE.ConeGeometry(4, 9, 12, 1, true), dark); cowl.rotation.x = -Math.PI / 2 - 0.5; cowl.position.set(0, -6.5, 13); arm.add(cowl);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(2, 10, 8), glow(0xffa060, 1)); tip.position.set(0, -7.5, 15); arm.add(tip);
+  // 촉수: 아래로 늘어져 흔들리는 마디
+  const tentacles = [];
+  for (let k = 0; k < 5; k++) {
+    const segs = []; let parent = head;
+    const a = k / 5 * Math.PI * 2 + 0.3;
+    for (let i = 0; i < 7; i++) {
+      const g = new THREE.Group();
+      if (i === 0) g.position.set(Math.cos(a) * 10, -8, Math.sin(a) * 10); else g.position.y = -4.2;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.9 - i * 0.1, 1.0 - i * 0.1, 4.4, 6), dark); m.position.y = -2.1; g.add(m);
+      parent.add(g); segs.push(g); parent = g;
+    }
+    tentacles.push(segs);
+  }
+  // 다리 (머리와 따로)
+  const legs = [];
+  for (let i = 0; i < 3; i++) {
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.3, 1, 8), hull);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.6, 1, 8), hull);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(3.2, 10, 8), joint);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 6, 2.5, 10), dark);
+    for (const m of [thigh, shin, knee, foot]) m.castShadow = true;
+    legs.push({ thigh, shin, knee, foot });
+  }
+  sh(head);
+  return { head, arm, tip, tentacles, legs, glowRing };
+}
+
 // 거대 로봇 (원점 = 바닥, 앞쪽 = +Z, 키 약 140)
 export function makeMech() {
   const g = new THREE.Group();

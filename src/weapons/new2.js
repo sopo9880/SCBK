@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { makeMeteor } from './models.js';
 import { makeAsteroid, glowMat } from './models2.js';
-import { cineGame, watch, orbit, chase, camDir } from './cam.js';
+import { cineGame, watch, orbit, chase, camDir, clearSpot } from './cam.js';
 import { fxBlast, over, mapPoint, flood, copies } from './endings.js';
 import { worldEnd, wipeMap, crustCollapse } from './apocalypse.js';
 import { funnelMat, Rain, boltMesh } from './storms.js';
@@ -77,7 +77,7 @@ export const NEW2 = {
       g.cine.play([
         // 혜성이 다가오는 쪽을 마주 보는 자리에서
         watch(center.clone().addScaledVector(side, 520).addScaledVector(f, -250).add(v3(0, 60, 0)), () => (st.split ? center : st.pos), { dur: T * 0.55, fov: 45, caption: '혜성 분열', smooth: 0.2 }),
-        watch(center.clone().addScaledVector(side, 380).addScaledVector(f, -200).add(v3(0, 130, 0)), () => { const fr = st.frags.find(x => x && x.pos); return fr ? fr.pos.clone().lerp(center, 0.6) : center; }, { dur: T * 0.9, fov: 58, smooth: 0.4, ts: (u) => (u < 0.6 ? 0.7 : 1) }),
+        watch(clearSpot(A, center, { dist: 560, h: 280, a0: Math.atan2(side.z - f.z * 0.5, side.x - f.x * 0.5) }), () => { const fr = st.frags.find(x => x && x.pos); return fr ? fr.pos.clone().lerp(center, 0.6) : center; }, { dur: T * 0.9, fov: 58, smooth: 0.4, ts: (u) => (u < 0.6 ? 0.7 : 1) }),
       ]);
     },
   },

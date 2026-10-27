@@ -124,6 +124,12 @@ export class Audio {
     for (const f of [180, 232, 291]) this._tone(f, f * 0.94, dur, 0.035, 'sawtooth');
     this._noise(dur, 1800, 0.05, 0.3, 4, 600);
   }
+  // 관제실 효과음
+  beep(f = 880, dur = 0.09, gain = 0.12) { if (!this._init() || this.muted) return; this._tone(f, f, dur, gain, 'square'); }
+  clack() { if (!this._init() || this.muted) return; this._noise(0.08, 3500, 0.35, 0.002, 2, 900); this._tone(220, 120, 0.06, 0.2, 'square'); }
+  click() { if (!this._init() || this.muted) return; this._noise(0.03, 6000, 0.25, 0.001, 3, 2500); this._tone(1400, 900, 0.03, 0.08, 'square'); }
+  alarm(dur = 0.4) { if (!this._init() || this.muted) return; this._tone(660, 990, dur, 0.1, 'sawtooth'); }
+  launch() { if (!this._init() || this.muted) return; this._noise(2.6, 900, 0.8, 0.05, 0.8, 120); this._tone(70, 40, 2.4, 0.5, 'sawtooth'); }
   horn(dur = 1.6) {
     if (!this._init() || this.muted) return;
     for (const f of [311, 370, 466]) this._tone(f, f * 0.995, dur, 0.09, 'sawtooth');

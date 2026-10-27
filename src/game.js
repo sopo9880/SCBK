@@ -76,6 +76,10 @@ export class Game {
     this._initContent();
     this._initControls();
     this.cine = new Cinematic(this);
+    // 폭발을 연출 카메라에 알려 가리면 시야를 확보하게
+    { const fx = this.fx, D = this.D, cine = this.cine;
+      const oe = fx.explosion.bind(fx); fx.explosion = (p, r, o) => { cine.noteEvent(p); return oe(p, r, o); };
+      const ox = D.explode.bind(D); D.explode = (o) => { if (o && o.r > 8) cine.noteEvent(o); return ox(o); }; }
     this.storm = 0;
     this._bind();
     this._fpsT = 0; this._fpsN = 0; this.fps = 60;
@@ -461,6 +465,7 @@ export class Game {
       this._onMove(e);
       if (this.planetFX) { this.endPlanet(); return; }
       if (this.pilot) { if (this.pilot.click) this.pilot.click(); return; }
+      if (this.arsenal._qte) { this.arsenal._qte(); return; }
       if (this.cine.active) { this.cine.skip(); return; }
       const hit = this.pick();
       if (!hit) return;
@@ -497,6 +502,37 @@ export class Game {
   }
 
   setSlowMo(on) { this.D.timeScale = on ? 0.22 : 1; }
+
+  // ---------- 관제실: 위에서 똑바로 내려다보는 고정 시점 (높이만 줌) ----------
+  startOverhead(x, z, h) {
+    this.overhead = { x, z, h, hx: x, hz: z, hh: h, snap: true };
+    this.controls.enabled = false;
+    this.marker.visible = false;
+  }
+  setOverhead(x, z) { if (this.overhead) { this.overhead.x = x; this.overhead.z = z; } }
+  zoomOverhead(f) { const o = this.overhead; if (o) o.h = Math.max(70, Math.min(this.grid.span * 1.6, o.h * f)); }
+  endOverhead() {
+    const o = this.overhead; if (!o) return;
+    this.overhead = null;
+    this.controls.enabled = true;
+    const gy = this.grid.sample(o.hx, o.hz);
+    this.controls.target.set(o.hx, gy, o.hz);
+    const d = Math.min(800, Math.max(220, o.hh * 0.8));
+    this.camera.position.set(o.hx + d * 0.55, gy + d * 0.65, o.hz + d * 0.55);
+    this.camera.fov = this.cfg.fov || 50; this.camera.updateProjectionMatrix();
+    this.controls.update();
+  }
+  _overheadStep(dt) {
+    const o = this.overhead, k = o.snap ? 1 : 1 - Math.exp(-dt * 6);
+    o.snap = false;
+    o.hx += (o.x - o.hx) * k; o.hz += (o.z - o.hz) * k; o.hh += (o.h - o.hh) * k;
+    const gy = this.grid.sample(o.hx, o.hz);
+    this.camera.position.set(o.hx, gy + o.hh, o.hz + 0.01);
+    this.camera.up.set(0, 0, -1);
+    this.camera.lookAt(o.hx, gy, o.hz);
+    this.camera.up.set(0, 1, 0);
+    if (Math.abs(this.camera.fov - 45) > 0.01) { this.camera.fov = 45; this.camera.updateProjectionMatrix(); }
+  }
 
   // ---------- 직접 조종 (유도 미사일, 이후 탈것) ----------
   // p: { update(dt, input) → false 이면 끝, camera(out:{pos,look,fov}), click(), abort(), dispose() }
@@ -628,6 +664,7 @@ export class Game {
     const cine = this.cine.active;
     // 샷은 게임 시간(연출 배속 × 슬로모션)으로 진행 → 무기 사건과 항상 맞음
     if (this.pilot) this._pilotStep(dt);
+    else if (this.overhead) this._overheadStep(dt);
     else if (cine) this.cine.update(dt, dt * this.cine.timeScale * this.D.timeScale);
     else { this._keyboard(dt); this.controls.update(); }
     const ts = this.cine.active ? this.cine.timeScale : 1;
@@ -645,7 +682,7 @@ export class Game {
     if (this.camera.position.y < cg + 4) this.camera.position.y = cg + 4;
 
     // 조준
-    if (!cine && !this.pilot && (this._moved || this._holding || this.arsenal.active.length)) {
+    if (!cine && !this.pilot && !this.overhead && (this._moved || this._holding || this.arsenal.active.length)) {
       this._moved = false;
       const hit = this.pick();
       this.aim = hit ? hit.point : null;

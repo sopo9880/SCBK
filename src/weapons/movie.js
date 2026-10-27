@@ -1,10 +1,10 @@
 // 영화 오마주 13종 — 장면의 흐름만 빌리고 기계·인물은 모두 새로 디자인
 import * as THREE from 'three';
-import { makeEngine, makeGuardian, makeTripod, makeMech, makeApe, makeShark } from './movieModels.js';
+import { makeEngine, makeGuardian, makeTripodParts, makeMech, makeApe, makeShark } from './movieModels.js';
 import { makeGolem, makeAsteroid, glowMat } from './models2.js';
 import { makeMeteor } from './models.js';
 import { cineGame, watch, orbit, chase, camDir } from './cam.js';
-import { fxBlast, over, mapPoint, flood } from './endings.js';
+import { fxBlast, over, mapPoint, flood, rain } from './endings.js';
 import { worldEnd, wipeMap, crustCollapse } from './apocalypse.js';
 import { detonate, nukeYield } from './nukes.js';
 import { funnelMat, boltMesh } from './storms.js';
@@ -138,54 +138,93 @@ export const MOVIE = {
       const S = A.S, p = hit.point, { scene, D, fx, grid, audio, camera, world } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
       const sc = 1.0 * S.r ** 0.3;
-      const tri = A.spawn(makeTripod(), sc);
-      const U = tri.userData;
+      const P = makeTripodParts();
+      const head = P.head; head.scale.setScalar(sc); scene.add(head);
+      for (const L of P.legs) for (const m of [L.thigh, L.shin, L.knee, L.foot]) { m.scale.multiplyScalar(sc); scene.add(m); }
+      const H = 120 * sc, L1 = 0.78 * H, L2 = 0.82 * H, Rf = 0.62 * H, hipR = 18 * sc, stepLen = 0.7 * H;
       const f = camDir(camera, c), side = v3(-f.z, 0, f.x);
       const walk = side.clone().multiplyScalar(R() < 0.5 ? 1 : -1);
-      const pos = c.clone().addScaledVector(walk, -120 * sc);
-      tri.position.copy(pos).add(v3(0, -U.H * sc * 1.2, 0));
-      const ray = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), glowMat(0xff4020, 0.9)); ray.visible = false; scene.add(ray);
+      const pos = c.clone().addScaledVector(walk, -110 * sc);        // 머리의 지면 투영점
+      const yawQ = new THREE.Quaternion().setFromUnitVectors(v3(0, 0, 1), walk);
+      const legA = [0, 2.1, -2.1];                                   // 다리 방향 (진행 방향 기준)
+      const restOf = (i, at) => { const d = v3(Math.sin(legA[i]), 0, Math.cos(legA[i])).applyQuaternion(yawQ); const q = at.clone().addScaledVector(d, Rf); q.y = grid.sample(q.x, q.z); return q; };
+      const feet = legA.map((_, i) => ({ at: restOf(i, pos), from: null, to: null, k: 1 }));
+      const ray = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), glowMat(0xff6a30, 0.9)); ray.visible = false; scene.add(ray);
       const dur = 16 * S.t;
+      const up = v3(0, 1, 0), tmp = v3(), dir = v3(), bend = v3(), knee = v3(), hip = v3();
+      const seg = (m, a, b) => { tmp.subVectors(b, a); const len = tmp.length(); m.position.copy(a).addScaledVector(tmp, 0.5); m.scale.y = len; m.quaternion.setFromUnitVectors(up, tmp.divideScalar(len || 1)); };
       audio.horn(3); audio.rumble(4);
       A.addActive({
-        t: 0, acc: 0, rayT: 0,
+        t: 0, acc: 0, stepping: -1,
         update(dt) {
           this.t += dt;
           const t = this.t;
-          // 솟아오름
-          if (t < 3) {
-            tri.position.y = pos.y - U.H * sc * 1.2 * (1 - ease.out(t / 3));
-            if (R() < dt * 30) fx.dust({ x: pos.x + (R() - 0.5) * 80 * sc, y: pos.y, z: pos.z + (R() - 0.5) * 80 * sc }, 12);
-            D.quake(pos.x, pos.z, 80 * sc, 1, dt);
-            return true;
+          // 솟아오름 (처음 3초) 뒤 걷기
+          const rise = Math.min(1, t / 3);
+          if (t >= 3 && t < dur) { pos.addScaledVector(walk, 11 * sc * dt); pos.y = grid.sample(pos.x, pos.z); }
+          const hy = pos.y + H * (0.15 + 0.85 * ease.out(rise)) + 3 * sc * Math.sin(t * 2.4);
+          head.position.set(pos.x, hy, pos.z);
+          head.quaternion.copy(yawQ); head.rotateX(0.05 * Math.sin(t * 1.2)); head.rotateZ(0.04 * Math.sin(t * 0.9));
+          if (t < 3) { if (R() < dt * 30) fx.dust({ x: pos.x + (R() - 0.5) * 80 * sc, y: pos.y, z: pos.z + (R() - 0.5) * 80 * sc }, 12); D.quake(pos.x, pos.z, 80 * sc, 1, dt); }
+          // 발 옮기기: 한 번에 한 발씩, 가장 뒤처진 발부터
+          if (this.stepping < 0 && t >= 3) {
+            let worst = -1, wd = stepLen * 0.55;
+            feet.forEach((ft, i) => { const d = ft.at.distanceTo(restOf(i, pos)); if (d > wd) { wd = d; worst = i; } });
+            if (worst >= 0) { const ft = feet[worst]; ft.from = ft.at.clone(); ft.to = restOf(worst, pos.clone().addScaledVector(walk, stepLen * 0.5)); ft.k = 0; this.stepping = worst; }
           }
-          // 걷기 (다리 흔들기)
-          pos.addScaledVector(walk, 9 * sc * dt); pos.y = grid.sample(pos.x, pos.z);
-          tri.position.copy(pos); tri.quaternion.setFromUnitVectors(v3(0, 0, 1), walk);
-          U.legs.forEach((L, i) => { L.hip.rotation.z = 0.25 * Math.sin(t * 1.6 + i * 2.1); });
-          U.body.position.y = U.H + 3 * Math.sin(t * 3.2);
-          D.explode({ x: pos.x, y: pos.y + 3, z: pos.z, r: 18 * sc, power: 14, lift: -0.4, lod: 2, lodBudget: 0 });
-          // 열선: 앞쪽 지면을 좌우로 쓸며 닿는 곳을 녹임
-          const sweep = Math.sin(t * 0.8) * 0.9;
-          const aimDir = walk.clone().applyAxisAngle(v3(0, 1, 0), sweep);
-          const tgt = pos.clone().addScaledVector(aimDir, (120 + 60 * Math.sin(t * 0.5)) * sc); tgt.y = grid.sample(tgt.x, tgt.z);
-          const from = tri.position.clone().add(v3(0, U.H * sc - 6 * sc, 0)).addScaledVector(walk, 22 * sc);
-          ray.visible = t < dur;
-          ray.position.copy(from).lerp(tgt, 0.5); ray.scale.set(1.6 * sc, from.distanceTo(tgt), 1.6 * sc);
-          ray.quaternion.setFromUnitVectors(v3(0, 1, 0), tgt.clone().sub(from).normalize());
-          const h = D.raycast(from, tgt.clone().sub(from).normalize(), from.distanceTo(tgt) + 5);
-          const q = h ? h.point : tgt;
-          D.laser(q.x, q.z, 5 * S.r ** 0.6, dt * 1.4); D.burn(q.x, q.z, 12, dt);
-          if ((this.acc += dt) > 0.05) { this.acc = 0; fx.sparks(q, { x: 0, y: 1, z: 0 }, 4); fx.fire.emit(q.x, q.y + 1, q.z, 0, 10, 0, 0.6, 5, 10, [1, 0.6, 0.2, 1], [0.8, 0.1, 0.02, 0], 1, 4); world.paintScorch(q.x, q.z, 8, 0.6); }
-          return t < dur;
+          if (this.stepping >= 0) {
+            const ft = feet[this.stepping];
+            ft.k = Math.min(1, ft.k + dt / 0.75);
+            ft.at.lerpVectors(ft.from, ft.to, ease.inOut(ft.k)); ft.at.y += Math.sin(Math.PI * ft.k) * H * 0.22;
+            if (ft.k >= 1) {
+              ft.at.copy(ft.to); this.stepping = -1;
+              fx.dust(ft.at, 14 * sc); audio.thud(); fx.addShake(0.5);
+              D.explode({ x: ft.at.x, y: ft.at.y + 2, z: ft.at.z, r: 14 * sc, power: 18, lift: -0.3, lod: 1, lodBudget: 2 });
+              world.blastTrees(ft.at.x, ft.at.z, 12 * sc, 12 * sc);
+            }
+          }
+          // 다리 관절 (2마디 역기구학): 무릎은 바깥·위로 꺾임
+          feet.forEach((ft, i) => {
+            const L = P.legs[i];
+            const d0 = v3(Math.sin(legA[i]), 0, Math.cos(legA[i])).applyQuaternion(yawQ);
+            hip.copy(head.position).addScaledVector(d0, hipR).add(v3(0, -6 * sc, 0));
+            dir.subVectors(ft.at, hip); let d = dir.length(); dir.divideScalar(d || 1);
+            d = Math.min(d, L1 + L2 - 0.01);
+            const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+            bend.copy(d0).addScaledVector(up, 1.4); bend.addScaledVector(dir, -bend.dot(dir)).normalize();
+            knee.copy(hip).addScaledVector(dir, a).addScaledVector(bend, h);
+            seg(L.thigh, hip, knee); seg(L.shin, knee, ft.at);
+            L.knee.position.copy(knee); L.foot.position.copy(ft.at);
+          });
+          // 촉수 흔들기
+          P.tentacles.forEach((sg, k) => sg.forEach((g, i) => { g.rotation.x = 0.25 * Math.sin(t * 1.7 + k + i * 0.6); g.rotation.z = 0.25 * Math.cos(t * 1.3 + k * 2 + i * 0.5); }));
+          P.glowRing.material.opacity = 0.6 + 0.3 * Math.sin(t * 5);
+          // 열선: 팔 끝에서 앞쪽 지면을 좌우로 쓸며 닿는 곳을 녹임
+          const firing = t > 3.5 && t < dur;
+          ray.visible = firing;
+          if (firing) {
+            const sweep = Math.sin(t * 0.8) * 0.9;
+            const aimDir = walk.clone().applyAxisAngle(up, sweep);
+            const tgt = pos.clone().addScaledVector(aimDir, (120 + 60 * Math.sin(t * 0.5)) * sc); tgt.y = grid.sample(tgt.x, tgt.z);
+            const from = P.tip.getWorldPosition(v3());
+            P.arm.rotation.y = sweep * 0.8;
+            ray.position.copy(from).lerp(tgt, 0.5); ray.scale.set(1.6 * sc, from.distanceTo(tgt), 1.6 * sc);
+            ray.quaternion.setFromUnitVectors(up, tgt.clone().sub(from).normalize());
+            const h2 = D.raycast(from, tgt.clone().sub(from).normalize(), from.distanceTo(tgt) + 5);
+            const q = h2 ? h2.point : tgt;
+            D.laser(q.x, q.z, 5 * S.r ** 0.6, dt * 1.4); D.burn(q.x, q.z, 12, dt);
+            if ((this.acc += dt) > 0.05) { this.acc = 0; fx.sparks(q, { x: 0, y: 1, z: 0 }, 4); fx.fire.emit(q.x, q.y + 1, q.z, 0, 10, 0, 0.6, 5, 10, [1, 0.6, 0.2, 1], [0.8, 0.1, 0.02, 0], 1, 4); world.paintScorch(q.x, q.z, 8, 0.6); }
+          }
+          return t < dur + 1;
         },
-        dispose() { A.remove(tri); disposeObj(scene, ray); },
+        dispose() { disposeObj(scene, head); for (const L of P.legs) for (const m of [L.thigh, L.shin, L.knee, L.foot]) disposeObj(scene, m); disposeObj(scene, ray); },
       });
       const g = cineGame(A); if (!g) return;
       const low = c.clone().addScaledVector(f, -320).addScaledVector(side, 80); low.y = c.y + 6;
       g.cine.play([
-        watch(low, () => tri.position.clone().add(v3(0, U.H * sc * 0.8, 0)), { dur: 4, fov: 48, caption: '땅속에서 무언가 솟아오른다', smooth: 0.25 }),
-        orbit(() => tri.position, { dist: 260 * sc, h: 70 * sc, a0: Math.atan2(-f.z, -f.x) - 0.6, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 6, look: 60 * sc, fov: 52 }),
+        watch(low, () => head.position.clone().add(v3(0, -H * 0.3, 0)), { dur: 4, fov: 50, caption: '땅속에서 무언가 솟아오른다', smooth: 0.25 }),
+        orbit(() => pos, { dist: 230 * sc, h: 60 * sc, a0: Math.atan2(-f.z, -f.x) - 0.6, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 6, look: H * 0.6, fov: 56 }),
+        watch(() => pos.clone().addScaledVector(walk, 230 * sc).addScaledVector(side, 130 * sc).add(v3(0, 25, 0)), () => head.position.clone().add(v3(0, -H * 0.3, 0)), { dur: 5, fov: 58, smooth: 0.3 }),
       ]);
     },
   },
@@ -488,52 +527,88 @@ export const MOVIE = {
   // ---- 소행성 시추: 다가오는 소행성 속 핵폭발 — 성공하면 둘로 갈라져 비껴가고, 실패하면 그대로 충돌 ----
   drillrock: {
     fire(A, hit) {
-      const S = A.S, p = hit.point, { scene, fx, grid, audio, camera, game } = A.ctx;
-      const ok = A.opts.drillok !== false && A.S.P < 75; // ×100(세계 멸망)에서는 늘 실패
+      const S = A.S, p = hit.point, { fx, grid, audio, camera, game, hud } = A.ctx;
+      const shatterOpt = !!A.opts.drillShatter;
       const tgt = v3(p.x, grid.sample(p.x, p.z), p.z);
       const f = camDir(camera, tgt), side = v3(-f.z, 0, f.x);
       const dirIn = f.clone().multiplyScalar(0.5).add(v3(0, -0.6, 0)).normalize();
-      const T = 10, D0 = 26000;
+      const T = 12, D0 = 26000, Q0 = 2.5, Q1 = 8;
       const sz = 120 * S.r ** 0.5;
+      const zone = Math.max(0.06, 0.24 - 0.09 * Math.log10(Math.max(1, S.P)));   // ×1 넓음 … ×100 아주 좁음
       const rock = A.spawn(makeAsteroid(), sz);
-      const st = { t: 0, split: false, halves: [] };
+      const st = { t: 0, result: null, halves: [], frags: [], cur: 0.5, pos: v3() };
+      A._drillResult = undefined;
       if (game) game.ensureView(D0 * 1.4, 8000);
       audio.rumble(T);
+      // 기폭 타이밍 막대
+      let ui = document.getElementById('qte');
+      if (!ui) { ui = document.createElement('div'); ui.id = 'qte'; ui.innerHTML = '<b>핵 기폭 타이밍</b><div class="qbar"><i class="zone"></i><i class="cur"></i></div><small>초록 칸에서 Space 또는 클릭</small>'; document.body.appendChild(ui); }
+      const zEl = ui.querySelector('.zone'), cEl = ui.querySelector('.cur');
+      zEl.style.left = (50 - zone * 50) + '%'; zEl.style.width = (zone * 100) + '%';
+      ui.hidden = true;
+      const decide = (res) => {
+        if (st.result) return;
+        st.result = res; A._drillResult = res; A._qte = null; ui.hidden = true;
+        const pos = rock.position.clone();
+        fx.flash = Math.max(fx.flash, 0.6); audio.nuke();
+        fx.explosion(pos, sz * 1.6, { smokeColumn: false });
+        if (res === 'success') {
+          A.remove(rock);
+          for (const s2 of [-1, 1]) { const h = A.spawn(makeAsteroid(), sz * 0.7); h.position.copy(pos); st.halves.push({ m: h, v: dirIn.clone().multiplyScalar(D0 / T).addScaledVector(side, s2 * 1100).add(v3(0, 300, 0)) }); }
+          if (hud) hud.toast('시추 성공 — 소행성이 둘로 갈라져 비껴갑니다', 'info');
+        } else if (res === 'shatter') {
+          A.remove(rock);
+          const n = Math.round(14 + 8 * S.n ** 0.5), Rr = 380 * S.r ** 0.5;
+          for (let i = 0; i < n; i++) {
+            const a = R() * 6.28, d = Math.sqrt(R()) * Rr;
+            const q = v3(tgt.x + Math.cos(a) * d, 0, tgt.z + Math.sin(a) * d); q.y = grid.sample(q.x, q.z);
+            const m = A.spawn(makeAsteroid(), sz * (0.08 + R() * 0.12));
+            const start = pos.clone().add(v3((R() - 0.5) * sz * 3, (R() - 0.5) * sz * 2, (R() - 0.5) * sz * 3));
+            st.frags.push({ m, a: start, b: q, t: 0, dur: 3 + R() * 3, r: (24 + R() * 30) * S.r ** 0.6 });
+          }
+          if (hud) hud.toast('시추 성공… 하지만 산산조각 난 파편이 쏟아집니다', 'info');
+        } else if (hud) hud.toast('시추 실패 — 충돌합니다', 'info');
+      };
+      A._qte = () => { if (st.t >= Q0 && !st.result) decide(Math.abs(st.cur - 0.5) < zone / 2 ? (shatterOpt ? 'shatter' : 'success') : 'fail'); };
       A.addActive({
         update(dt) {
           st.t += dt;
           const u = Math.min(1, st.t / T);
-          if (!st.split) {
+          if (!st.result || st.result === 'fail') {
             const pos = tgt.clone().addScaledVector(dirIn, -D0 * (1 - u));
-            rock.position.copy(pos); rock.rotation.y += dt * 0.2;
+            rock.position.copy(pos); rock.rotation.y += dt * 0.2; st.pos.copy(pos);
             for (let i = 0; i < 3; i++) fx.fire.emit(pos.x, pos.y, pos.z, -dirIn.x * 200, -dirIn.y * 200, -dirIn.z * 200, 1, sz * 0.8, sz * 1.6, [1, 0.8, 0.5, 0.8], [1, 0.3, 0.05, 0], 1, 0);
-            if (u > 0.55) {
-              st.split = true;
-              fx.flash = Math.max(fx.flash, 0.6); audio.nuke();
-              fx.explosion(pos, sz * 1.6, { smokeColumn: false });
-              if (ok) {
-                A.remove(rock);
-                for (const s of [-1, 1]) { const h = A.spawn(makeAsteroid(), sz * 0.7); h.position.copy(pos); st.halves.push({ m: h, v: dirIn.clone().multiplyScalar(D0 / T).addScaledVector(side, s * 900) }); }
-                if (A.ctx.hud) A.ctx.hud.toast('시추 성공 — 소행성이 둘로 갈라져 비껴갑니다', 'info');
-              } else if (A.ctx.hud) A.ctx.hud.toast('시추 실패', 'info');
-            }
-          } else if (ok) {
-            for (const h of st.halves) { h.m.position.addScaledVector(h.v, dt); h.m.rotation.x += dt * 0.5; }
-            if (st.t > T * 1.7) return false;
-          } else {
-            const pos = tgt.clone().addScaledVector(dirIn, -D0 * (1 - u));
-            rock.position.copy(pos);
-            if (u >= 1) { A.remove(rock); detonate(A, tgt, { kt: nukeYield(S.P) * 6, kind: 'impact', pullback: false }); return false; }
           }
-          return true;
+          if (!st.result) {
+            if (st.t >= Q0) {
+              ui.hidden = false;
+              st.cur = 0.5 + 0.5 * Math.sin((st.t - Q0) * 2.4);
+              cEl.style.left = (st.cur * 100) + '%';
+              zEl.classList.toggle('hit', Math.abs(st.cur - 0.5) < zone / 2);
+            }
+            if (st.t > Q1) decide('fail');
+          }
+          if (st.result === 'fail' && u >= 1) { A.remove(rock); detonate(A, tgt, { kt: nukeYield(S.P) * 6, kind: 'impact', pullback: false }); return false; }
+          for (const h of st.halves) { h.m.position.addScaledVector(h.v, dt); h.m.rotation.x += dt * 0.5; st.pos.copy(st.halves[0].m.position).lerp(st.halves[1].m.position, 0.5); }
+          for (const fr of st.frags) {
+            if (!fr.m.parent) continue;
+            fr.t += dt; const k = Math.min(1, fr.t / fr.dur);
+            fr.m.position.lerpVectors(fr.a, fr.b, k * k); fr.m.rotation.x += dt;
+            fx.trail(fr.m.position, 6, true);
+            if (k >= 1) { A.remove(fr.m); if (R() < 0.45) A.blast(fr.b, fr.r, 45 * S.v, { crater: [fr.r * 0.4, fr.r * 0.15], silent: R() > 0.4 }); else fxBlast(A, fr.b, fr.r, { silent: R() > 0.3 }); A.crater(fr.b.x, fr.b.z, fr.r * 0.4, fr.r * 0.12); }
+          }
+          if (st.frags.length) st.pos.copy(tgt);
+          if (st.result === 'success' && st.t > T * 1.6) return false;
+          if (st.result === 'shatter' && st.frags.every(fr => !fr.m.parent) && st.t > 6) return false;
+          return st.t < 40;
         },
-        dispose() { A.remove(rock); for (const h of st.halves) A.remove(h.m); },
+        dispose() { A.remove(rock); for (const h of st.halves) A.remove(h.m); for (const fr of st.frags) A.remove(fr.m); ui.hidden = true; if (A._qte) A._qte = null; },
       });
       const g = cineGame(A); if (!g) return;
       const low = tgt.clone().addScaledVector(f, -500); low.y = tgt.y + 40;
       g.cine.play([
-        watch(low, () => rock.position, { dur: T * 0.5, fov: 40, caption: '소행성 시추 작전', smooth: 0.3 }),
-        watch(low.clone().add(v3(0, 50, 0)), () => (st.halves.length ? st.halves[0].m.position.clone().lerp(st.halves[1].m.position, 0.5) : rock.position), { dur: T * 0.65, fov: 55, smooth: 0.3 }),
+        watch(low, () => rock.position, { dur: Q1 + 0.4, fov: 40, caption: '소행성 시추 작전 — 정확한 순간에 기폭!', smooth: 0.3 }),
+        watch(low.clone().add(v3(0, 60, 0)), () => st.pos, { dur: 7, fov: 58, smooth: 0.3 }),
       ]);
     },
   },
@@ -662,7 +737,7 @@ export const MOVIE_ENDINGS = {
   robokaiju: (A, c) => { crustCollapse(A, c, { level: 1 }); worldEnd(A, c, 'fire', { delay: 14 }); },
   halfvanish: (A, c) => { worldEnd(A, c, 'dust', { delay: 7, planetKind: 'ash', wave: true }); },
   corestop: (A, c) => { wipeMap(A, c, 'nuke', { dur: 14 }); worldEnd(A, c, 'fire', { delay: 4, planetKind: 'crack' }); },
-  drillrock: (A, c) => { worldEnd(A, c, 'impact', { delay: 10 }); },
+  drillrock: Object.assign((A, c) => { if (A._drillResult === 'shatter') { rain(A, 60, 8, { size: 9, r: 50, speed: 260, angle: 0.4, phys: 0.2 }); worldEnd(A, c, 'impact', { delay: 5 }); } else worldEnd(A, c, 'impact', { delay: 2 }); }, { when: (A) => (A._drillResult === undefined ? undefined : A._drillResult !== 'success') }),
   sharknado: (A, c) => { over(A, 4, 6, () => fireOther(A, 'sharknado', mapPoint(A))); wipeMap(A, c, 'nuke', { dur: 16 }); worldEnd(A, c, 'water', { delay: 6, planetKind: 'water' }); },
   megaquake: (A, c) => { crustCollapse(A, c, { level: 1, cracks: 16 }); wipeMap(A, c, 'nuke', { dur: 10 }); worldEnd(A, c, 'crack', { delay: 3 }); },
   giantape: (A, c) => { wipeMap(A, c, 'nuke', { dur: 12 }); worldEnd(A, c, 'dust', { delay: 15, planetKind: 'crack' }); },

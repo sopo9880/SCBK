@@ -29,7 +29,7 @@ export const NEW5 = {
       const S = A.S, p = hit.point, { D, fx, audio, grid, camera, world } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
       const f = camDir(camera, c), dir = sideOf(f);          // 화면 가로로 날아가게
-      const R0 = 130 * S.r ** 0.8, T0 = 1.8;
+      const R0 = S.P >= 75 ? grid.span * 0.75 : 130 * S.r ** 0.8, T0 = 1.8;
       audio.rumble(T0 + 4); audio.wind(8);
       A.addActive({
         t: 0, k: 0,
@@ -73,6 +73,7 @@ export const NEW5 = {
       const ball = makeScrapBall(); ball.position.copy(core); ball.scale.setScalar(0.1); scene.add(ball);
       let vol = 0, rc = 3;
       const T = 9;
+      const st = { ballPos: core.clone() };
       audio.hum(T); audio.charge(2);
       A.addActive({
         t: 0, acc: 0, dropped: false,
@@ -105,10 +106,27 @@ export const NEW5 = {
           if (!this.dropped) {
             this.dropped = true; A.remove(mag); scene.remove(ball);
             for (const ch of D.loose) if (ch.state === 1 && ch.body.gravityScale && ch.body.gravityScale() === 0) ch.body.setGravityScale(1, true);
-            D.addBall(core, v3(0, -5, 0), rc, ball, { life: 30, onHit: () => { fx.addShake(1.5); A.ctx.audio.thud(); } });
+            const rd = v3(R() - 0.5, 0, R() - 0.5).normalize();
+            this.ball = D.addBall(core, v3(rd.x * 18, -5, rd.z * 18), rc, ball, { life: 40, onHit: () => { fx.addShake(1.2); A.ctx.audio.thud(); } });
+            this.rollT = 0;
             audio.whoosh(2);
           }
-          return this.t < T + 1;
+          // 굴러다니다 (자기 펄스로 방향이 바뀜) 마지막에 자기장이 반전되며 튕겨 나감
+          const bl = this.ball;
+          if (bl && D.balls.includes(bl)) {
+            this.rollT += dt;
+            const v = bl.body.linvel(), p0 = bl.body.translation();
+            st.ballPos.set(p0.x, p0.y, p0.z);
+            if (this.rollT < 8) {
+              if (R() < dt * 0.9) { const a = R() * 6.28; bl.body.setLinvel({ x: v.x * 0.4 + Math.cos(a) * 22, y: v.y, z: v.z * 0.4 + Math.sin(a) * 22 }, true); fx.ring(st.ballPos, rc * 3, 0.6, 0x8fc8ff, 0.5); audio.hum(0.5); }
+            } else if (!this.flung) {
+              this.flung = true;
+              const out = v3(p0.x - c.x, 0, p0.z - c.z); if (out.lengthSq() < 1) out.set(1, 0, 0); out.normalize();
+              bl.body.setLinvel({ x: out.x * 120, y: 30, z: out.z * 120 }, true);
+              fx.ring(st.ballPos, rc * 8, 1, 0xbfe0ff, 0.7); fx.flash = Math.max(fx.flash, 0.2); audio.boom(2.5, 60); audio.whoosh(2);
+            }
+          }
+          return this.t < T + 14;
         },
         dispose() { A.remove(mag); if (!this.dropped) scene.remove(ball); },
       });
@@ -117,7 +135,8 @@ export const NEW5 = {
       g.cine.play([
         watch(c.clone().addScaledVector(f, -R0 * 1.6 - 120).addScaledVector(sd, 60).add(v3(0, 30, 0)), core, { dur: 5, fov: 58, caption: '자기장 폭주', smooth: 0.3 }),
         watch(c.clone().addScaledVector(f, -R0 * 1.2 - 80).addScaledVector(sd, -R0 * 0.6).add(v3(0, 50, 0)), core, { dur: T - 5 + 0.3, fov: 55, smooth: 0.3 }),
-        watch(c.clone().addScaledVector(f, -R0 * 1.4 - 100).add(v3(0, 25, 0)), c.clone().add(v3(0, 15, 0)), { dur: 4, fov: 58, ts: 0.6 }),
+        watch(c.clone().addScaledVector(f, -R0 * 1.4 - 100).add(v3(0, 25, 0)), () => st.ballPos, { dur: 3, fov: 58, ts: 0.6, smooth: 0.3 }),
+        chase(() => st.ballPos, () => { const b = st.ballPos.clone().sub(c).setY(0); return b.lengthSq() > 1 ? b : f; }, { back: 70, up: 30, side: 30, ahead: 20, dur: 9, fov: 60, smooth: 0.25 }),
       ]);
     },
   },
@@ -332,10 +351,12 @@ export const NEW5 = {
       const hitSet = new Map();
       const T = 12;
       const st = { pos, landed: false, tilt: 0, done: false };
+      const se = A.summon(m);
       audio.whoosh(2);
       A.addActive({
         t: 0, acc: 0, spin: 0,
         update(dt) {
+          if (se.captured) return !se.gone;
           this.t += dt;
           this.spin += dt * 18;
           const gy = grid.sample(pos.x, pos.z);
@@ -432,9 +453,10 @@ export const NEW5 = {
             const body = D.phys.chunk(x, y, z, { box: [s / 2, s / 2, s / 2, 0, 0, 0, 1] }, 0.55, GROUP_NORMAL, 0.55 * s * s * s);
             body.setDynamic(true); body.setLinvel({ x: (R() - 0.5) * 6, y: -30, z: (R() - 0.5) * 6 });
             body.applyTorqueImpulse({ x: (R() - 0.5) * s ** 4, y: (R() - 0.5) * s ** 4, z: (R() - 0.5) * s ** 4 });
-            list.push({ m, body, s, pv: 30, hits: 0 });
+            list.push({ m, body, s, pv: 30, hits: 0, e: A.summon(m) });
           }
           for (const it of list) {
+            if (it.e.captured) { if (it.body.alive) D.phys.remove(it.body); continue; }
             if (!it.body.alive) continue;
             const t = it.body.translation(), q = it.body.rotation(), v = it.body.linvel();
             it.m.position.set(t.x, t.y, t.z); it.m.quaternion.set(q.x, q.y, q.z, q.w);
@@ -463,13 +485,24 @@ export const NEW5 = {
 
 export const NEW5_ENDINGS = {
   spinstop: (A, c) => {
-    // 지도 위 모든 것이 한쪽으로 쓸려 나감
-    const { D, camera } = A.ctx;
+    // 지도 위 모든 것이 한쪽으로 쓸려 날아가고, 지평선 너머까지 휩쓸림
+    const { D, camera, fx, grid, world, audio } = A.ctx;
     const dir = sideOf(camDir(camera, c));
-    let k = 0; for (const b of D.buildings) if (b.state === 'intact') { D.flatten(b, 1, dir.x, dir.z, 1.2 + R()); if (k++ % 10 === 0) A.ctx.fx.collapseDust(b); }
-    for (const ch of D.loose) if (ch.state !== 3) D.launch(ch, dir.x * 120, 10, dir.z * 120, 1);
-    worldEnd(A, c, 'dust', { delay: 2, planetKind: 'shatter' });
+    const half = grid.span / 2;
+    for (const b of D.buildings) {
+      if (b.state !== 'intact') continue;
+      const up = (b.cx - c.x) * -dir.x + (b.cz - c.z) * -dir.z;            // 바람 위쪽부터
+      D.fling(b, dir.x * (60 + R() * 40), 6 + R() * 10, dir.z * (60 + R() * 40), 5 + R() * 2, Math.max(0, (up + half) / (half * 2)) * 2.5 + R() * 0.6);
+    }
+    for (const ch of D.loose) if (ch.state !== 3) D.launch(ch, dir.x * 140, 15, dir.z * 140, 1);
+    world.blastTrees(c.x, c.z, grid.span, grid.span);
+    crustCollapse(A, c, { level: 0.8, cracks: 8, dur: 10 });
+    audio.wind(14); audio.rumble(12);
+    // 지도를 가로지르는 거대한 먼지 폭풍
+    A.addActive({ t: 0, update(dt) { this.t += dt; const n = Math.round(30 * A.ctx.quality.fxScale); for (let i = 0; i < n; i++) { const x = (R() * 2 - 1) * half * 1.2, z = (R() * 2 - 1) * half * 1.2; fx.smoke.emit(x, grid.sample(x, z) + 5 + R() * 120, z, dir.x * (120 + R() * 80), 4, dir.z * (120 + R() * 80), 4, 20, 70, [0.6, 0.55, 0.48, 0.6], [0.55, 0.52, 0.48, 0], 0.05, 0.3); } fx.addShake(dt * 0.8); return this.t < 12; } });
+    worldEnd(A, c, 'dust', { delay: 1.5, waveSpeed: 3000, planetKind: 'shatter' });
   },
+
   magnet: (A, c) => { liftAll(A, c, 5); crustCollapse(A, c, { level: 0.8, cracks: 5 }); worldEnd(A, c, 'void', { delay: 5, planetKind: 'shatter' }); },
   entropy: (A, c) => { wipeMap(A, c, 'nuke', { dur: 12 }); A.ctx.world.blastTrees(c.x, c.z, A.ctx.grid.span, 0); worldEnd(A, c, 'dust', { delay: 4, planetKind: 'ash' }); },
   melt: (A, c) => { wipeMap(A, c, 'nuke', { dur: 10 }); flood(A, { dur: 14, color: 0x6a5a50, height: 0.3 }); worldEnd(A, c, 'fire', { delay: 4 }); },
