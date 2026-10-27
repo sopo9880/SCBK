@@ -145,7 +145,7 @@ export const NEW5 = {
             for (const [b] of blds) if (b.state === 'intact') D.tint(b, RUST, 0.06);
             world.paintScorch(c.x, c.z, R0, 0.05);
             if (this.t > 3) world.blastTrees(c.x, c.z, R0 * Math.min(1, this.t / T), 0);
-            D.burn(c.x, c.z, R0, 0.6);
+            { const a = R() * 6.28, d = R() * R0 * 0.6; D.burn(c.x + Math.cos(a) * d, c.z + Math.sin(a) * d, R0 * 0.4, 0.8); }
           }
           for (const it of blds) {
             if (it[1] < 0 || this.t < it[1]) continue;
