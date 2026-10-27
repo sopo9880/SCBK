@@ -10,7 +10,7 @@ function build() {
   el.id = 'control'; el.hidden = true;
   el.innerHTML = `
     <div class="cr-map"><div class="cr-head"><b>전술 지도</b><span id="crCoord">표적 없음</span></div><canvas id="crCanvas" width="720" height="720"></canvas><div class="cr-hint">지도를 눌러 표적 지정</div></div>
-    <div class="cr-live"><div class="cr-head"><b>실시간 화면</b><span class="cr-rec">● LIVE</span></div></div>
+    <div class="cr-live"><div class="cr-head"><b>실시간 화면 · 위에서</b><span class="cr-rec">● LIVE</span></div><div class="cr-zoom">휠 · ↑↓ 줌</div></div>
     <div class="cr-panel">
       <div class="cr-head"><b>발사 관제실</b><button class="cr-x" id="crClose" title="닫기 (Esc)">✕</button></div>
       <div class="cr-sec"><span>무기</span><div class="cr-weps" id="crWeps"></div></div>
@@ -104,7 +104,7 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
   for (const id of LAUNCHABLE) {
     const w = WEAPONS.find(x => x.id === id); if (!w) continue;
     const b = document.createElement('button'); b.className = 'cr-wep' + (id === st.wep ? ' on' : ''); b.innerHTML = `${weaponIcon(id)}<span>${w.name}</span>`; b.title = w.desc;
-    b.onclick = () => { st.wep = id; for (const x of wb.children) x.classList.toggle('on', x === b); st.key = false; status(); };
+    b.onclick = () => { st.wep = id; for (const x of wb.children) x.classList.toggle('on', x === b); st.key = false; game.audio.click(); status(); };
     wb.appendChild(b);
   }
   cv.onpointerdown = (e) => {
@@ -114,18 +114,13 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
     st.tgt = { x: Math.max(-h, Math.min(h, x)), z: Math.max(-h, Math.min(h, z)) };
     const col = String.fromCharCode(65 + Math.min(9, Math.floor((st.tgt.x / span + 0.5) * 10))), row = Math.min(10, Math.floor((st.tgt.z / span + 0.5) * 10) + 1);
     $(el, '#crCoord').textContent = `표적 ${col}-${row}  (${Math.round(st.tgt.x)}, ${Math.round(st.tgt.z)})`;
-    // 실시간 화면도 표적 쪽을 바라보게
-    const gy = grid.sample(st.tgt.x, st.tgt.z);
-    const back = game.camera.position.clone().sub(game.controls.target); back.y = 0; if (back.lengthSq() < 1) back.set(1, 0, 0);
-    back.normalize().multiplyScalar(Math.min(700, Math.max(300, radius() * 2.2)));
-    game.controls.target.set(st.tgt.x, gy, st.tgt.z);
-    game.camera.position.set(st.tgt.x + back.x, gy + back.length() * 0.6, st.tgt.z + back.z);
-    game.controls.update();
+    // 실시간 화면도 표적 위로
+    game.setOverhead(st.tgt.x, st.tgt.z);
     status();
-    game.audio.resume(); game.audio.crack && game.audio.buzz(0.08);
+    game.audio.resume(); game.audio.beep(1200, 0.06);
   };
-  $(el, '#crCover').onclick = () => { st.cover = !st.cover; if (!st.cover) st.key = false; game.audio.thud(); status(); };
-  $(el, '#crKey').onclick = () => { if (!st.cover || !st.tgt) return; st.key = !st.key; game.audio.crack(); status(); };
+  $(el, '#crCover').onclick = () => { st.cover = !st.cover; if (!st.cover) st.key = false; game.audio.clack(); status(); };
+  $(el, '#crKey').onclick = () => { if (!st.cover || !st.tgt) return; st.key = !st.key; game.audio.click(); if (st.key) setTimeout(() => game.audio.beep(1500, 0.05), 90); status(); };
   const fireBtn = $(el, '#crFire'), ring = $(el, '#crRing');
   const C = 2 * Math.PI * 44;
   ring.style.strokeDasharray = `${C}`; ring.style.strokeDashoffset = `${C}`;
@@ -136,9 +131,16 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
     cancelAnimationFrame(st.raf);
     el.hidden = true; document.body.classList.remove('control');
     window.removeEventListener('keydown', onKey, true);
+    el.removeEventListener('wheel', onWheel);
+    game.endOverhead();
+    if (!launched) game.audio.beep(440, 0.1);
     if (!launched && onClose) onClose();
   };
-  const onKey = (e) => { if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); } };
+  const onKey = (e) => {
+    if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); return; }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); e.stopPropagation(); game.zoomOverhead(1 / 1.2); }
+    else if (e.code === 'ArrowDown' || e.code === 'KeyS') { e.preventDefault(); e.stopPropagation(); game.zoomOverhead(1.2); }
+  };
   window.addEventListener('keydown', onKey, true);
   $(el, '#crClose').onclick = () => close(false);
   let last = performance.now();
@@ -152,7 +154,12 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
     draw();
     st.raf = requestAnimationFrame(tick);
   };
+  // 실시간 화면: 위에서 내려다보기 고정 (휠·위아래 방향키로 줌)
+  { const t0 = game.controls.target; game.startOverhead(t0.x, t0.z, Math.min(span * 0.9, 600)); }
+  const onWheel = (e) => { e.preventDefault(); game.zoomOverhead(e.deltaY > 0 ? 1.15 : 1 / 1.15); };
+  el.addEventListener('wheel', onWheel, { passive: false });
   el.hidden = false; document.body.classList.add('control');
+  game.audio.resume(); game.audio.beep(660, 0.08); setTimeout(() => game.audio.beep(990, 0.1), 110);
   status(); draw();
   st.raf = requestAnimationFrame(tick);
   return { close, state: st };

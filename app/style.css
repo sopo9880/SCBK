@@ -320,3 +320,5 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #qte .zone.hit { background: rgba(120,255,150,.9); }
 #qte .cur { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 8px #fff; }
 #qte small { display: block; margin-top: 6px; font-size: 12px; opacity: .85; }
+
+#control .cr-zoom { position: absolute; margin: 8px 10px; font-size: 11px; opacity: .7; background: rgba(4,18,12,.6); padding: 3px 8px; border-radius: 3px; }

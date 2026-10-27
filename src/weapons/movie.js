@@ -1,6 +1,6 @@
 // 영화 오마주 13종 — 장면의 흐름만 빌리고 기계·인물은 모두 새로 디자인
 import * as THREE from 'three';
-import { makeEngine, makeGuardian, makeTripod, makeMech, makeApe, makeShark } from './movieModels.js';
+import { makeEngine, makeGuardian, makeTripodParts, makeMech, makeApe, makeShark } from './movieModels.js';
 import { makeGolem, makeAsteroid, glowMat } from './models2.js';
 import { makeMeteor } from './models.js';
 import { cineGame, watch, orbit, chase, camDir } from './cam.js';
@@ -138,54 +138,93 @@ export const MOVIE = {
       const S = A.S, p = hit.point, { scene, D, fx, grid, audio, camera, world } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
       const sc = 1.0 * S.r ** 0.3;
-      const tri = A.spawn(makeTripod(), sc);
-      const U = tri.userData;
+      const P = makeTripodParts();
+      const head = P.head; head.scale.setScalar(sc); scene.add(head);
+      for (const L of P.legs) for (const m of [L.thigh, L.shin, L.knee, L.foot]) { m.scale.multiplyScalar(sc); scene.add(m); }
+      const H = 120 * sc, L1 = 0.78 * H, L2 = 0.82 * H, Rf = 0.62 * H, hipR = 18 * sc, stepLen = 0.7 * H;
       const f = camDir(camera, c), side = v3(-f.z, 0, f.x);
       const walk = side.clone().multiplyScalar(R() < 0.5 ? 1 : -1);
-      const pos = c.clone().addScaledVector(walk, -120 * sc);
-      tri.position.copy(pos).add(v3(0, -U.H * sc * 1.2, 0));
-      const ray = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), glowMat(0xff4020, 0.9)); ray.visible = false; scene.add(ray);
+      const pos = c.clone().addScaledVector(walk, -110 * sc);        // 머리의 지면 투영점
+      const yawQ = new THREE.Quaternion().setFromUnitVectors(v3(0, 0, 1), walk);
+      const legA = [0, 2.1, -2.1];                                   // 다리 방향 (진행 방향 기준)
+      const restOf = (i, at) => { const d = v3(Math.sin(legA[i]), 0, Math.cos(legA[i])).applyQuaternion(yawQ); const q = at.clone().addScaledVector(d, Rf); q.y = grid.sample(q.x, q.z); return q; };
+      const feet = legA.map((_, i) => ({ at: restOf(i, pos), from: null, to: null, k: 1 }));
+      const ray = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), glowMat(0xff6a30, 0.9)); ray.visible = false; scene.add(ray);
       const dur = 16 * S.t;
+      const up = v3(0, 1, 0), tmp = v3(), dir = v3(), bend = v3(), knee = v3(), hip = v3();
+      const seg = (m, a, b) => { tmp.subVectors(b, a); const len = tmp.length(); m.position.copy(a).addScaledVector(tmp, 0.5); m.scale.y = len; m.quaternion.setFromUnitVectors(up, tmp.divideScalar(len || 1)); };
       audio.horn(3); audio.rumble(4);
       A.addActive({
-        t: 0, acc: 0, rayT: 0,
+        t: 0, acc: 0, stepping: -1,
         update(dt) {
           this.t += dt;
           const t = this.t;
-          // 솟아오름
-          if (t < 3) {
-            tri.position.y = pos.y - U.H * sc * 1.2 * (1 - ease.out(t / 3));
-            if (R() < dt * 30) fx.dust({ x: pos.x + (R() - 0.5) * 80 * sc, y: pos.y, z: pos.z + (R() - 0.5) * 80 * sc }, 12);
-            D.quake(pos.x, pos.z, 80 * sc, 1, dt);
-            return true;
+          // 솟아오름 (처음 3초) 뒤 걷기
+          const rise = Math.min(1, t / 3);
+          if (t >= 3 && t < dur) { pos.addScaledVector(walk, 11 * sc * dt); pos.y = grid.sample(pos.x, pos.z); }
+          const hy = pos.y + H * (0.15 + 0.85 * ease.out(rise)) + 3 * sc * Math.sin(t * 2.4);
+          head.position.set(pos.x, hy, pos.z);
+          head.quaternion.copy(yawQ); head.rotateX(0.05 * Math.sin(t * 1.2)); head.rotateZ(0.04 * Math.sin(t * 0.9));
+          if (t < 3) { if (R() < dt * 30) fx.dust({ x: pos.x + (R() - 0.5) * 80 * sc, y: pos.y, z: pos.z + (R() - 0.5) * 80 * sc }, 12); D.quake(pos.x, pos.z, 80 * sc, 1, dt); }
+          // 발 옮기기: 한 번에 한 발씩, 가장 뒤처진 발부터
+          if (this.stepping < 0 && t >= 3) {
+            let worst = -1, wd = stepLen * 0.55;
+            feet.forEach((ft, i) => { const d = ft.at.distanceTo(restOf(i, pos)); if (d > wd) { wd = d; worst = i; } });
+            if (worst >= 0) { const ft = feet[worst]; ft.from = ft.at.clone(); ft.to = restOf(worst, pos.clone().addScaledVector(walk, stepLen * 0.5)); ft.k = 0; this.stepping = worst; }
           }
-          // 걷기 (다리 흔들기)
-          pos.addScaledVector(walk, 9 * sc * dt); pos.y = grid.sample(pos.x, pos.z);
-          tri.position.copy(pos); tri.quaternion.setFromUnitVectors(v3(0, 0, 1), walk);
-          U.legs.forEach((L, i) => { L.hip.rotation.z = 0.25 * Math.sin(t * 1.6 + i * 2.1); });
-          U.body.position.y = U.H + 3 * Math.sin(t * 3.2);
-          D.explode({ x: pos.x, y: pos.y + 3, z: pos.z, r: 18 * sc, power: 14, lift: -0.4, lod: 2, lodBudget: 0 });
-          // 열선: 앞쪽 지면을 좌우로 쓸며 닿는 곳을 녹임
-          const sweep = Math.sin(t * 0.8) * 0.9;
-          const aimDir = walk.clone().applyAxisAngle(v3(0, 1, 0), sweep);
-          const tgt = pos.clone().addScaledVector(aimDir, (120 + 60 * Math.sin(t * 0.5)) * sc); tgt.y = grid.sample(tgt.x, tgt.z);
-          const from = tri.position.clone().add(v3(0, U.H * sc - 6 * sc, 0)).addScaledVector(walk, 22 * sc);
-          ray.visible = t < dur;
-          ray.position.copy(from).lerp(tgt, 0.5); ray.scale.set(1.6 * sc, from.distanceTo(tgt), 1.6 * sc);
-          ray.quaternion.setFromUnitVectors(v3(0, 1, 0), tgt.clone().sub(from).normalize());
-          const h = D.raycast(from, tgt.clone().sub(from).normalize(), from.distanceTo(tgt) + 5);
-          const q = h ? h.point : tgt;
-          D.laser(q.x, q.z, 5 * S.r ** 0.6, dt * 1.4); D.burn(q.x, q.z, 12, dt);
-          if ((this.acc += dt) > 0.05) { this.acc = 0; fx.sparks(q, { x: 0, y: 1, z: 0 }, 4); fx.fire.emit(q.x, q.y + 1, q.z, 0, 10, 0, 0.6, 5, 10, [1, 0.6, 0.2, 1], [0.8, 0.1, 0.02, 0], 1, 4); world.paintScorch(q.x, q.z, 8, 0.6); }
-          return t < dur;
+          if (this.stepping >= 0) {
+            const ft = feet[this.stepping];
+            ft.k = Math.min(1, ft.k + dt / 0.75);
+            ft.at.lerpVectors(ft.from, ft.to, ease.inOut(ft.k)); ft.at.y += Math.sin(Math.PI * ft.k) * H * 0.22;
+            if (ft.k >= 1) {
+              ft.at.copy(ft.to); this.stepping = -1;
+              fx.dust(ft.at, 14 * sc); audio.thud(); fx.addShake(0.5);
+              D.explode({ x: ft.at.x, y: ft.at.y + 2, z: ft.at.z, r: 14 * sc, power: 18, lift: -0.3, lod: 1, lodBudget: 2 });
+              world.blastTrees(ft.at.x, ft.at.z, 12 * sc, 12 * sc);
+            }
+          }
+          // 다리 관절 (2마디 역기구학): 무릎은 바깥·위로 꺾임
+          feet.forEach((ft, i) => {
+            const L = P.legs[i];
+            const d0 = v3(Math.sin(legA[i]), 0, Math.cos(legA[i])).applyQuaternion(yawQ);
+            hip.copy(head.position).addScaledVector(d0, hipR).add(v3(0, -6 * sc, 0));
+            dir.subVectors(ft.at, hip); let d = dir.length(); dir.divideScalar(d || 1);
+            d = Math.min(d, L1 + L2 - 0.01);
+            const a = (L1 * L1 - L2 * L2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L1 * L1 - a * a));
+            bend.copy(d0).addScaledVector(up, 1.4); bend.addScaledVector(dir, -bend.dot(dir)).normalize();
+            knee.copy(hip).addScaledVector(dir, a).addScaledVector(bend, h);
+            seg(L.thigh, hip, knee); seg(L.shin, knee, ft.at);
+            L.knee.position.copy(knee); L.foot.position.copy(ft.at);
+          });
+          // 촉수 흔들기
+          P.tentacles.forEach((sg, k) => sg.forEach((g, i) => { g.rotation.x = 0.25 * Math.sin(t * 1.7 + k + i * 0.6); g.rotation.z = 0.25 * Math.cos(t * 1.3 + k * 2 + i * 0.5); }));
+          P.glowRing.material.opacity = 0.6 + 0.3 * Math.sin(t * 5);
+          // 열선: 팔 끝에서 앞쪽 지면을 좌우로 쓸며 닿는 곳을 녹임
+          const firing = t > 3.5 && t < dur;
+          ray.visible = firing;
+          if (firing) {
+            const sweep = Math.sin(t * 0.8) * 0.9;
+            const aimDir = walk.clone().applyAxisAngle(up, sweep);
+            const tgt = pos.clone().addScaledVector(aimDir, (120 + 60 * Math.sin(t * 0.5)) * sc); tgt.y = grid.sample(tgt.x, tgt.z);
+            const from = P.tip.getWorldPosition(v3());
+            P.arm.rotation.y = sweep * 0.8;
+            ray.position.copy(from).lerp(tgt, 0.5); ray.scale.set(1.6 * sc, from.distanceTo(tgt), 1.6 * sc);
+            ray.quaternion.setFromUnitVectors(up, tgt.clone().sub(from).normalize());
+            const h2 = D.raycast(from, tgt.clone().sub(from).normalize(), from.distanceTo(tgt) + 5);
+            const q = h2 ? h2.point : tgt;
+            D.laser(q.x, q.z, 5 * S.r ** 0.6, dt * 1.4); D.burn(q.x, q.z, 12, dt);
+            if ((this.acc += dt) > 0.05) { this.acc = 0; fx.sparks(q, { x: 0, y: 1, z: 0 }, 4); fx.fire.emit(q.x, q.y + 1, q.z, 0, 10, 0, 0.6, 5, 10, [1, 0.6, 0.2, 1], [0.8, 0.1, 0.02, 0], 1, 4); world.paintScorch(q.x, q.z, 8, 0.6); }
+          }
+          return t < dur + 1;
         },
-        dispose() { A.remove(tri); disposeObj(scene, ray); },
+        dispose() { disposeObj(scene, head); for (const L of P.legs) for (const m of [L.thigh, L.shin, L.knee, L.foot]) disposeObj(scene, m); disposeObj(scene, ray); },
       });
       const g = cineGame(A); if (!g) return;
       const low = c.clone().addScaledVector(f, -320).addScaledVector(side, 80); low.y = c.y + 6;
       g.cine.play([
-        watch(low, () => tri.position.clone().add(v3(0, U.H * sc * 0.8, 0)), { dur: 4, fov: 48, caption: '땅속에서 무언가 솟아오른다', smooth: 0.25 }),
-        orbit(() => tri.position, { dist: 260 * sc, h: 70 * sc, a0: Math.atan2(-f.z, -f.x) - 0.6, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 6, look: 60 * sc, fov: 52 }),
+        watch(low, () => head.position.clone().add(v3(0, -H * 0.3, 0)), { dur: 4, fov: 50, caption: '땅속에서 무언가 솟아오른다', smooth: 0.25 }),
+        orbit(() => pos, { dist: 230 * sc, h: 60 * sc, a0: Math.atan2(-f.z, -f.x) - 0.6, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 6, look: H * 0.6, fov: 56 }),
+        watch(() => pos.clone().addScaledVector(walk, 140 * sc).addScaledVector(side, 60 * sc).add(v3(0, 12, 0)), () => head.position.clone().add(v3(0, -H * 0.2, 0)), { dur: 5, fov: 58, smooth: 0.3 }),
       ]);
     },
   },
