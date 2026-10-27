@@ -32,6 +32,10 @@ const BURST = {
   plasma: [8, 420, 4], napalm: [10, 480, 4], minefield: [5, 420, 3], demolition: [12, 480, 6], cruise: [12, 480, 5],
   tornado: [4, 380, 4], sinkhole: [6, 420, 4], airship: [6, 420, 5], dustex: [5, 420, 3], hail: [3, 380, 3],
   thermobaric: [6, 420, 3], deepblast: [6, 420, 3], vacuum: [6, 420, 3], landslide: [3, 380, 4],
+  soccer: [12, 420, 5], bowling: [10, 420, 5], domino: [8, 420, 4], marbles: [5, 380, 4], ball: [10, 420, 5], top: [8, 420, 4],
+  shrink: [12, 420, 4], portal: [5, 380, 4], jenga: [12, 420, 5], sharknado: [3, 380, 4], sandworm: [5, 420, 8], giantape: [2, 350, 6],
+  geyser: [6, 420, 4], pendulum: [6, 420, 4], methane: [5, 420, 4], blocks: [5, 380, 4], wildfire: [4, 420, 3], psychic: [5, 420, 4],
+  tripod: [3, 380, 5], superfight: [2, 300, 4], stomp: [6, 420, 4], train: [3, 380, 4], dinos: [2, 380, 3], datacrash: [4, 400, 3], voxel: [5, 420, 4], melt: [5, 420, 4],
 };
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
 
