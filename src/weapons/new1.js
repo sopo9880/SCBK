@@ -282,7 +282,10 @@ export const NEW1 = {
             if (!t.m.parent || t.e.captured) continue;
             const gy = grid.sample(t.pos.x, t.pos.z);
             if (!t.landed) {
-              t.vy = Math.max(-14, t.vy - 9.8 * dt); t.pos.y += t.vy * dt;
+              // 자유 낙하 뒤 지면 90m 위에서 낙하산이 펴짐
+              const open = t.pos.y < gy + 90;
+              t.vy = open ? Math.min(-9, t.vy + 40 * dt) : Math.max(-60, t.vy - 9.8 * dt); t.pos.y += t.vy * dt;
+              t.ch.visible = open;
               if (t.pos.y <= gy) { t.landed = true; t.pos.y = gy; A.remove(t.ch); fx.dust(t.pos, 6); audio.thud(); D.explode({ x: t.pos.x, y: gy + 2, z: t.pos.z, r: 10, power: 20, lift: -0.5, lod: 1 }); }
               t.ch.position.copy(t.pos);
             } else {
@@ -290,14 +293,19 @@ export const NEW1 = {
               // 잠깐 달리다 멈춰서 포격
               if (t.drive > 0) {
                 t.drive -= dt;
-                t.pos.addScaledVector(t.dir, 9 * dt); t.pos.y = gy;
+                t.pos.addScaledVector(t.dir, 14 * dt); t.pos.y = gy;
                 D.explode({ x: t.pos.x + t.dir.x * 5, y: gy + 2, z: t.pos.z + t.dir.z * 5, r: 6, power: 10, lift: 0.1, lod: 1, lodBudget: 0 });
               } else {
                 // 표적: 가까운 온전한 건물, 3발 쏘면 다음 건물
                 if (!t.tgt || t.tgt.state === 'gone' || t.shots >= 3) {
                   const bs = D.buildingsNear(t.pos.x, t.pos.z, 240).filter(b => b.state === 'intact' || b.state === 'fractured').sort((a, b) => Math.hypot(a.cx - t.pos.x, a.cz - t.pos.z) - Math.hypot(b.cx - t.pos.x, b.cz - t.pos.z));
                   t.tgt = bs[Math.min(bs.length - 1, Math.floor(R() * 3))] || null; t.shots = 0;
-                  if (!t.tgt) { t.drive = 2; t.dir.applyAxisAngle(v3(0, 1, 0), (R() - 0.5) * 2); }
+                  if (!t.tgt) {
+                    // 가까이에 건물이 없으면 가장 가까운 건물 쪽으로 달려감
+                    const far = D.buildingsNear(t.pos.x, t.pos.z, 900).filter(b => b.state === 'intact').sort((a, b) => Math.hypot(a.cx - t.pos.x, a.cz - t.pos.z) - Math.hypot(b.cx - t.pos.x, b.cz - t.pos.z))[0];
+                    if (far) { t.dir.set(far.cx - t.pos.x, 0, far.cz - t.pos.z).normalize(); t.drive = Math.min(6, Math.max(1, (Math.hypot(far.cx - t.pos.x, far.cz - t.pos.z) - 150) / 14)); }
+                    else { t.drive = 2; t.dir.applyAxisAngle(v3(0, 1, 0), (R() - 0.5) * 2); }
+                  }
                 }
                 if (t.tgt) {
                   const b = t.tgt;

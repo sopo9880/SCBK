@@ -121,7 +121,7 @@ export const MOVIE3 = {
             const dir = bm.op.pos.clone().sub(from).normalize().applyAxisAngle(UP, bm.sweep * (bm.t - 0.6));
             const len = R0 * 2;
             const h2 = D.raycast(from, dir, len);
-            const end = h2 ? h2.point : from.clone().addScaledVector(dir, len);
+            const end = h2 ? v3(h2.point.x, h2.point.y, h2.point.z) : from.clone().addScaledVector(dir, len);
             bm.beam.children.forEach((m) => { const o = v3(-dir.z, 0, dir.x).multiplyScalar(m.userData.off * 0.4 * sz * 0.1); const a2 = from.clone().add(o); m.position.copy(a2).lerp(end, 0.5); m.scale.set(sz * 0.08, a2.distanceTo(end), sz * 0.08); m.quaternion.setFromUnitVectors(UP, end.clone().sub(a2).normalize()); });
             D.lineBlast(from.clone().addScaledVector(dir, sz * 3), v3(end.x, end.y, end.z), 3.5 * S.r ** 0.5, 30);
             if (h2) { fx.sparks(end, UP, 6); D.laser(end.x, end.z, 4 * S.r ** 0.5, dt); world.paintScorch(end.x, end.z, 6, 0.6); }

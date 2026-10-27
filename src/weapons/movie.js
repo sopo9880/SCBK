@@ -224,7 +224,7 @@ export const MOVIE = {
       g.cine.play([
         watch(low, () => head.position.clone().add(v3(0, -H * 0.3, 0)), { dur: 4, fov: 50, caption: '땅속에서 무언가 솟아오른다', smooth: 0.25 }),
         orbit(() => pos, { dist: 230 * sc, h: 60 * sc, a0: Math.atan2(-f.z, -f.x) - 0.6, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: 6, look: H * 0.6, fov: 56 }),
-        watch(() => pos.clone().addScaledVector(walk, 140 * sc).addScaledVector(side, 60 * sc).add(v3(0, 12, 0)), () => head.position.clone().add(v3(0, -H * 0.2, 0)), { dur: 5, fov: 58, smooth: 0.3 }),
+        watch(() => pos.clone().addScaledVector(walk, 230 * sc).addScaledVector(side, 130 * sc).add(v3(0, 25, 0)), () => head.position.clone().add(v3(0, -H * 0.3, 0)), { dur: 5, fov: 58, smooth: 0.3 }),
       ]);
     },
   },
