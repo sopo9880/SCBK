@@ -302,6 +302,9 @@ export class GPUCore {
     const frameStep = 1 / 60;
     let frames = 0;
     while (this._acc >= frameStep - 1e-6 && frames < maxSteps) { this._acc -= frameStep; frames++; }
+    // GPU 가 밀려 있으면(읽기 2개 이상 대기) 이번 프레임은 쉬어서 일이 끝없이 쌓이지 않게 (물리가 잠시 느려짐)
+    const inflight = this.staging.filter(x => x.busy).length;
+    if (inflight >= 2) { frames = 0; this.behind = (this.behind || 0) + 1; }
     const nsub = frames * this.substeps;
     const wg = (n) => Math.ceil(n / 64);
     const run = (pass, name, n) => { pass.setPipeline(this.pipes[name]); pass.setBindGroup(0, this.group); pass.dispatchWorkgroups(Math.max(1, wg(n))); };
