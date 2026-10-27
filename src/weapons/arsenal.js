@@ -26,6 +26,13 @@ Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS, MOVIE_ENDINGS, 
 const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3, ...MOVIE, ...NEW4, ...NEW5, ...NEW6, ...MOVIE2, ...GUIDED, ...MOVIE3 };
 export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+// ×75 이상에서 한 발짜리 무기는 "일제 사격"으로: [발 수, 퍼지는 반경(m), 걸리는 시간(초)]
+const BURST = {
+  bomb: [24, 480, 4], missile: [22, 480, 4], bunker: [16, 450, 4], railgun: [10, 420, 3], rod: [12, 480, 3.5],
+  plasma: [8, 420, 4], napalm: [10, 480, 4], minefield: [5, 420, 3], demolition: [12, 480, 6], cruise: [12, 480, 5],
+  tornado: [4, 380, 4], sinkhole: [6, 420, 4], airship: [6, 420, 5], dustex: [5, 420, 3], hail: [3, 380, 3],
+  thermobaric: [6, 420, 3], deepblast: [6, 420, 3], vacuum: [6, 420, 3], landslide: [3, 380, 4],
+};
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
 
 export class Arsenal {
@@ -51,6 +58,7 @@ export class Arsenal {
     this._newShot(hit && hit.point);
     const h = HANDLERS[this.current];
     if (h && h.fire) h.fire(this, hit, cameraPos.clone());
+    if (hit && this.S.P >= 75 && BURST[this.current]) this._burst(this.current, hit.point);
     if (hit) runEnding(this, this.current, hit.point);
   }
   // 다른 무기를 지금 위력으로 한 번 쏘기 (세계 멸망 결말에서 여러 번 쓸 때)
@@ -70,6 +78,26 @@ export class Arsenal {
     if (h && h.holdEnd) h.holdEnd(this, this._hold.state);
     if (this._holdAim) runEnding(this, this._hold.id, this._holdAim);
     this._hold = null; this._holdAim = null;
+  }
+
+  // 일제 사격: 표적 주변에 같은 무기를 여러 번 (연출·결말 없이)
+  _burst(id, p) {
+    const [n, rad, dur] = BURST[id];
+    const half = this.ctx.grid.span / 2 * 0.9, r = Math.min(rad, half);
+    const pts = [];
+    for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 * 3.7, d = r * Math.sqrt((i + 1) / n); pts.push({ x: Math.max(-half, Math.min(half, p.x + Math.cos(a) * d)), z: Math.max(-half, Math.min(half, p.z + Math.sin(a) * d)) }); }
+    let k = 0;
+    const self = this;
+    this.addActive({ t: 0, update(dt) {
+      this.t += dt;
+      while (k < n && this.t >= 0.6 + (k / n) * dur) {
+        const q = pts[k++], gy = self.ctx.grid.sample(q.x, q.z);
+        const hit = self.ctx.D.raycast({ x: q.x, y: gy + 2500, z: q.z }, { x: 0, y: -1, z: 0 }, 6000) || { point: { x: q.x, y: gy, z: q.z }, info: null };
+        const cine = self.opts.cinematic; self.opts.cinematic = false; self._noEnding = true;
+        try { const h = HANDLERS[id]; if (h && h.fire) h.fire(self, hit, self.ctx.camera.position.clone()); } finally { self.opts.cinematic = cine; self._noEnding = false; }
+      }
+      return k < n;
+    } });
   }
 
   // 새 발사: 기다리던 세계 멸망 카운트다운·행성 장면은 취소
