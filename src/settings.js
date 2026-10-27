@@ -63,6 +63,7 @@ export const SCHEMA = [
   { tab: 'cam', key: 'rotSens', label: '회전 감도', type: 'range', min: 0.2, max: 3, step: 0.05, def: 1, fmt: mul },
   { tab: 'cam', key: 'zoomSens', label: '확대 감도', type: 'range', min: 0.2, max: 3, step: 0.05, def: 1, fmt: mul },
   { tab: 'cam', key: 'moveSpeed', label: '키보드 이동 속도', type: 'range', min: 0.2, max: 3, step: 0.05, def: 1, fmt: mul },
+  { tab: 'cam', key: 'vehMouse', label: '탈것 마우스', type: 'select', def: 'look', options: [['look', '카메라 둘러보기 (GTA 방식)'], ['steer', '마우스로 조종']] },
   { tab: 'cam', key: 'cinematic', label: '카메라 연출', type: 'toggle', def: true, desc: '큰 무기의 발사·착탄 장면 연출' },
   { tab: 'cam', key: 'autoPull', label: '거대 폭발 때 자동으로 물러나기', type: 'toggle', def: true },
   { tab: 'cam', key: 'worldEnd', label: '세계 멸망 결말', type: 'toggle', def: true, desc: '끄면 ×100 이어도 무기 자체의 연출과 파괴만 나와요.' },
@@ -78,6 +79,7 @@ export const SCHEMA = [
   { tab: 'safety', key: 'strobe', label: '번개 깜빡임', type: 'toggle', def: true, desc: '끄면 번개가 깜빡이지 않고 한 번만 보여요.' },
   // ---- 조작 키 ----
   { tab: 'keys', key: 'k_slow', label: '슬로모션', type: 'key', def: 'KeyT' },
+  { tab: 'keys', key: 'k_fast', label: '빨리 감기 (×2 → ×4 → ×1)', type: 'key', def: 'KeyY' },
   { tab: 'keys', key: 'k_time', label: '시간대 바꾸기', type: 'key', def: 'KeyN' },
   { tab: 'keys', key: 'k_shot', label: '스크린샷', type: 'key', def: 'KeyP' },
   { tab: 'keys', key: 'k_mute', label: '소리 끄기', type: 'key', def: 'KeyM' },

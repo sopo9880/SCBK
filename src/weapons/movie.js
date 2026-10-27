@@ -33,8 +33,11 @@ export const MOVIE = {
       const U = eng.userData;
       const startY = c.y + 2600;
       eng.position.set(c.x, startY, c.z);
-      const nP = Math.round(5 + 2 * S.n ** 0.6);              // 중력 박동 횟수
-      const T_LAND = 5, T_SPIN = 2.2, T_P = 1.7, T_PULSES = nP * T_P;
+      // v1.10: 박동마다 "위이이잉" 충전 → "파아앙" 박동. 갈수록 충전이 길고 세짐
+      const nP = Math.round(3 + 1.4 * S.n ** 0.6);            // 중력 박동 횟수 (×1: 4, ×10: 6, ×100: 9)
+      const chargeOf = (k) => 2.3 + k * 0.18, AFTER = 1.15;
+      const PT = []; { let tt = 0; for (let k = 0; k < nP; k++) { tt += chargeOf(k); PT.push(tt); tt += AFTER; } }
+      const T_LAND = 5, T_SPIN = 1.6, T_PULSES = PT[nP - 1] + AFTER + 0.6;
       const T_HERO = T_LAND + T_SPIN + T_PULSES;              // 수호자 도착
       const r0 = 60 * S.r ** 0.5;
       const f = camDir(camera, c), side = v3(-f.z, 0, f.x);
@@ -64,19 +67,29 @@ export const MOVIE = {
           if (tp < 0) { if (R() < dt * 30) { const a = R() * 6.28, d = r0 * (1 + R()); const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.dust({ x, y: grid.sample(x, z), z }, 6); } return true; }
           // 3) 중력 박동: 떠올랐다가 짓눌림, 범위가 점점 커짐
           if (!st.heroHit) {
-            const k = Math.floor(tp / T_P), ph = (tp % T_P) / T_P;
-            U.beamMat.opacity = ph < 0.25 ? 0.9 : 0.35 + 0.1 * Math.sin(t * 30);
-            U.beam.scale.set(1 + (ph < 0.25 ? 0.6 : 0), 1, 1 + (ph < 0.25 ? 0.6 : 0));
-            if (k >= st.pulse && k < nP) {
-              st.pulse = k + 1;
+            // 지금 충전 중인 박동 k 와 진행도 ch (0~1), 박동 직후 aft (0~1)
+            let k = st.pulse;
+            const t0k = k < nP ? PT[k] - chargeOf(k) : 1e9;
+            const chg = k < nP ? Math.max(0, Math.min(1, (tp - t0k) / chargeOf(k))) : 0;
+            const aft = st.lastP !== undefined ? Math.max(0, 1 - (tp - st.lastP) / AFTER) : 0;
+            if (k < nP && tp >= t0k && st.wound !== k) { st.wound = k; audio.windup(chargeOf(k), 1 + k * 0.08); }
+            // 충전: 빔이 가늘게 떨리며 점점 밝아짐 → 박동: 굵게 번쩍
+            U.beamMat.opacity = Math.max(0.12 + 0.6 * chg * chg + 0.08 * Math.sin(t * (20 + chg * 60)), aft * 0.95);
+            const bw = 0.55 + 0.35 * chg + aft * 1.0;
+            U.beam.scale.set(bw, 1, bw);
+            U.arms.rotation.y += dt * chg * 4;
+            if (chg > 0.2 && R() < dt * 25 * chg) { const a = R() * 6.28, d = r0 * (1 + k * 0.45) * (0.6 + R() * 0.8); const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.dust({ x, y: grid.sample(x, z), z }, 3 + chg * 4); }
+            if (k < nP && tp >= PT[k]) {
+              st.pulse = k + 1; st.lastP = tp;
+              audio.pulse(1 + k * 0.06);
               const rk = r0 * (1 + k * 0.45);
               // 박동: 아래로 짓누르는 충격 + 바닥 꺼짐
               D.explode({ x: c.x, y: c.y + 4, z: c.z, r: rk, power: 40 * S.v, lift: -1.2, scorch: 0.2, lod: 1 });
               A.crater(c.x, c.z, rk * 0.8, 4 + k * 1.5);
               for (const b of D.buildingsNear(c.x, c.z, rk * 1.5)) { const d = Math.hypot(b.cx - c.x, b.cz - c.z); if (d < rk * 1.5 && d > rk * 0.4) D.flatten(b, Math.min(1, 1.3 - d / (rk * 1.5)), (b.cx - c.x) / d, (b.cz - c.z) / d, 0.6); }
               // 흩어진 파편은 떠올랐다가 다음 박동에 내리꽂힘
-              for (const ch of D.gather(c.x, c.z, rk * 1.4, 2)) if (R() < 0.35) { if (D.launch(ch, (R() - 0.5) * 3, 14 + R() * 10, (R() - 0.5) * 3)) st.slam.push([ch, t + T_P * 0.55]); }
-              fx.ring(c, rk * 2.2, 1.2, 0xa8dcff, 0.6); fx.addShake(1.8); audio.boom(2.4, camera.position.distanceTo(c));
+              for (const ch of D.gather(c.x, c.z, rk * 1.4, 2)) if (R() < 0.35) { if (D.launch(ch, (R() - 0.5) * 3, 14 + R() * 10, (R() - 0.5) * 3)) st.slam.push([ch, t + chargeOf(k + 1) * 0.8 + AFTER * 0.5]); }
+              fx.ring(c, rk * 2.2, 1.2, 0xa8dcff, 0.6); fx.addShake(1.8);
               world.paintScorch(c.x, c.z, rk, 0.4);
             }
             for (let i = st.slam.length - 1; i >= 0; i--) { const [ch, at] = st.slam[i]; if (t >= at) { st.slam.splice(i, 1); if (ch.state === 1) { ch.body.setGravityScale(4, true); ch.body.setLinvel({ x: 0, y: -40, z: 0 }, true); } } }
@@ -92,31 +105,82 @@ export const MOVIE = {
                 st.heroHit = true; st.fall = t;
                 U.beamMat.opacity = 0; U.eyeMat.opacity = 0;
                 const q = coreAt();
-                fx.explosion(q, 60 * sc, { smokeColumn: true }); fx.flash = Math.max(fx.flash, 0.5); fx.addShake(3); audio.nuke();
-                for (let i = 0; i < 80; i++) fx.sparks(q, { x: (R() - 0.5) * 2, y: R(), z: (R() - 0.5) * 2 }, 3);
+                // 수호자가 엔진 중심을 터트림 → 그 뒤로는 모든 소리가 가라앉고 중심으로 빨려 들어감
+                fx.explosion(q, 40 * sc, { smokeColumn: false }); fx.flash = Math.max(fx.flash, 0.45); fx.addShake(2); audio.pulse(1.6);
+                for (let i = 0; i < 60; i++) fx.sparks(q, { x: (R() - 0.5) * 2, y: R(), z: (R() - 0.5) * 2 }, 3);
                 for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true);
-                if (A.ctx.hud) A.ctx.hud.toast('수호자가 엔진을 멈췄습니다', 'info');
+                st.slam.length = 0;
+                if (A.ctx.hud) A.ctx.hud.toast('수호자가 엔진을 터트렸습니다', 'info');
+                // 빨려 들어갈 범위: 엔진이 누르던 범위의 약 1.8배
+                st.RI = r0 * (1 + (nP - 1) * 0.45) * 1.5;
+                st.sing = c.clone().add(v3(0, 25 * sc, 0));
+                st.held = [];
+                for (const b of D.buildingsNear(c.x, c.z, st.RI)) {
+                  if (b.state !== 'intact') continue;
+                  const d = Math.hypot(b.cx - c.x, b.cz - c.z); if (d > st.RI) continue;
+                  const h = D.carryBuilding(b); if (h) st.held.push({ h, d, from: h.center.clone(), at: 0.6 + (d / st.RI) * 4.2 + R() * 0.6, spin: v3(R() - 0.5, R() - 0.5, R() - 0.5).normalize(), q: new THREE.Quaternion() });
+                }
+                st.hole = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), new THREE.MeshBasicMaterial({ color: 0xcfe8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+                st.hole.position.copy(st.sing); st.hole.scale.setScalar(30 * sc); scene.add(st.hole);
+                st.dug = 0;
+                setTimeout(() => audio.implode(9), 600);
               }
             }
             return true;
           }
-          // 4) 수호자는 뚫고 하늘로, 엔진은 기울며 쓰러짐
-          const tf = t - st.fall;
+          // 4) 조용한 소멸: 엔진·건물·파편·나무가 중심으로 빨려 들어가며 작아지고 사라짐
+          const tf = t - st.fall, RI = st.RI, Pc = st.sing;
           hero.position.addScaledVector(v3(0, 1, 0).add(side.clone().multiplyScalar(0.3)).normalize(), 900 * dt);
-          if (tf < 4) {
-            const ang = 1.25 * ease.in(Math.min(1, tf / 3.2));
-            eng.quaternion.setFromAxisAngle(f, -ang);
-            if (R() < dt * 20) { const q = coreAt(); fx.explosion(q.add(v3((R() - 0.5) * 60, (R() - 0.5) * 60, (R() - 0.5) * 60)), 15 * sc, { smokeColumn: false }); }
-            if (tf > 3.2 && !st.crashed) {
-              st.crashed = true;
-              const q = c.clone().addScaledVector(side, U.H * sc * 0.9); q.y = grid.sample(q.x, q.z);
-              A.blast(q, 90 * sc, 50 * S.v, { vap: 10, crater: [40 * sc, 10 * sc] }); fx.addShake(3);
-            }
-            return true;
+          const END = 9;
+          // 엔진 본체: 쪼그라들며 중심으로
+          { const u = Math.min(1, tf / 3.5); eng.position.lerp(Pc.clone().add(v3(0, -U.H * sc * (1 - u) * 0.5, 0)), Math.min(1, dt * 2)); eng.scale.setScalar(sc * Math.max(0.001, 1 - ease.in(u))); eng.rotation.y += dt * (2 + u * 10); if (u >= 1) eng.visible = false; }
+          // 건물: 바깥쪽일수록 늦게, 돌며 날아와 작아지고 사라짐
+          for (let i = st.held.length - 1; i >= 0; i--) {
+            const it = st.held[i];
+            const u = Math.max(0, Math.min(1, (tf - it.at) / 2.4));
+            if (u <= 0) { if (tf > it.at - 0.8) { it.q.setFromAxisAngle(it.spin, Math.sin(tf * 30) * 0.01); it.h.set(it.from, it.q, 1); } continue; }
+            const e = ease.in(u);
+            const p2 = it.from.clone().lerp(Pc, e); p2.y += Math.sin(u * Math.PI) * it.d * 0.12;
+            it.q.setFromAxisAngle(it.spin, e * 4);
+            it.h.set(p2, it.q, Math.max(0.001, 1 - e * 0.98));
+            if (u >= 1) { it.h.drop(); st.held.splice(i, 1); }
           }
-          return tf < 8;
+          // 흩어진 파편: 중력장으로 빨아들여 중심에서 없앰
+          if (tf < END - 1) D.field({ x: Pc.x, y: Pc.y, z: Pc.z, r: RI * 1.1, mode: 'gravity', core: 18 * sc + 10, grab: RI * Math.min(1, tf / 4), strength: 70, consume: true }, dt);
+          // 남은 조각(무너진 건물의 밑동·잔해)도 안쪽부터 조금씩 빛으로 사라짐
+          if (tf > 3.5) {
+            st.vt = (st.vt || 0) + dt;
+            if (st.vt > 0.2 || tf >= END) {
+              st.vt = 0;
+              const left = D.gather(c.x, c.z, RI, 2);
+              const frac = tf >= END ? 1 : Math.min(1, 0.12 + (tf - 3.5) * 0.06);
+              for (const ch of left) {
+                const d = Math.hypot(ch.x - c.x, ch.z - c.z);
+                if (tf < END && (R() > frac || d > RI * Math.min(1, (tf - 3.5) / 4.5))) continue;
+                if (R() < 0.15) fx.smoke.emit(ch.x, ch.y, ch.z, (Pc.x - ch.x) * 0.5, (Pc.y - ch.y) * 0.5, (Pc.z - ch.z) * 0.5, 1.6, 2.5, 0.5, [0.8, 0.88, 1, 0.5], [0.9, 0.95, 1, 0], 0.1, 0);
+                D.removeChunk(ch);
+              }
+            }
+          }
+          // 나무와 땅: 안쪽부터 점점 매끈한 그릇 모양으로 파임
+          const rr = RI * Math.min(1, tf / 6);
+          world.blastTrees(c.x, c.z, rr, rr);
+          if (rr - st.dug > RI * 0.12) { st.dug = rr; A.crater(c.x, c.z, rr * 0.75, 3 + rr * 0.05); }
+          // 빛나는 점: 커졌다가 마지막에 점 하나로 줄어들어 꺼짐
+          if (st.hole) {
+            const k = tf < END - 2 ? 1 + Math.sin(tf * 3) * 0.08 : Math.max(0, (END - tf) / 2);
+            st.hole.scale.setScalar((30 * sc + 12) * k); st.hole.material.opacity = 0.85 * Math.min(1, k * 1.2);
+            if (R() < dt * 30 && tf < END - 1.5) { const a = R() * 6.28, d = RI * (0.3 + R() * 0.8); const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; const y = grid.sample(x, z); fx.smoke.emit(x, y + 2, z, (Pc.x - x) * 0.3, (Pc.y - y) * 0.3, (Pc.z - z) * 0.3, 2.5, 6, 1, [0.75, 0.82, 0.9, 0.35], [0.9, 0.95, 1, 0], 0.1, 0); }
+          }
+          if (tf >= END) {
+            for (const it of st.held) it.h.drop(); st.held.length = 0;
+            if (st.hole) { disposeObj(scene, st.hole); st.hole = null; }
+            A.crater(c.x, c.z, RI * 0.75, 3 + RI * 0.05);
+            return false;
+          }
+          return true;
         },
-        dispose() { A.remove(eng); A.remove(hero); for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true); },
+        dispose() { A.remove(eng); A.remove(hero); for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true); if (st.held) for (const it of st.held) it.h.drop(); if (st.hole) disposeObj(scene, st.hole); },
       });
       const g = cineGame(A); if (!g) return;
       const low = c.clone().addScaledVector(f, -700).addScaledVector(side, 250); low.y = c.y + 15;
@@ -127,7 +191,8 @@ export const MOVIE = {
         orbit(c, { dist: 900 * sc, h: 260 * sc, a0, a1: a0 + 0.9, dur: T_PULSES - 3.2, look: 80 * sc, fov: 55 }),
         chase(() => hero.position, () => coreAt().sub(hero.position), { back: 60 * sc, up: 10 * sc, ahead: 200, dur: 2.6, fov: 60, caption: '하늘에서 무언가 날아온다' }),
         watch(() => coreAt().addScaledVector(side, -500 * sc).add(v3(0, 60, 0)), () => coreAt(), { dur: 1.2, fov: 45, ts: 0.25, smooth: 0.1 }),
-        watch(() => c.clone().addScaledVector(f, -1100 * sc).addScaledVector(side, 500 * sc).setY(c.y + 160 * sc), () => c.clone().add(v3(0, 120 * sc, 0)), { dur: 6, fov: 50, ts: (u) => (u < 0.2 ? 0.4 : 1) }),
+        watch(() => c.clone().addScaledVector(f, -1100 * sc).addScaledVector(side, 500 * sc).setY(c.y + 160 * sc), () => c.clone().add(v3(0, 60 * sc, 0)), { dur: 4, fov: 50, ts: (u) => (u < 0.25 ? 0.4 : 1), caption: '' }),
+        watch(() => c.clone().addScaledVector(f, -(st.RI || 400) * 2.2).addScaledVector(side, (st.RI || 400) * 0.8).setY(c.y + (st.RI || 400) * 0.9), () => c.clone().add(v3(0, 20, 0)), { dur: 6.5, fov: 52, caption: '빨려 들어가 사라지는 도시' }),
       ]);
     },
   },

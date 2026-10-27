@@ -153,5 +153,107 @@ export class Audio {
     if (!this._init() || this.muted) return;
     this._tone(80, 900, dur, 0.22, 'sawtooth'); this._tone(40, 460, dur, 0.25, 'sine');
   }
+  // ---------- 탈것 엔진 (계속 울리는 소리) ----------
+  // kind: car | heli | prop | jet | bomber. set({ rpm, load, wind, skid, roll, ab }) 로 실시간 조절
+  engine(kind) {
+    if (!this._init()) return null;
+    const c = this.ctx, t0 = c.currentTime;
+    const out = c.createGain(); out.gain.value = 0.0001; out.connect(this.master);
+    const nodes = [];
+    const osc = (type, f) => { const o = c.createOscillator(); o.type = type; o.frequency.value = f; o.start(); nodes.push(o); return o; };
+    const noi = () => { const s2 = c.createBufferSource(); s2.buffer = this.noise; s2.loop = true; s2.playbackRate.value = 0.9 + Math.random() * 0.2; s2.start(0, Math.random() * 2); nodes.push(s2); return s2; };
+    const gain = (v, to = out) => { const g = c.createGain(); g.gain.value = v; g.connect(to); return g; };
+    const filt = (type, f, q = 0.7, to) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; if (to) b.connect(to); return b; };
+    const T = (param, v, tc = 0.06) => param.setTargetAtTime(v, c.currentTime, tc);
+    const P = {};
+    if (kind === 'car') {
+      const lp = filt('lowpass', 600, 2, gain(1));
+      P.o1 = osc('sawtooth', 40); P.o2 = osc('square', 20); P.o1.connect(lp); const g2 = gain(0.5, lp); P.o2.connect(g2);
+      P.lp = lp; P.ng = gain(0.06); noi().connect(filt('bandpass', 350, 0.8, P.ng));
+    } else if (kind === 'heli') {
+      // 로터가 공기를 치는 "두두두": 낮은 잡음을 블레이드 박자로 끊음
+      const am = gain(0); const lp = filt('lowpass', 240, 0.8, am); noi().connect(lp);
+      P.lfo = osc('square', 5); const depth = c.createGain(); depth.gain.value = 0.5; P.lfo.connect(depth); depth.connect(am.gain);
+      const base = c.createConstantSource ? c.createConstantSource() : null; if (base) { base.offset.value = 0.55; base.connect(am.gain); base.start(); nodes.push(base); }
+      P.tur = osc('sine', 800); P.tg = gain(0.015); P.tur.connect(P.tg);
+      P.ng = gain(0.05); noi().connect(filt('highpass', 1500, 0.7, P.ng));
+    } else if (kind === 'prop') {
+      const lp = filt('lowpass', 900, 1.2, gain(1));
+      P.o1 = osc('sawtooth', 70); P.o2 = osc('sawtooth', 71.5); P.o1.connect(lp); P.o2.connect(lp); P.lp = lp;
+      P.ng = gain(0.05); noi().connect(filt('lowpass', 1200, 0.7, P.ng));
+    } else if (kind === 'jet') {
+      P.wg = gain(0.12); noi().connect(filt('bandpass', 2600, 1.4, P.wg)); P.wf = P.wg;
+      P.whine = osc('sine', 1800); P.whg = gain(0.012); P.whine.connect(P.whg);
+      P.rg = gain(0.25); P.rlp = filt('lowpass', 260, 0.6, P.rg); noi().connect(P.rlp);
+    } else if (kind === 'bomber') {
+      const lp = filt('lowpass', 480, 1, gain(1)); P.os = [52, 55.3, 58.1, 61.6].map(f => { const o = osc('sawtooth', f); o.connect(lp); return o; }); P.lp = lp;
+      P.ng = gain(0.18); noi().connect(filt('lowpass', 380, 0.6, P.ng));
+    }
+    // 공통: 바람, 타이어 끌림, 바퀴 구름
+    P.wind = gain(0); noi().connect(filt('bandpass', 900, 0.5, P.wind));
+    P.skid = gain(0); noi().connect(filt('bandpass', 2800, 6, P.skid));
+    P.roll = gain(0); noi().connect(filt('lowpass', 180, 0.7, P.roll));
+    let alive = true;
+    return {
+      set: (o) => {
+        if (!alive) return;
+        const r = Math.max(0, Math.min(1.2, o.rpm || 0)), ld = Math.max(0, Math.min(1, o.load || 0));
+        if (kind === 'car') { T(P.o1.frequency, 38 + r * 150); T(P.o2.frequency, 19 + r * 75); T(P.lp.frequency, 260 + r * 2200 + ld * 600); T(out.gain, 0.05 + r * 0.05 + ld * 0.06); }
+        else if (kind === 'heli') { T(P.lfo.frequency, 1 + r * 16); T(P.tur.frequency, 500 + r * 900); T(out.gain, (0.04 + r * 0.32) * (0.8 + ld * 0.4)); }
+        else if (kind === 'prop') { T(P.o1.frequency, 45 + r * 95); T(P.o2.frequency, 46 + r * 97); T(P.lp.frequency, 500 + r * 1400); T(out.gain, 0.04 + r * 0.1); }
+        else if (kind === 'jet') { T(P.whine.frequency, 900 + r * 2600); T(P.wg.gain, 0.05 + r * 0.12); T(P.rg.gain, 0.1 + r * 0.25 + (o.ab ? 0.55 : 0)); T(P.rlp.frequency, o.ab ? 520 : 260); T(out.gain, 0.12 + r * 0.12); }
+        else if (kind === 'bomber') { P.os.forEach((os, i) => T(os.frequency, [52, 55.3, 58.1, 61.6][i] * (0.7 + r * 0.6))); T(P.lp.frequency, 300 + r * 500); T(out.gain, 0.07 + r * 0.1); }
+        T(P.wind.gain, Math.min(0.5, (o.wind || 0) * 0.5)); T(P.skid.gain, Math.min(0.4, (o.skid || 0) * 0.4)); T(P.roll.gain, Math.min(0.6, (o.roll || 0) * 0.6));
+      },
+      stop: () => {
+        if (!alive) return; alive = false;
+        const t = c.currentTime; out.gain.cancelScheduledValues(t); out.gain.setValueAtTime(Math.max(0.0001, out.gain.value), t); out.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        for (const n of nodes) { try { n.stop(t + 0.55); } catch (e) { /* 이미 멈춤 */ } }
+        setTimeout(() => out.disconnect(), 700);
+      },
+    };
+  }
+  // 경적: 누르는 동안 계속
+  hornOn() {
+    if (!this._init() || this._horn) return;
+    const c = this.ctx, t = c.currentTime;
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.03); g.connect(this.master);
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2200; f.connect(g);
+    const os = [311, 370, 466].map(fr => { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; const og = c.createGain(); og.gain.value = 0.33; o.connect(og); og.connect(f); o.start(); return o; });
+    this._horn = { g, os };
+  }
+  hornOff() {
+    if (!this._horn) return;
+    const { g, os } = this._horn; const t = this.ctx.currentTime;
+    g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    for (const o of os) o.stop(t + 0.08);
+    this._horn = null;
+  }
+  // 테라포밍 엔진: 점점 올라가는 충전음 (위이이잉)
+  windup(dur = 2.5, k = 1) {
+    if (!this._init() || this.muted) return;
+    const c = this.ctx, t = c.currentTime;
+    for (const [f0, f1, type, gn] of [[90, 520 * k, 'sawtooth', 0.12], [181, 1046 * k, 'triangle', 0.08], [45, 260 * k, 'sine', 0.22]]) {
+      const o = c.createOscillator(); o.type = type;
+      o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      const vib = c.createOscillator(); vib.frequency.setValueAtTime(5, t); vib.frequency.linearRampToValueAtTime(14, t + dur);
+      const vg = c.createGain(); vg.gain.value = f1 * 0.012; vib.connect(vg); vg.connect(o.frequency);
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gn, t + dur * 0.92); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.08);
+      o.connect(g); g.connect(this.master); o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
+    }
+    this._noise(dur, 2500, 0.08, dur * 0.9, 3, 6000);
+  }
+  // 테라포밍 엔진: 박동 (파아앙)
+  pulse(k = 1) {
+    if (!this._init() || this.muted) return;
+    this._tone(1300 * k, 70, 1.4, 0.22, 'sawtooth'); this._tone(650 * k, 40, 1.8, 0.3, 'sine');
+    this._noise(1.6, 5000, 0.7, 0.004, 0.8, 200); this._noise(2.6, 260, 0.9, 0.01, 0.5, 35);
+  }
+  // 조용한 소멸: 낮게 가라앉는 울림과 거꾸로 빨려드는 바람
+  implode(dur = 8) {
+    if (!this._init() || this.muted) return;
+    this._tone(70, 22, dur, 0.35, 'sine'); this._tone(140, 40, dur * 0.8, 0.06, 'triangle');
+    this._noise(dur * 0.9, 300, 0.25, dur * 0.6, 1.5, 1200);
+  }
   hum(dur) { if (!this._init() || this.muted) return; this._tone(48, 30, dur, 0.5, 'sine'); this._tone(96, 40, dur, 0.15, 'triangle'); }
 }

@@ -348,3 +348,9 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #vehPick .vp-start button { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 #vehPick .vp-start button.on { background: rgba(255,170,80,.25); border-color: #ffb050; }
 #vehPick .vp-note { margin: 12px 0 0; font-size: 12px; opacity: .6; }
+
+.fast-badge { background: rgba(60,140,255,.9) !important; color: #fff !important; text-shadow: none !important; }
+#vehHud .vh-hp i { display: block; width: 80px; height: 6px; background: rgba(255,255,255,.15); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+#vehHud .vh-hp em { display: block; height: 100%; background: #5fd47a; width: 100%; transition: width .2s; }
+#vehHud .vh-hp.low em { background: #ff5a3a; }
+#vehHud .vh-land { position: fixed; left: 50%; top: 62%; transform: translateX(-50%); color: #fff; font: 600 15px/1.4 system-ui, sans-serif; text-shadow: 0 1px 4px rgba(0,0,0,.8); white-space: nowrap; }

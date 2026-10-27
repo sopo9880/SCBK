@@ -310,6 +310,7 @@ async function loadAndRun(place, reuse) {
     hud.enter(place, data);
     $('#loading').hidden = true; $('#hud').hidden = false;
     window.__game = game;
+    document.dispatchEvent(new Event('we-newgame'));
   } catch (e) {
     console.error(e);
     setStep(Math.min(i, STEPS.length - 1), 'fail');
@@ -457,7 +458,19 @@ function initHud() {
     if (game) game.arsenal.power = v;
   };
   let slow = false;
-  const toggleSlow = () => { slow = !slow; game && game.setSlowMo(slow); $('#tSlow').classList.toggle('on', slow); $('#slowBadge').hidden = !slow; };
+  let fast = 1;
+  const showFast = () => { $('#tFast').classList.toggle('on', fast > 1); $('#fastBadge').hidden = fast <= 1; $('#fastBadge').textContent = `▶▶ ×${fast}`; };
+  const toggleSlow = () => { slow = !slow; if (slow) { fast = 1; showFast(); } game && game.setSlowMo(slow); $('#tSlow').classList.toggle('on', slow); $('#slowBadge').hidden = !slow; };
+  // 빨리 감기: ×1 → ×2 → ×4 → ×1 (슬로모션과는 같이 못 켬)
+  const cycleFast = () => {
+    fast = fast === 1 ? 2 : fast === 2 ? 4 : 1;
+    if (fast > 1 && slow) { slow = false; $('#tSlow').classList.remove('on'); $('#slowBadge').hidden = true; }
+    if (game) { if (fast > 1) game.setTimeRate(fast); else game.setSlowMo(slow); }
+    showFast();
+  };
+  $('#tFast').onclick = cycleFast;
+  // 새 도시를 열면 슬로모션·빨리 감기 상태를 다시 적용
+  document.addEventListener('we-newgame', () => { if (!game) return; if (fast > 1) game.setTimeRate(fast); else game.setSlowMo(slow); });
   $('#tSlow').onclick = toggleSlow;
   const cycleTime = () => {
     const keys = Object.keys(TIMES); settings.time = keys[(keys.indexOf(settings.time) + 1) % keys.length]; store.set('settings', settings);
@@ -526,7 +539,7 @@ function initHud() {
     }
     if (e.code === 'Tab') { e.preventDefault(); hud.cycleCat(e.shiftKey ? -1 : 1); return; }
     const K = settings.cfg;
-    const acts = { [K.k_slow]: toggleSlow, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true), [K.k_control]: () => openControlRoom(), [K.k_vehicle]: () => openVehicles(),
+    const acts = { [K.k_slow]: toggleSlow, [K.k_fast]: cycleFast, [K.k_time]: cycleTime, [K.k_shot]: shot, [K.k_mute]: mute, [K.k_help]: help, [K.k_ui]: () => $('#hud').classList.toggle('hide-ui'), [K.k_settings]: () => showSettings(true), [K.k_control]: () => openControlRoom(), [K.k_vehicle]: () => openVehicles(),
       [K.k_powDown]: () => { const p = $('#power'); p.value = Math.max(0, +p.value - 0.05); p.oninput(); }, [K.k_powUp]: () => { const p = $('#power'); p.value = Math.min(1, +p.value + 0.05); p.oninput(); } };
     delete acts[''];
     if (acts[e.code]) { e.preventDefault(); acts[e.code](); return; }
