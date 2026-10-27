@@ -111,6 +111,9 @@ const I = {
   top: '<path d="M5 9h14l-7 13z" fill="currentColor"/><rect x="11" y="2" width="2" height="7" fill="currentColor"/><ellipse cx="12" cy="9" rx="8" ry="2" fill="currentColor"/>',
   soccer: '<circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8l3.5 2.5-1.3 4h-4.4l-1.3-4z" fill="currentColor"/><path d="M12 8V3M15.5 10.5l4-2M14.2 14.5l2.5 4M9.8 14.5l-2.5 4M8.5 10.5l-4-2" stroke="currentColor" stroke-width="1.3"/>',
   blocks: '<rect x="3" y="13" width="8" height="8" fill="currentColor"/><circle cx="16.5" cy="17" r="4" fill="currentColor" opacity="0.7"/><path d="M8 11l4-8 4 8z" fill="currentColor" opacity="0.85"/>',
+  roguehole: '<circle cx="12" cy="12" r="4" fill="currentColor"/><ellipse cx="12" cy="12" rx="10" ry="3" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(15 12 12)"/><path d="M2 21l4-3M7 22l2-3" stroke="currentColor" stroke-width="1.4"/>',
+  supernova: '<circle cx="12" cy="12" r="3.5" fill="currentColor"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5M4 4l3.5 3.5M16.5 16.5L20 20M20 4l-3.5 3.5M7.5 16.5L4 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  airloss: '<path d="M3 20a9 9 0 0 1 18 0z" fill="currentColor" opacity="0.4"/><path d="M8 14V4M12 14V2M16 14V4M6 7l2-3 2 3M10 5l2-3 2 3M14 7l2-3 2 3" stroke="currentColor" stroke-width="1.6" fill="none"/>',
 };
 
 export const CATEGORIES = [
@@ -242,6 +245,9 @@ export const WEAPONS = [
   { id: 'megaquake', cat: 'movie', name: '지진 대협곡', desc: '단층이 열리며 도시를 가로지르는 거대 협곡' },
   { id: 'giantape', cat: 'movie', name: '거대 유인원', desc: '가장 높은 빌딩을 기어올라 가슴을 치고 뛰어내림', opts: [CINE] },
   { id: 'sunfall', cat: 'end', name: '태양 낙하', desc: '해가 커지며 하늘이 불타고 도시가 녹아내림', opts: [CINE] },
+  { id: 'roguehole', cat: 'end', name: '떠돌이 블랙홀 통과', desc: '하늘을 가로지르는 블랙홀이 아래의 도시를 빨아올려 삼킴', opts: [CINE] },
+  { id: 'supernova', cat: 'end', name: '초신성', desc: '별 하나가 태양보다 밝아지고 빛의 벽이 밀려와 쓸어버림', opts: [CINE] },
+  { id: 'airloss', cat: 'end', name: '대기 증발', desc: '하늘이 검게 변하고 공기가 빠져나가며 건물이 부풀어 터짐', opts: [CINE] },
 ];
 
 export const DEFAULT_OPTS = { realNuke: true, cinematic: true, mirv: false, absorb: false, giant: true, enlarge: false, drillok: true };
