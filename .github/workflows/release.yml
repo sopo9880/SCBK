@@ -3,7 +3,7 @@ name: Release
 # Windows exe 를 빌드하고 기존 릴리스/태그를 모두 지운 뒤 package.json 버전으로 새 릴리스를 만든다.
 on:
   push:
-    branches: [main]
+    branches: [main, 'wip/**']
   workflow_dispatch:
 permissions:
   contents: write
@@ -47,5 +47,10 @@ jobs:
           if gh release view "$VER" >/dev/null 2>&1; then
             echo "같은 버전 릴리스 교체: $VER"; gh release delete "$VER" --yes --cleanup-tag
           fi
+          # 버전에 '-' 가 있으면 (예: 2.0.0-beta.1) 시험판으로 올리고 '최신' 표시는 그대로 둠
+          case "$VER" in
+            *-*) FLAG="--prerelease --latest=false" ;;
+            *)   FLAG="--latest" ;;
+          esac
           gh release create "$VER" dist/*.exe dist/*.zip dist/SHA256SUMS.txt \
-            --target "$GITHUB_SHA" --title "WreckEarth $VER" --notes-file RELEASE_NOTES.md --latest
+            --target "$GITHUB_SHA" --title "WreckEarth $VER" --notes-file RELEASE_NOTES.md $FLAG
