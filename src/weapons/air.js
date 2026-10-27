@@ -121,7 +121,7 @@ export const AIR = {
       const g = cineGame(A); if (!g) return;
       const T = L / SPD;
       const side = v3(-f.z, 0, f.x);
-      const ground = tgt.clone().addScaledVector(f, -170).addScaledVector(side, 60); ground.y = grid.sample(ground.x, ground.z) + 4;
+      const ground = clearSpot(A, tgt.clone().add(v3(0, 6, 0)), { dist: 190, h: 30, a0: Math.atan2(-f.z, -f.x) + 0.35 });
       g.cine.play([
         chase(() => st.pos, () => st.vel, { back: 22, up: 6, ahead: 60, dur: Math.max(1.5, T - 2.4), caption: '순항미사일', fov: 62 }),
         watch(ground, () => (st.hit ? tgt : st.pos), { dur: 1.6, fov: 48, ts: 0.45, smooth: 0.05 }),

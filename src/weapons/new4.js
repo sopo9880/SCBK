@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { makeBomb, makeMissile, makeBomber } from './models.js';
 import { makeHeli, makeJet, makeGlider, makeAirship, makeSilo, makeMine, makeIceberg, makeClimateSat, lumpy, glow, std } from './models4.js';
-import { cineGame, watch, orbit, chase, camDir } from './cam.js';
+import { cineGame, watch, orbit, chase, camDir, clearSpot } from './cam.js';
 import { fxBlast, over, mapPoint, flood, liftAll, rain, copies } from './endings.js';
 import { worldEnd, wipeMap, crustCollapse } from './apocalypse.js';
 import { boltMesh } from './storms.js';
@@ -144,8 +144,8 @@ export const NEW4 = {
       const f = camDir(camera, v3(first.cx, first.baseY, first.cz)), sd = sideOf(f);
       const H = first.height, ext = Math.max(first.maxx - first.minx, first.maxz - first.minz);
       const ctr = v3(first.cx, first.baseY, first.cz);
-      const wide = ctr.clone().addScaledVector(f, -(H * 1.6 + ext + 90)).addScaledVector(sd, H * 0.5).add(v3(0, H * 0.45 + 12, 0));
-      const base = ctr.clone().addScaledVector(f, -(ext * 0.5 + 45)).addScaledVector(sd, -ext * 0.4).add(v3(0, 4, 0));
+      const wide = clearSpot(A, ctr.clone().add(v3(0, H * 0.3, 0)), { dist: H * 1.6 + ext + 90, h: H * 0.35 + 20, a0: Math.atan2(-f.z, -f.x) + 0.3 });
+      const base = clearSpot(A, ctr.clone().add(v3(0, 3, 0)), { dist: ext * 1.2 + 55, h: 14, a0: Math.atan2(-f.z, -f.x) - 0.4 });
       g.cine.play([
         watch(wide, ctr.clone().add(v3(0, H * 0.45, 0)), { dur: T0 - 0.6, fov: 48, caption: '철거 발파', smooth: 0.3 }),
         watch(base, ctr.clone().add(v3(0, H * 0.5, 0)), { dur: 1.6, fov: 62, ts: (u) => (u < 0.4 ? 1 : 0.35) }),
@@ -197,8 +197,8 @@ export const NEW4 = {
       const g = cineGame(A); if (!g) return;
       const a0 = Math.atan2(camera.position.z - c.z, camera.position.x - c.x);
       g.cine.play([
-        orbit(c, { dist: R0 * 1.4 + 70, h: 30 + R0 * 0.25, a0, a1: a0 + 0.35, dur: 1.4, fov: 52, caption: '지뢰밭' }),
-        orbit(c, { dist: R0 * 1.6 + 90, h: 45 + R0 * 0.4, a0: a0 + 0.35, a1: a0 + 1.1, dur: 2 + n * 0.035, fov: 55, ts: 0.65, cut: false }),
+        orbit(c, { dist: R0 * 1.4 + 70, h: 70 + R0 * 0.5, a0, a1: a0 + 0.35, dur: 1.4, fov: 52, caption: '지뢰밭' }),
+        orbit(c, { dist: R0 * 1.6 + 90, h: 95 + R0 * 0.6, a0: a0 + 0.35, a1: a0 + 1.1, dur: 2 + n * 0.035, fov: 55, ts: 0.65, cut: false }),
       ]);
     },
   },
@@ -471,7 +471,7 @@ export const NEW4 = {
       g.cine.play([
         watch(low, () => st.pos, { dur: 3.2, fov: 50, caption: '비행선 추락', smooth: 0.25 }),
         watch(mid, () => st.pos, { dur: 3, fov: 55, smooth: 0.25 }),
-        watch(low.clone().addScaledVector(sd, -L * 0.4).add(v3(0, 30, 0)), () => (st.crashed ? c.clone().add(v3(0, 20, 0)) : st.pos), { dur: 7, fov: 58, ts: (u) => (u > 0.25 && u < 0.6 ? 0.5 : 1), smooth: 0.3 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 8, 0)), { dist: L * 1.4 + 200, h: 100, a0: Math.atan2(-f.z, -f.x) - 0.4 }), () => (st.crashed ? c.clone().add(v3(0, 20, 0)) : st.pos), { dur: 7, fov: 58, ts: (u) => (u > 0.25 && u < 0.6 ? 0.5 : 1), smooth: 0.3 }),
       ]);
     },
   },
@@ -537,7 +537,7 @@ export const NEW4 = {
       const r0 = runs[0], sd = sideOf(r0.dir);
       g.cine.play([
         chase(() => r0.pos, () => r0.dir, { back: 45, up: 8, side: 12, ahead: 120, dur: (half - 250) / sp, fov: 58, caption: '전투기 기총소사' }),
-        watch(c.clone().addScaledVector(sd, 130).addScaledVector(r0.dir, 60).add(v3(0, 12, 0)), () => (r0.m.visible === false ? c : r0.pos.clone().lerp(c, 0.5)), { dur: 4.5, fov: 60, ts: 0.5, smooth: 0.15 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 4, 0)), { dist: 170, h: 45, a0: Math.atan2(sd.z, sd.x) }), () => (r0.m.visible === false ? c : r0.pos.clone().lerp(c, 0.5)), { dur: 4.5, fov: 60, ts: 0.5, smooth: 0.15 }),
       ]);
     },
   },
@@ -606,7 +606,7 @@ export const NEW4 = {
       const g = cineGame(A); if (!g) return;
       const foot = c.clone().addScaledVector(dir, -160).addScaledVector(sd, 90).add(v3(0, 10, 0));
       const sideCam = c.clone().addScaledVector(sd, H * 0.55).addScaledVector(dir, H * 0.3).add(v3(0, H * 0.18, 0));
-      const along = c.clone().addScaledVector(sd, 160).addScaledVector(dir, 200).add(v3(0, 45, 0));
+      const along = clearSpot(A, c.clone().addScaledVector(dir, Math.min(half * 0.6, H * 0.3)), { dist: 280, h: 130, a0: Math.atan2(sd.z, sd.x) });
       g.cine.play([
         watch(foot, c.clone().add(v3(0, H * 0.5, 0)), { dur: T0 + 0.6, fov: 70, caption: '우주 엘리베이터 붕괴', smooth: 0.3 }),
         watch(sideCam, () => c.clone().addScaledVector(dir, H * 0.3).add(v3(0, H * 0.15, 0)), { dur: 6, fov: 60, smooth: 0.3 }),
@@ -1051,7 +1051,7 @@ export const NEW4 = {
       const g = cineGame(A); if (!g) return;
       const f = camDir(camera, c), sd = sideOf(f);
       g.cine.play([
-        watch(c.clone().addScaledVector(f, -R0 - 150).addScaledVector(sd, 60).add(v3(0, 30, 0)), c.clone().add(v3(0, 8, 0)), { dur: ign - 0.3, fov: 55, caption: '메탄 분출', smooth: 0.3 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 6, 0)), { dist: R0 + 170, h: 75, a0: Math.atan2(-f.z, -f.x) + 0.3 }), c.clone().add(v3(0, 8, 0)), { dur: ign - 0.3, fov: 55, caption: '메탄 분출', smooth: 0.3 }),
         watch(c.clone().addScaledVector(f, -R0 * 1.6 - 200).addScaledVector(sd, -80).add(v3(0, 60, 0)), c.clone().add(v3(0, 25, 0)), { dur: 4.5, fov: 60, ts: (u) => (u < 0.4 ? 0.45 : 1), smooth: 0.3 }),
       ]);
     },

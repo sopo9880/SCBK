@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { makeMeteor } from './models.js';
 import { makeIceSpike, glowMat } from './models2.js';
-import { cineGame, watch, orbit, chase, camDir } from './cam.js';
+import { cineGame, watch, orbit, chase, camDir, clearSpot } from './cam.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
@@ -120,7 +120,7 @@ export const NATURE2 = {
       const a0 = Math.atan2(-f.z, -f.x);
       g.cine.play([
         orbit(c, { dist: Rc * 3.4, h: Hc * 0.9, a0: a0 - 0.3, a1: a0 + 0.1, dur: T_RISE, look: Hc * 0.4, caption: '땅이 솟아오릅니다', fov: 48 }),
-        watch(() => c.clone().addScaledVector(f, -Rc * 3.6).addScaledVector(side, Rc * 1.2).setY(grid.sample(c.x, c.z) + 30), () => c.clone().setY(grid.sample(c.x, c.z) + 120), { dur: 3, fov: 56, caption: '분화!', ts: (u) => 0.5 + 0.5 * u }),
+        watch(clearSpot(A, c.clone().setY(grid.sample(c.x, c.z) + 40), { dist: Rc * 3.8, h: Hc * 0.8 + 60, a0: Math.atan2(-f.z, -f.x) + 0.3 }), () => c.clone().setY(grid.sample(c.x, c.z) + 120), { dur: 3, fov: 56, caption: '분화!', ts: (u) => 0.5 + 0.5 * u }),
         orbit(c, { dist: Rc * 5, h: Hc * 2, a0: a0 + 0.1, a1: a0 + 0.9, dur: 7, look: Hc * 1.2, fov: 50 }),
       ], { onSkip: () => { st.t = Math.max(st.t, T_RISE + 0.01); } });
     },

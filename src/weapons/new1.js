@@ -75,7 +75,7 @@ export const NEW1 = {
       const c = v3(mid.cx, mid.baseY, mid.cz);
       g.cine.play([
         watch(v3(first.cx, first.baseY, first.cz).addScaledVector(side, 90).add(v3(0, 30, 0)), v3(first.cx, first.baseY + first.height * 0.4, first.cz), { dur: 1.6, fov: 50, caption: `연쇄 폭약 ${chain.length}채` }),
-        orbit(c, { dist: 260, h: 140, a0: Math.atan2(-f.z, -f.x) - 0.3, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: chain.length * 0.32 + 3, look: 20, fov: 52 }),
+        orbit(c, { dist: 400, h: 240, a0: Math.atan2(-f.z, -f.x) - 0.3, a1: Math.atan2(-f.z, -f.x) + 0.3, dur: chain.length * 0.32 + 3, look: 10, fov: 56 }),
       ]);
     },
   },
