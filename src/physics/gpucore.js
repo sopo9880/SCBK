@@ -258,7 +258,7 @@ export class GPUCore {
     f[4] = this.gravity[0]; f[5] = this.gravity[1]; f[6] = this.gravity[2];
     f[8] = this.terrain.x0; f[9] = this.terrain.z0; f[10] = this.terrain.cell; f[11] = this.terrain.n;
     f[12] = this.bgrid.x0; f[13] = this.bgrid.z0; f[14] = this.bgrid.cell; f[15] = this.bgrid.w;
-    f[16] = 1.0; f[17] = 0.6; f[18] = 0.45; f[19] = this._ncmd || 0;
+    f[16] = 1.25; f[17] = 0.6; f[18] = 0.45; f[19] = this._ncmd || 0;
     f[20] = last ? (this._resync ? 2 : 1) : 0; f[21] = 0.05; f[22] = 0.3; f[23] = 300;
     const so = this.so; u[24] = so[0]; u[25] = so[1]; u[26] = so[2]; u[27] = so[3]; u[28] = so[4]; u[29] = so[5]; u[30] = this.N; u[31] = 0;
     this.device.queue.writeBuffer(this.uni, 0, this.params);

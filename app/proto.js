@@ -235,7 +235,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
     }
   }
   var xn = xi;
-  if (cntC > 0.0) { xn = xi + D * P.k.x / max(1.0, cntC * 0.5); }
+  if (cntC > 0.0) { xn = xi + D * P.k.x / cntC; }
   PT[pi * 4u + 2u] = vec4f(xn, ri);
 }
 @compute @workgroup_size(64) fn commit(@builtin(global_invocation_id) id: vec3u) {
@@ -270,12 +270,17 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       q = normalize(qmul(vec4f(ax * sin(ha), cos(ha)), q));
     }
   }
-  let pos = c - qrot(q, lr);
+  var pos = c - qrot(q, lr);
   let dt = P.dt;
-  let v = (pos - b.ppos.xyz) / dt;
+  var v = (pos - b.ppos.xyz) / dt;
+  // \uACB9\uCE68\uC744 \uD55C \uBC88\uC5D0 \uD480\uBA70 \uD295\uACA8 \uB098\uAC00\uC9C0 \uC54A\uAC8C: \uC774\uBC88 \uB2E8\uACC4\uC5D0\uC11C \uBC14\uB00C\uB294 \uC18D\uB3C4\uB97C \uC81C\uD55C (\uCD5C\uB300 \uBC00\uC5B4\uB0B4\uAE30 \uC18D\uB3C4)
+  let dv = v - b.vel.xyz; let dvl = length(dv);
+  if (dvl > 12.0) { v = b.vel.xyz + dv * (12.0 / dvl); pos = b.ppos.xyz + v * dt; }
   var dq = qmul(q, vec4f(-b.pq.xyz, b.pq.w));
   if (dq.w < 0.0) { dq = -dq; }
-  let w = 2.0 * dq.xyz / dt;
+  var w = 2.0 * dq.xyz / dt;
+  let dw = w - b.ang.xyz; let dwl = length(dw);
+  if (dwl > 8.0) { w = b.ang.xyz + dw * (8.0 / dwl); let ha = w * dt * 0.5; q = normalize(b.pq + qmul(vec4f(ha, 0.0), b.pq)); pos = c - qrot(q, lr); if (dvl > 12.0) { pos = b.ppos.xyz + v * dt; } }
   // \uC7A0\uB4E4\uAE30: \uB290\uB9B0 \uC0C1\uD0DC\uAC00 0.5\uCD08 \uC774\uC5B4\uC9C0\uAC70\uB098, \uB5A8\uAE30\uB9CC \uD558\uACE0 0.6\uCD08 \uB3D9\uC548 \uAC70\uC758 \uC81C\uC790\uB9AC\uBA74
   var sleepT = b.ang.w;
   if (length(v) < 0.25 && length(w) < 0.35) { sleepT += dt; } else { sleepT = 0.0; }
@@ -732,7 +737,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       f[13] = this.bgrid.z0;
       f[14] = this.bgrid.cell;
       f[15] = this.bgrid.w;
-      f[16] = 1;
+      f[16] = 1.25;
       f[17] = 0.6;
       f[18] = 0.45;
       f[19] = this._ncmd || 0;

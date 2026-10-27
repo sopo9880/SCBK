@@ -236,7 +236,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
     }
   }
   var xn = xi;
-  if (cntC > 0.0) { xn = xi + D * P.k.x / max(1.0, cntC * 0.5); }
+  if (cntC > 0.0) { xn = xi + D * P.k.x / cntC; }
   PT[pi * 4u + 2u] = vec4f(xn, ri);
 }
 @compute @workgroup_size(64) fn commit(@builtin(global_invocation_id) id: vec3u) {
@@ -271,12 +271,17 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       q = normalize(qmul(vec4f(ax * sin(ha), cos(ha)), q));
     }
   }
-  let pos = c - qrot(q, lr);
+  var pos = c - qrot(q, lr);
   let dt = P.dt;
-  let v = (pos - b.ppos.xyz) / dt;
+  var v = (pos - b.ppos.xyz) / dt;
+  // 겹침을 한 번에 풀며 튕겨 나가지 않게: 이번 단계에서 바뀌는 속도를 제한 (최대 밀어내기 속도)
+  let dv = v - b.vel.xyz; let dvl = length(dv);
+  if (dvl > 12.0) { v = b.vel.xyz + dv * (12.0 / dvl); pos = b.ppos.xyz + v * dt; }
   var dq = qmul(q, vec4f(-b.pq.xyz, b.pq.w));
   if (dq.w < 0.0) { dq = -dq; }
-  let w = 2.0 * dq.xyz / dt;
+  var w = 2.0 * dq.xyz / dt;
+  let dw = w - b.ang.xyz; let dwl = length(dw);
+  if (dwl > 8.0) { w = b.ang.xyz + dw * (8.0 / dwl); let ha = w * dt * 0.5; q = normalize(b.pq + qmul(vec4f(ha, 0.0), b.pq)); pos = c - qrot(q, lr); if (dvl > 12.0) { pos = b.ppos.xyz + v * dt; } }
   // 잠들기: 느린 상태가 0.5초 이어지거나, 떨기만 하고 0.6초 동안 거의 제자리면
   var sleepT = b.ang.w;
   if (length(v) < 0.25 && length(w) < 0.35) { sleepT += dt; } else { sleepT = 0.0; }
