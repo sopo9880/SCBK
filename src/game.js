@@ -461,6 +461,7 @@ export class Game {
       this._onMove(e);
       if (this.planetFX) { this.endPlanet(); return; }
       if (this.pilot) { if (this.pilot.click) this.pilot.click(); return; }
+      if (this.arsenal._qte) { this.arsenal._qte(); return; }
       if (this.cine.active) { this.cine.skip(); return; }
       const hit = this.pick();
       if (!hit) return;

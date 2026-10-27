@@ -245,7 +245,7 @@ export const MOVIE2 = {
         const h = (kind ? 32 : 20) * S.r ** 0.4 * (0.8 + R() * 0.4);
         const m = A.spawn(makeDino(kind, cols[i % cols.length]), h);
         const lat = (R() - 0.5) * 2 * W;
-        herd.push({ m, h, kind, pos: c.clone().addScaledVector(dir, -620 - R() * 260).addScaledVector(f, lat), sp: (kind ? 16 : 26) * (0.85 + R() * 0.3), ph: R() * 6.28, hit: new Set() });
+        herd.push({ m, h, kind, pos: c.clone().addScaledVector(dir, -620 - R() * 260).addScaledVector(f, lat), sp: (kind ? 16 : 26) * (0.85 + R() * 0.3), ph: R() * 6.28, hit: new Set(), e: A.summon(m) });
       }
       audio.rumble(18); audio.roar(2);
       A.addActive({
@@ -253,6 +253,7 @@ export const MOVIE2 = {
         update(dt) {
           this.t += dt;
           for (const d of herd) {
+            if (d.e.captured) continue;
             d.pos.addScaledVector(dir, d.sp * dt);
             const gy = grid.sample(d.pos.x, d.pos.z);
             const bob = Math.abs(Math.sin(this.t * d.sp * 0.25 + d.ph)) * d.h * 0.04;

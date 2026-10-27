@@ -511,6 +511,7 @@ function initHud() {
     if (!game || $('#hud').hidden) return;
     if (game.planetFX) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.endPlanet(); } return; }
     if (game.pilot) { if (e.code === 'Escape') { e.preventDefault(); if (game.pilot.abort) game.pilot.abort(); else game.endPilot(true); } return; }
+    if (game.arsenal._qte && (e.code === 'Space' || e.code === 'Enter')) { e.preventDefault(); game.arsenal._qte(); return; }
     if (e.code === 'Escape' && game.arsenal.cancelEnding()) { e.preventDefault(); return; }
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
     if (/^Digit[0-9]$/.test(e.code)) {

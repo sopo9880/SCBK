@@ -38,6 +38,7 @@ export class Arsenal {
     this._hold = null;
     this._crater = [];
     this._tmp = v3();
+    this.summons = new Set();   // 소환한 물체 (진공청소기가 빨아들일 수 있음)
   }
 
   get S() { return powerScale(this.power); }
@@ -101,6 +102,9 @@ export class Arsenal {
       runEnding(this, this._lastId || 'bomb', this._lastPoint, true);
     }
   }
+
+  // 소환물 등록: 빨려 들어가면 e.captured = true (무기는 그때부터 움직임·파괴를 멈춤), 다 빨려 들어가면 e.gone = true
+  summon(obj) { const e = { obj, captured: false, gone: false }; this.summons.add(e); return e; }
 
   spawn(obj, scale = 1) { obj.scale.setScalar(scale); this.ctx.scene.add(obj); return obj; }
   remove(obj) {
@@ -189,6 +193,7 @@ export class Arsenal {
     for (const p of this.projectiles) this.remove(p.mesh);
     for (const a of this.active) if (a.dispose) a.dispose();
     this.projectiles = []; this.active = [];
+    this.summons.clear();
     this.holdEnd();
   }
 }

@@ -746,6 +746,12 @@ export class Destruction {
   }
 
   // ---------- 철구 ----------
+  removeBall(ball) {
+    const i = this.balls.indexOf(ball); if (i < 0) return;
+    this.phys.remove(ball.body);
+    if (ball.mesh.parent) ball.mesh.parent.remove(ball.mesh);
+    this.balls.splice(i, 1);
+  }
   addBall(pos, vel, radius, mesh, opts = {}) {
     const body = this.phys.ball(pos.x, pos.y, pos.z, vel.x, vel.y, vel.z, radius);
     const ball = { body, radius, mesh, age: 0, life: opts.life || 40, onHit: opts.onHit, hits: 0 };
@@ -1212,6 +1218,18 @@ export class Destruction {
         if (u >= 1) { b.state = 'flat'; b.flatH = Math.max(0.5, b.height - a.sink); this._anim.splice(i, 1); }
         continue;
       }
+      if (a.fling) {
+        // 통째로 한쪽으로 날아감 (자전 정지): 가속하며 구르다 사라짐
+        const k = Math.max(0, a.t - a.wait);
+        const off = (this._off || (this._off = new THREE.Vector3())).set(a.vx * k * (1 + k * 0.6), a.vy * k - 4 * k * k, a.vz * k * (1 + k * 0.6));
+        q.setFromAxisAngle(this._v.set(a.vz, 0, -a.vx).normalize(), Math.min(2.5, k * a.spin));
+        m.makeTranslation(b.cx + off.x, b.baseY + b.height * 0.5 + off.y, b.cz + off.z);
+        m.multiply(M2.makeRotationFromQuaternion(q));
+        m.multiply(M2.makeTranslation(-b.cx, -b.baseY - b.height * 0.5, -b.cz));
+        this.intact.setMatrixAt(b.inst, m);
+        if (k >= a.dur) { this.intact.setVisibleAt(b.inst, false); b.state = 'gone'; this._anim.splice(i, 1); }
+        continue;
+      }
       if (a.lift) {
         // 통째로 하늘로 떠올라 사라짐 (반중력·중력 반전 세계 멸망)
         const k = Math.max(0, (a.t - a.wait) / a.dur);
@@ -1259,6 +1277,15 @@ export class Destruction {
     if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
     this._anim.push({ b, t: 0, dur, grow, onStep, onDone });
     return true;
+  }
+  // 건물 통째로 한 방향으로 날려 보냄 (물리 없이)
+  fling(b, vx, vy, vz, dur = 5, wait = 0) {
+    if (b.state !== 'intact') return;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._scoreBuilding(b, 1);
+    this._anim.push({ b, t: 0, dur, wait, fling: true, vx, vy, vz, spin: 0.4 + Math.random() * 0.8 });
+    this._wakeArea(b);
   }
   // 건물 통째로 하늘로 (물리 없이)
   levitate(b, height = 3000, dur = 8, wait = 0) {

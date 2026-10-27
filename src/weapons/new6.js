@@ -115,7 +115,7 @@ export const NEW6 = {
     fire(A, hit) {
       const S = A.S, p = hit.point, { D, fx, audio, grid, camera, scene, world, game } = A.ctx;
       const c = v3(p.x, grid.sample(p.x, p.z), p.z);
-      const R0 = 160 * S.r ** 0.8, T = 10;
+      const R0 = 160 * S.r ** 0.8, T = 10, R1 = R0 * 1.25;
       const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x02030a, transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false }));
       dome.position.copy(c); dome.scale.setScalar(R0 * 1.3); scene.add(dome);
       const blds = D.buildingsNear(c.x, c.z, R0).filter(b => Math.hypot(b.cx - c.x, b.cz - c.z) < R0).map(b => [b, 3 + R() * (T - 4)]);
@@ -140,7 +140,24 @@ export const NEW6 = {
             const b = it[0]; it[1] = -1;
             if (b.state === 'intact') { D.explode({ x: b.cx, y: b.baseY + b.height * 0.5, z: b.cz, r: Math.max(b.maxx - b.minx, b.maxz - b.minz) * 0.8 + 6, power: 14 * S.v, lift: 0.5, lod: 1 }); fx.sparks(v3(b.cx, b.baseY + b.height * 0.6, b.cz), v3(0, 1, 0), 12); audio.crumble(20); }
           }
-          return this.t < T + 2;
+          // 끝날 때: 바깥 공기가 한꺼번에 밀려 들어옴
+          if (this.t >= T && !this.rush) {
+            this.rush = true;
+            dome.material.opacity = 0;
+            fx.addShake(3); fx.flash = Math.max(fx.flash, 0.15);
+            audio.boom(3, 40); audio.wind(4); audio.crumble(120);
+            const n = Math.round(260 * A.ctx.quality.fxScale);
+            for (let i = 0; i < n; i++) { const a = R() * 6.28, d = R1 * (0.95 + R() * 0.25), sp = 70 + R() * 50; const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.smoke.emit(x, grid.sample(x, z) + 2 + R() * 30, z, -Math.cos(a) * sp, 2 + R() * 4, -Math.sin(a) * sp, 2.5 + R(), 12, 40, [0.82, 0.84, 0.88, 0.75], [0.75, 0.76, 0.8, 0], 0.5, 0.5); }
+            fx.ring(c, R1, 1.2, 0xe0e8ff, 0.5);
+            for (const b of D.buildingsNear(c.x, c.z, R1)) {
+              if (b.state === 'gone') continue;
+              const d = Math.hypot(b.cx - c.x, b.cz - c.z) || 1;
+              const outside = v3(b.cx + (b.cx - c.x) / d * 60, b.baseY, b.cz + (b.cz - c.z) / d * 60);
+              D.blastFrom(b, outside, 30 * S.v, { lift: 0.1, lod: 2 });
+            }
+            for (const ch of D.gather(c.x, c.z, R1, 2)) { const pos = D.chunkPos(ch); const dx = c.x - pos.x, dz = c.z - pos.z, d = Math.hypot(dx, dz) || 1; D.launch(ch, dx / d * 40 * S.v, 6, dz / d * 40 * S.v, 1); }
+          }
+          return this.t < T + 3;
         },
         dispose() { disposeObj(scene, dome); },
       });
@@ -148,7 +165,8 @@ export const NEW6 = {
       const f = camDir(camera, c), sd = sideOf(f);
       g.cine.play([
         watch(c.clone().addScaledVector(f, -R0 * 1.5 - 100).addScaledVector(sd, 50).add(v3(0, 30, 0)), c.clone().add(v3(0, 50, 0)), { dur: 5, fov: 62, caption: '대기 증발', smooth: 0.3 }),
-        orbit(c, { dist: R0 * 1.3 + 80, h: 70, a0: Math.atan2(-f.z, -f.x), a1: Math.atan2(-f.z, -f.x) + 0.7, dur: 6, fov: 58, look: 20 }),
+        orbit(c, { dist: R0 * 1.3 + 80, h: 70, a0: Math.atan2(-f.z, -f.x), a1: Math.atan2(-f.z, -f.x) + 0.7, dur: 4.6, fov: 58, look: 20 }),
+        watch(c.clone().addScaledVector(f, -R0 * 1.1 - 60).add(v3(0, 45, 0)), c.clone().add(v3(0, 20, 0)), { dur: 4, fov: 64, ts: (u) => (u < 0.5 ? 0.45 : 1), caption: '공기가 밀려든다' }),
       ]);
     },
   },
