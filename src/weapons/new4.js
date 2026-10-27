@@ -517,13 +517,14 @@ export const NEW4 = {
                 const h2 = D.raycast(v3(gp.x, r.pos.y, gp.z), v3(0, -1, 0), 400);
                 const q = h2 ? h2.point : v3(gp.x, grid.sample(gp.x, gp.z), gp.z);
                 fx.sparks(q, UP, 3); if (shots % 3 === 0) fx.dust(q, 1.5);
-                if (shots % 5 === 0 && phys < 120) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: 4.5 * S.r ** 0.4, power: 22 * S.v, lift: 0.25, lod: 2 }); }
+                if (shots % (S.P >= 75 ? 3 : 5) === 0 && phys < (S.P >= 75 ? 320 : 120)) { phys++; D.explode({ x: q.x, y: q.y, z: q.z, r: 4.5 * S.r ** (S.P >= 75 ? 0.7 : 0.4), power: 22 * S.v, lift: 0.25, lod: 2 }); }
               }
               if (shots % 12 === 0) audio.buzz(0.15);
             }
             // 폭탄 한 발
             if (!r.bombed && s > -120) {
               r.bombed = true;
+              for (let bk = 1; bk < (S.P >= 75 ? 5 : 1); bk++) A.addProjectile({ mesh: A.spawn(makeBomb(), 1.4), pos: r.pos.clone().add(v3(0, -3, 0)).addScaledVector(r.dir, -bk * 25), vel: r.dir.clone().multiplyScalar(sp * 0.6), g: 30, align: 'fwd', onHit: (q) => A.blast(q, 28 * S.r ** 0.7, 50 * S.v, { crater: [8, 3], lift: 0.4, silent: true }) });
               A.addProjectile({ mesh: A.spawn(makeBomb(), 1.4), pos: r.pos.clone().add(v3(0, -3, 0)), vel: r.dir.clone().multiplyScalar(sp * 0.6), g: 30, align: 'fwd',
                 onHit: (q) => A.blast(q, 28 * S.r ** 0.7, 50 * S.v, { crater: [8, 3], lift: 0.4 }) });
             }
@@ -583,7 +584,7 @@ export const NEW4 = {
             if (k >= 1 && !land[j]) {
               land[j] = true;
               const q = v3(pts[j].x, gyy, pts[j].z);
-              const r = (14 + hs[j] * 0.006) * S.r ** 0.4;
+              const r = (14 + hs[j] * 0.006) * S.r ** (S.P >= 75 ? 0.8 : 0.4);
               const inside = Math.abs(q.x) < half * 0.98 && Math.abs(q.z) < half * 0.98;
               if (inside && phys < 80) { phys++; A.blast(q, r * 1.4, 50 * S.v, { lift: 0.5, crater: [r * 0.4, r * 0.18], silent: j % 4 !== 0 }); D.lineBlast(v3(q.x, q.y + 8, q.z).addScaledVector(dir, -H / N), v3(q.x, q.y + 8, q.z), rad * 4, 40 * S.v); }
               else if (inside || hs[j] < H * 0.6) fxBlast(A, q, r * 1.2, { silent: j % 3 !== 0, smoke: j % 2 === 0 });

@@ -28,7 +28,7 @@ export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 // ×75 이상에서 한 발짜리 무기는 "일제 사격"으로: [발 수, 퍼지는 반경(m), 걸리는 시간(초)]
 const BURST = {
-  bomb: [24, 480, 4], missile: [22, 480, 4], bunker: [16, 450, 4], railgun: [10, 420, 3], rod: [12, 480, 3.5],
+  bomb: [24, 480, 4], missile: [22, 480, 4], bunker: [16, 450, 4], railgun: [18, 420, 3], elevator: [3, 300, 5], strafe: [2, 300, 6], rod: [12, 480, 3.5],
   plasma: [8, 420, 4], napalm: [10, 480, 4], minefield: [5, 420, 3], demolition: [12, 480, 6], cruise: [12, 480, 5],
   tornado: [4, 380, 4], sinkhole: [6, 420, 4], airship: [6, 420, 5], dustex: [5, 420, 3], hail: [3, 380, 3],
   thermobaric: [6, 420, 3], deepblast: [6, 420, 3], vacuum: [6, 420, 3], landslide: [3, 380, 4],
