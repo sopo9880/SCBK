@@ -343,4 +343,8 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #vehPick .vp-item:hover { background: rgba(255,170,80,.18); border-color: #ffb050; }
 #vehPick .vp-ic { grid-row: span 2; font-size: 26px; align-self: center; text-align: center; }
 #vehPick .vp-item small { opacity: .7; font-size: 12px; margin-top: 2px; }
+#vehPick .vp-start { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 13px; }
+#vehPick .vp-start span { opacity: .75; margin-right: 4px; }
+#vehPick .vp-start button { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15); color: inherit; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+#vehPick .vp-start button.on { background: rgba(255,170,80,.25); border-color: #ffb050; }
 #vehPick .vp-note { margin: 12px 0 0; font-size: 12px; opacity: .6; }

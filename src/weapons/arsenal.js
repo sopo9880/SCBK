@@ -35,7 +35,7 @@ const BURST = {
   soccer: [24, 420, 6], bowling: [14, 420, 5], domino: [14, 420, 5], marbles: [5, 380, 4], ball: [10, 420, 5], top: [8, 420, 4],
   shrink: [12, 420, 4], portal: [5, 380, 4], jenga: [12, 420, 5], sharknado: [5, 380, 4], sandworm: [5, 420, 8], giantape: [3, 380, 6],
   geyser: [6, 420, 4], pendulum: [6, 420, 4], methane: [5, 420, 4], blocks: [5, 380, 4], wildfire: [4, 420, 3], psychic: [5, 420, 4],
-  tripod: [5, 400, 5], superfight: [2, 300, 4], stomp: [6, 420, 4], train: [3, 380, 4], dinos: [2, 380, 3], datacrash: [4, 400, 3], voxel: [5, 420, 4], melt: [5, 420, 4],
+  tripod: [5, 400, 5], stomp: [6, 420, 4], train: [3, 380, 4], dinos: [2, 380, 3], datacrash: [4, 400, 3], voxel: [5, 420, 4], melt: [5, 420, 4],
 };
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);
 

@@ -1151,13 +1151,13 @@ export class Destruction {
 
   // ---------- 물리 없이 가볍게 처리하는 대규모 파괴 (핵 등) ----------
   // 건물 증발: 즉시 사라짐
-  vaporizeBuilding(b) {
+  vaporizeBuilding(b, quiet = false) {
     if (b.state === 'gone') return;
     if (b.state === 'intact' || b.state === 'collapsing' || b.state === 'flat') {
       this.intact.setVisibleAt(b.inst, false);
       if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
       if (b.pending) b.pending = null;
-      this._scoreBuilding(b, 1);
+      if (!quiet) this._scoreBuilding(b, 1);
     } else if (b.state === 'fractured') {
       for (const c of b.chunks) if (c.state !== GONE) this.removeChunk(c);
     }
@@ -1192,6 +1192,7 @@ export class Destruction {
     for (let i = this._anim.length - 1; i >= 0; i--) {
       const a = this._anim[i], b = a.b;
       if (b.state === 'gone' || b.state === 'fractured') { this._anim.splice(i, 1); continue; }
+      if (a.carry) { this.intact.setMatrixAt(b.inst, a.carry); continue; }
       a.t += dt;
       const u = Math.min(1, a.t / a.dur), e = u * u * (3 - 2 * u);
       if (a.grow) {
@@ -1286,6 +1287,21 @@ export class Destruction {
     this._scoreBuilding(b, 1);
     this._anim.push({ b, t: 0, dur, wait, fling: true, vx, vy, vz, spin: 0.4 + Math.random() * 0.8 });
     this._wakeArea(b);
+  }
+  // 건물을 통째로 들고 다님 (초능력자 대결 등). set(중심 위치, 회전)으로 움직이고 drop()으로 없앰
+  carryBuilding(b) {
+    if (b.state !== 'intact') return null;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._wakeArea(b);
+    const a = { b, t: 0, dur: 1e9, carry: new THREE.Matrix4() };
+    this._anim.push(a);
+    const c0 = new THREE.Vector3(b.cx, b.baseY + b.height * 0.5, b.cz), M2 = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1);
+    return {
+      b, center: c0,
+      set: (pos, quat) => { a.carry.compose(pos, quat, one).multiply(M2.makeTranslation(-c0.x, -c0.y, -c0.z)); },
+      drop: () => { if (b.state === 'gone') return; this._scoreBuilding(b, 1); this.intact.setVisibleAt(b.inst, false); b.state = 'gone'; },
+    };
   }
   // 건물 통째로 하늘로 (물리 없이)
   levitate(b, height = 3000, dur = 8, wait = 0) {

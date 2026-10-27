@@ -543,7 +543,7 @@ function initHud() {
 function openVehicles() {
   if (!game || game.pilot || game.planetFX || document.getElementById('control')?.hidden === false) return;
   if (game.cine.active) game.cine.skip();
-  openVehiclePicker((id) => { if (game && !game.pilot) { game.audio.resume(); startVehicle(game.arsenal, id); } });
+  openVehiclePicker((id, o) => { if (game && !game.pilot) { game.audio.resume(); startVehicle(game.arsenal, id, o); } });
 }
 
 // ---------- 발사 관제실 ----------
