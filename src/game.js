@@ -460,6 +460,7 @@ export class Game {
       if (e.button !== 0) return;
       this._onMove(e);
       if (this.planetFX) { this.endPlanet(); return; }
+      if (this.pilot) { if (this.pilot.click) this.pilot.click(); return; }
       if (this.cine.active) { this.cine.skip(); return; }
       const hit = this.pick();
       if (!hit) return;
@@ -496,6 +497,58 @@ export class Game {
   }
 
   setSlowMo(on) { this.D.timeScale = on ? 0.22 : 1; }
+
+  // ---------- 직접 조종 (유도 미사일, 이후 탈것) ----------
+  // p: { update(dt, input) → false 이면 끝, camera(out:{pos,look,fov}), click(), abort(), dispose() }
+  startPilot(p) {
+    if (this.pilot) this.endPilot(true);
+    if (this.cine.active) this.cine.stop(true);
+    this.pilot = p;
+    this._pilotCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 70 };
+    this._pilotSnap = true;
+    this._fov0 = this.camera.fov;
+    document.body.classList.add('pilot');
+    this.marker.visible = false;
+    this.controls.enabled = false;
+  }
+  endPilot(aborted = false) {
+    const p = this.pilot; if (!p) return;
+    this.pilot = null;
+    document.body.classList.remove('pilot');
+    this.controls.enabled = true;
+    if (p.dispose) p.dispose(aborted);
+    this.camera.fov = this._fov0 || this.cfg.fov || 50; this.camera.updateProjectionMatrix();
+    // 끝난 자리를 바라보며 일반 조작으로
+    const at = p.endPoint || this._pilotCam.look;
+    const gy = this.grid.sample(at.x, at.z);
+    const back = new THREE.Vector3().subVectors(this.camera.position, at); back.y = 0;
+    if (back.lengthSq() < 1) back.set(1, 0, 0);
+    back.normalize().multiplyScalar(260);
+    this.controls.target.set(at.x, gy, at.z);
+    this.camera.position.set(at.x + back.x, gy + 170, at.z + back.z);
+    this.controls.update();
+  }
+  _pilotStep(dt) {
+    const k = this._keys, K = this.cfg;
+    const input = {
+      x: this._mouse.x, y: this._mouse.y,
+      left: k.has(K.k_left) || k.has('ArrowLeft'), right: k.has(K.k_right) || k.has('ArrowRight'),
+      up: k.has(K.k_back) || k.has('ArrowDown'), down: k.has(K.k_fwd) || k.has('ArrowUp'),
+      boost: k.has('ShiftLeft') || k.has('ShiftRight'), space: k.has('Space'),
+    };
+    const alive = this.pilot.update(dt * this.D.timeScale, input, dt);
+    const c = this._pilotCam;
+    this.pilot.camera(c);
+    const cam = this.camera;
+    const kk = this._pilotSnap ? 1 : 1 - Math.exp(-dt * 10);
+    this._pilotSnap = false;
+    cam.position.lerp(c.pos, kk);
+    const gy = this.groundAt(cam.position.x, cam.position.z);
+    if (cam.position.y < gy + 2) cam.position.y = gy + 2;
+    cam.lookAt(c.look);
+    if (Math.abs(cam.fov - c.fov) > 0.01) { cam.fov = c.fov; cam.updateProjectionMatrix(); }
+    if (alive === false) this.endPilot(false);
+  }
 
   screenshot() {
     this.composer.render();
@@ -574,7 +627,8 @@ export class Game {
     this.camera.position.sub(this._shakeOff);
     const cine = this.cine.active;
     // 샷은 게임 시간(연출 배속 × 슬로모션)으로 진행 → 무기 사건과 항상 맞음
-    if (cine) this.cine.update(dt, dt * this.cine.timeScale * this.D.timeScale);
+    if (this.pilot) this._pilotStep(dt);
+    else if (cine) this.cine.update(dt, dt * this.cine.timeScale * this.D.timeScale);
     else { this._keyboard(dt); this.controls.update(); }
     const ts = this.cine.active ? this.cine.timeScale : 1;
     const dtSim = dt * ts;
@@ -591,7 +645,7 @@ export class Game {
     if (this.camera.position.y < cg + 4) this.camera.position.y = cg + 4;
 
     // 조준
-    if (!cine && (this._moved || this._holding || this.arsenal.active.length)) {
+    if (!cine && !this.pilot && (this._moved || this._holding || this.arsenal.active.length)) {
       this._moved = false;
       const hit = this.pick();
       this.aim = hit ? hit.point : null;
@@ -605,7 +659,7 @@ export class Game {
       this.hud.hover(hit && hit.info && (hit.info.b || (hit.info.chunk && hit.info.chunk.b)), this._mx, this._my);
     }
 
-    this.marker.visible = this.marker.visible && !cine;
+    this.marker.visible = this.marker.visible && !cine && !this.pilot;
     PROF.time('weapons', () => this.arsenal.update(dtSim * this.D.timeScale, this.aim));
     PROF.time('physics', () => this.D.update(dtSim));
     PROF.time('fx', () => this.fx.update(dtSim * this.D.timeScale, this.camera));

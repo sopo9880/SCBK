@@ -246,3 +246,22 @@ body.timestop canvas { filter: grayscale(0.85) contrast(1.15) brightness(1.05); 
 #endCount b { display: block; font-size: 22px; letter-spacing: .3em; color: #ffb38a; font-weight: 700; }
 #endCount span { display: block; font-size: 96px; font-weight: 800; line-height: 1.1; }
 #endCount small { display: block; font-size: 13px; opacity: .75; margin-top: 4px; }
+
+/* 직접 조종 화면 */
+body.pilot #hud > * { opacity: 0 !important; pointer-events: none !important; }
+body.pilot #hud > #toasts { opacity: 1 !important; }
+body.pilot #stage { cursor: crosshair; }
+#pilotHud { position: fixed; inset: 0; z-index: 40; pointer-events: none; color: #bff5d0; font-variant-numeric: tabular-nums; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+#pilotHud .ph-cross { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; transform: translate(-50%,-50%); background: linear-gradient(#bff5d0,#bff5d0) center/2px 14px no-repeat, linear-gradient(#bff5d0,#bff5d0) center/14px 2px no-repeat; opacity: .9; }
+#pilotHud .ph-ring { position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; transform: translate(-50%,-50%); border: 1.5px solid rgba(191,245,208,.55); border-radius: 50%; }
+#pilotHud .ph-left { position: absolute; left: 6vw; top: 50%; transform: translateY(-50%); display: grid; gap: 18px; }
+#pilotHud .ph-left span, #pilotHud .ph-right span { display: block; font-size: 12px; letter-spacing: .2em; opacity: .75; }
+#pilotHud .ph-left b { font-size: 30px; font-weight: 700; }
+#pilotHud .ph-left small { margin-left: 4px; font-size: 12px; opacity: .7; }
+#pilotHud .ph-right { position: absolute; right: 6vw; top: 50%; transform: translateY(-50%); width: 16px; }
+#pilotHud .ph-fuel { width: 16px; height: 180px; border: 1.5px solid rgba(191,245,208,.6); display: flex; align-items: flex-end; margin-top: 6px; }
+#pilotHud .ph-fuel i { display: block; width: 100%; background: #bff5d0; transition: background .2s; }
+#pilotHud .ph-fuel i { height: 100%; }
+#pilotHud .ph-fuel i.low { background: #ff7a5a; }
+#pilotHud .ph-title { position: absolute; left: 50%; top: 7vh; transform: translateX(-50%); font-size: 15px; letter-spacing: .3em; font-weight: 700; }
+#pilotHud .ph-help { position: absolute; left: 50%; bottom: 5vh; transform: translateX(-50%); font-size: 13px; opacity: .8; white-space: nowrap; }

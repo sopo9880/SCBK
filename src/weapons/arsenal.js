@@ -19,9 +19,10 @@ import { NEW4, NEW4_ENDINGS } from './new4.js';
 import { NEW5, NEW5_ENDINGS } from './new5.js';
 import { NEW6, NEW6_ENDINGS } from './new6.js';
 import { MOVIE2, MOVIE2_ENDINGS } from './movie2.js';
-Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS, MOVIE_ENDINGS, NEW4_ENDINGS, NEW5_ENDINGS, NEW6_ENDINGS, MOVIE2_ENDINGS);
+import { GUIDED, GUIDED_ENDINGS } from './guided.js';
+Object.assign(ENDINGS, NEW1_ENDINGS, NEW2_ENDINGS, NEW3_ENDINGS, MOVIE_ENDINGS, NEW4_ENDINGS, NEW5_ENDINGS, NEW6_ENDINGS, MOVIE2_ENDINGS, GUIDED_ENDINGS);
 
-const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3, ...MOVIE, ...NEW4, ...NEW5, ...NEW6, ...MOVIE2 };
+const HANDLERS = { ...CLASSIC, ...EXTRA, ...STORMS, ...NUKES, ...AIR, ...SKY2, ...NATURE2, ...FUN, ...SPECIAL2, ...NEW1, ...NEW2, ...NEW3, ...MOVIE, ...NEW4, ...NEW5, ...NEW6, ...MOVIE2, ...GUIDED };
 export const HANDLER_IDS = Object.keys(HANDLERS);
 export const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const _up = v3(0, 1, 0), _down = v3(0, -1, 0), _fwd = v3(0, 0, 1);

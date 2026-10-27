@@ -507,6 +507,7 @@ function initHud() {
     { const st = document.getElementById('settings'); if (st && !st.hidden) { if (e.code === 'Escape') document.getElementById('setClose')?.click(); return; } }
     if (!game || $('#hud').hidden) return;
     if (game.planetFX) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.endPlanet(); } return; }
+    if (game.pilot) { if (e.code === 'Escape') { e.preventDefault(); if (game.pilot.abort) game.pilot.abort(); else game.endPilot(true); } return; }
     if (e.code === 'Escape' && game.arsenal.cancelEnding()) { e.preventDefault(); return; }
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
     if (/^Digit[0-9]$/.test(e.code)) {
