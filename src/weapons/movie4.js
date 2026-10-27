@@ -63,6 +63,17 @@ function makeColossus(r) {
   return g;
 }
 
+// 와이어로 날아다니는 작은 병사 (자체 디자인: 짙은 남색 몸, 등에 주황빛 추진기)
+function makeFlyer() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.7, 4, 8), new THREE.MeshStandardMaterial({ color: 0x27344a, roughness: 0.7 }));
+  body.position.y = 0.6; body.castShadow = true; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshStandardMaterial({ color: 0xc89c7c, roughness: 0.8 })); head.position.y = 1.25; g.add(head);
+  for (const s of [-1, 1]) { const pk = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.3, 0.2), new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.7, roughness: 0.3 })); pk.position.set(s * 0.3, 0.55, -0.05); g.add(pk); }
+  const jet = new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false })); jet.position.set(0, 0.6, -0.28); g.add(jet);
+  return g;
+}
+
 export const MOVIE4 = {
   rumbling: {
     fire(A, hit) {
@@ -90,9 +101,48 @@ export const MOVIE4 = {
         G.push({ m, base, ph: R() * Math.PI * 2, sideFoot: 0, hitT: 0, seen: new Set(), sc: m.scale.x, lastStep: 0, steam: R() });
       }
       const st = { t: 0, stepSnd: 0 };
+      // 와이어 부대: 가운데 쪽 거인 1~2명을 쓰러뜨림
+      const T_ATK = 19, T_CUT = 5.5;                  // 공격 시작(4번째 장면과 맞춤), 쓰러질 때까지
+      const order = G.map((gi, i) => [Math.abs(gi.base.clone().sub(c).dot(side)), i]).sort((a, b) => a[0] - b[0]);
+      const victims = [G[order[0][1]]]; if (P >= 10 && G.length > 3) victims.push(G[order[1][1]]);
+      victims.forEach((v, k) => { v.victim = true; v.tAtk = T_ATK + k * 2.2; });
+      const squad = [];
+      const wireMat = new THREE.LineBasicMaterial({ color: 0xe8e8e8, transparent: true, opacity: 0.85 });
+      for (const v of victims) for (let i = 0; i < 6; i++) {
+        const m = makeFlyer(); m.scale.setScalar(2.2); m.visible = false; scene.add(m);
+        const geo = new THREE.BufferGeometry().setFromPoints([v3(), v3()]); const wire = new THREE.Line(geo, wireMat); wire.visible = false; wire.frustumCulled = false; scene.add(wire);
+        squad.push({ m, wire, v, a0: R() * Math.PI * 2, rr: 0.9 + R() * 0.8, hh: 0.35 + R() * 0.55, sp: (R() < 0.5 ? -1 : 1) * (1.4 + R()), pos: v3(), prev: v3() });
+      }
       audio.rumble(Math.min(30, T)); audio.drone(Math.min(20, T));
       if (game) game.ensureView(D0 * 2.5, Hs * 4);
       const inMap = (q, pad = 40) => Math.abs(q.x) < half + pad && Math.abs(q.z) < half + pad;
+      // 쓰러지는 거인: 무릎이 꺾이고 앞으로 넘어져 도시를 덮침, 그 뒤 증기를 뿜으며 사라짐
+      const fallStep = (gi, dt) => {
+        gi.fallT += dt;
+        const ft = gi.fallT, U = gi.m.userData;
+        if (!gi.fall0) { gi.fall0 = gi.m.position.clone(); gi.q0 = gi.m.quaternion.clone(); }
+        const u = Math.min(1, ft / 2.6), e = u * u;
+        for (const L of U.legs) L.kn.rotation.x = Math.min(1.4, ft * 1.2);
+        for (const Ar of U.arms) Ar.sh.rotation.x = -1.2 * u;
+        gi.m.quaternion.copy(gi.q0).multiply(new THREE.Quaternion().setFromAxisAngle(v3(1, 0, 0), e * 1.45));
+        gi.m.position.copy(gi.fall0).add(v3(0, -e * gi.sc * 0.45, 0));
+        if (u >= 1 && !gi.landed) {
+          gi.landed = true; gi.dissolve = 0;
+          // 몸이 닿는 자리 (발 → 머리) 를 따라 충격
+          for (let k = 1; k <= 5; k++) {
+            const q = gi.fall0.clone().addScaledVector(dir, gi.sc * 0.42 * k); q.y = gnd(q.x, q.z);
+            if (inMap(q)) A.blast(q, Hs * 0.16, 40 * S.v, { crater: [Hs * 0.1, Hs * 0.03], lift: 0.4, lod: 1, silent: k > 1, smokeColumn: false });
+            fx.dust(q, Hs * 0.15);
+          }
+          fx.addShake(2.5); audio.boom(3, camera.position.distanceTo(gi.fall0));
+        }
+        if (gi.landed) {
+          gi.dissolve += dt;
+          if (R() < dt * 25) { const q = gi.fall0.clone().addScaledVector(dir, gi.sc * (0.3 + R() * 1.8)); q.y = gnd(q.x, q.z) + gi.sc * 0.2; fx.smoke.emit(q.x, q.y, q.z, (R() - 0.5) * 2, 4 + R() * 4, (R() - 0.5) * 2, 4, gi.sc * 0.3, gi.sc * 1.3, [0.95, 0.95, 0.97, 0.55], [1, 1, 1, 0], 0.4, 1, 0.1); }
+          if (gi.dissolve > 6) { gi.m.scale.multiplyScalar(Math.exp(-dt * 0.6)); }
+          if (gi.dissolve > 12 && gi.m.visible) { gi.m.visible = false; gi.gone = true; }
+        }
+      };
       const tmp = v3();
       A.addActive({
         update(dt) {
@@ -102,6 +152,7 @@ export const MOVIE4 = {
           let near = 1e9;
           for (const gi of G) {
             // 몸: 줄을 지어 앞으로, 걸음에 맞춰 위아래로 흔들림
+            if (gi.victim && gi.fallT !== undefined) { fallStep(gi, dt); continue; }
             const ph = gi.ph + (dist / stride) * Math.PI;
             const pos = gi.base.clone().addScaledVector(dir, dist);
             pos.y = gnd(pos.x, pos.z) + Math.abs(Math.sin(ph)) * gi.sc * 0.05;
@@ -146,11 +197,36 @@ export const MOVIE4 = {
               fx.smoke.emit(sp.x, sp.y, sp.z, (R() - 0.5) * 2, 3 + R() * 3, (R() - 0.5) * 2, 3 + R() * 3, gi.sc * 0.25, gi.sc * 1.1, [0.92, 0.92, 0.94, 0.45], [0.95, 0.95, 0.97, 0], 0.4, 0.8, 0.1);
             }
           }
+          // 와이어 부대
+          for (const q of squad) {
+            const v = q.v, ta = t - v.tAtk;
+            if (ta < 0 || v.gone) { q.m.visible = false; q.wire.visible = false; continue; }
+            const gp = v.m.position, sz = v.sc;
+            q.m.visible = true;
+            const ang = q.a0 + ta * q.sp, rad = sz * q.rr;
+            const hgt = sz * (q.hh + 0.5 * Math.sin(ta * 1.3 + q.a0)) * (v.fallT !== undefined ? Math.max(0.2, 1 - (t - v.fallT0) / 2) : 1);
+            q.prev.copy(q.pos);
+            q.pos.set(gp.x + Math.cos(ang) * rad, gp.y + Math.max(sz * 0.15, hgt), gp.z + Math.sin(ang) * rad);
+            if (ta < 0.6) q.pos.lerp(gp.clone().addScaledVector(dir, sz * 4).add(v3(0, sz * 0.4, 0)), 1 - ta / 0.6);
+            q.m.position.copy(q.pos); q.m.lookAt(q.pos.clone().add(q.pos.clone().sub(q.prev)));
+            if (R() < 0.7) fx.trail(q.pos, 0.6, false);
+            // 와이어: 거인 몸에 걸고 휘감듯 날아다님
+            const anchor = gp.clone().add(v3(Math.cos(ang + 1.2) * sz * 0.3, sz * (0.9 + 0.8 * ((q.a0 * 7) % 1)), Math.sin(ang + 1.2) * sz * 0.3));
+            const pa = q.wire.geometry.attributes.position; pa.setXYZ(0, q.pos.x, q.pos.y, q.pos.z); pa.setXYZ(1, anchor.x, anchor.y, anchor.z); pa.needsUpdate = true;
+            q.wire.visible = v.fallT === undefined && Math.sin(ta * 2.3 + q.a0) > -0.3;
+            // 베기: 목덜미·발목에 불꽃과 증기
+            if (v.fallT === undefined && R() < dt * 2.5) {
+              const hit = gp.clone().add(v3(0, sz * (R() < 0.5 ? 0.25 : 1.85), 0));
+              fx.sparks(hit, { x: R() - 0.5, y: 0.6, z: R() - 0.5 }, 12); fx.smoke.emit(hit.x, hit.y, hit.z, 0, 4, 0, 2, sz * 0.15, sz * 0.6, [0.95, 0.95, 0.97, 0.6], [1, 1, 1, 0], 0.4, 1, 0.05);
+              audio.clack();
+            }
+          }
+          for (const v of victims) if (v.fallT === undefined && t - v.tAtk > T_CUT) { v.fallT = 0; v.fallT0 = t; audio.roar(2.5); }
           fx.addShake(Math.min(0.08, 25 / Math.max(50, near)) * dt * 30);
           if (t > T) return false;
           return true;
         },
-        dispose() { for (const gi of G) disposeObj(scene, gi.m); },
+        dispose() { for (const gi of G) disposeObj(scene, gi.m); for (const q of squad) { disposeObj(scene, q.m); scene.remove(q.wire); q.wire.geometry.dispose(); } },
       });
       const g = cineGame(A); if (!g) return;
       const lineAt = () => c.clone().addScaledVector(f, D0 - speed * st.t);
@@ -172,7 +248,19 @@ export const MOVIE4 = {
           out.pos.copy(L).addScaledVector(side, W * 0.32).addScaledVector(dir, Hs * 1.2).add(v3(0, Hs * 0.7, 0));
           out.look.copy(L).addScaledVector(side, -W * 0.1).add(v3(0, Hs * 0.5, 0)); out.fov = 55; out.smooth = 0.12;
         } },
-        { dur: Math.max(5, T - T1 - T2 - T3), caption: '', update: (t, u, out) => {
+        { dur: T_CUT + 3.5, caption: '와이어 부대', noAvoid: true, update: (t, u, out) => {
+          const v = victims[0], gp = v.fall0 || v.m.position, sz = v.sc;
+          if (v.fallT === undefined) {
+            const a = 0.8 + t * 0.25;
+            out.pos.copy(gp).addScaledVector(side, Math.cos(a) * sz * 2.8).addScaledVector(dir, Math.sin(a) * sz * 1.4 + sz * 2.2).add(v3(0, sz * 1.3, 0));
+            out.look.copy(gp).add(v3(0, sz * 1.1, 0)); out.fov = 58; out.timeScale = 0.75;
+          } else {
+            out.pos.copy(gp).addScaledVector(side, sz * 2.2).addScaledVector(dir, sz * 1.6).add(v3(0, sz * 0.6, 0));
+            out.look.copy(gp).addScaledVector(dir, sz * 0.9).add(v3(0, sz * 0.4, 0)); out.fov = 60; out.timeScale = v.fallT < 2.8 ? 0.6 : 1;
+          }
+          out.pos.y = Math.max(out.pos.y, gnd(out.pos.x, out.pos.z) + 5); out.smooth = 0.1;
+        } },
+        { dur: Math.max(5, T - T1 - T2 - T3 - T_CUT - 3.5), caption: '', update: (t, u, out) => {
           out.pos.copy(c).addScaledVector(f, -half * 1.1).addScaledVector(side, half * 0.5).add(v3(0, half * 0.75 + 200, 0));
           out.look.copy(lineAt()).lerp(c, 0.4); out.fov = 50; out.smooth = 0.1;
         } },
