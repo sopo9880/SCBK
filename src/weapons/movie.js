@@ -45,7 +45,7 @@ export const MOVIE = {
       const coreAt = () => eng.position.clone().add(v3(0, U.H * sc, 0));
       const hero = A.spawn(makeGuardian(), 14 * sc);
       hero.visible = false;
-      const st = { t: 0, pulse: 0, landed: false, heroHit: false, fall: 0, slam: [], lifted: new Set() };
+      const st = { t: 0, pulse: 0, landed: false, heroHit: false, fall: 0, slam: [], lifted: new Set(), lift: new Map() };
       audio.drone(T_LAND + 2); audio.rumble(T_LAND);
       if (game) game.ensureView(9000, 4000);
       A.addActive({
@@ -72,7 +72,34 @@ export const MOVIE = {
             const t0k = k < nP ? PT[k] - chargeOf(k) : 1e9;
             const chg = k < nP ? Math.max(0, Math.min(1, (tp - t0k) / chargeOf(k))) : 0;
             const aft = st.lastP !== undefined ? Math.max(0, 1 - (tp - st.lastP) / AFTER) : 0;
-            if (k < nP && tp >= t0k && st.wound !== k) { st.wound = k; audio.windup(chargeOf(k), 1 + k * 0.08); }
+            if (k < nP && tp >= t0k && st.wound !== k) {
+              st.wound = k; audio.windup(chargeOf(k), 1 + k * 0.08);
+              // 이번 박동 범위 안의 건물을 붙잡음 (범위가 점점 넓어짐)
+              const rk = r0 * (1 + k * 0.45);
+              for (const b of D.buildingsNear(c.x, c.z, rk)) {
+                if (b.state !== 'intact' || st.lift.size > 400) continue;
+                const d = Math.hypot(b.cx - c.x, b.cz - c.z); if (d > rk) continue;
+                const h = D.carryBuilding(b);
+                if (h) st.lift.set(b, { h, b, from: h.center.clone(), d, ax: v3(R() - 0.5, 0, R() - 0.5).normalize(), up: 0, last: 0, sink: 0, q: new THREE.Quaternion(), r: R() });
+              }
+            }
+            // 붙잡힌 건물: 충전하는 동안 떠오르며 떨리고, 박동 순간 내리꽂힘
+            {
+              const lifting = st.lastP === undefined || tp - st.lastP > AFTER;
+              const sl = st.lastP === undefined ? 1 : (tp - st.lastP) / 0.16;
+              for (const e of st.lift.values()) {
+                let y;
+                if (lifting && k < nP) {
+                  const top = (16 + k * 9 + e.r * 12) * (0.55 + 0.45 * Math.max(0, 1 - e.d / (r0 * (1 + k * 0.45))));
+                  y = top * ease.inOut(chg) + Math.sin(t * 23 + e.r * 40) * 0.25 * chg; e.last = y;
+                  e.q.setFromAxisAngle(e.ax, (0.03 + e.r * 0.05) * chg * Math.sin(t * 2 + e.r * 9));
+                } else {
+                  y = sl < 1 ? e.last * (1 - sl * sl) : 0;
+                  if (sl >= 1) e.q.identity();
+                }
+                e.h.set(e.from.clone().add(v3(0, y - e.sink, 0)), e.q, 1);
+              }
+            }
             // 충전: 빔이 가늘게 떨리며 점점 밝아짐 → 박동: 굵게 번쩍
             U.beamMat.opacity = Math.max(0.12 + 0.6 * chg * chg + 0.08 * Math.sin(t * (20 + chg * 60)), aft * 0.95);
             const bw = 0.55 + 0.35 * chg + aft * 1.0;
@@ -83,12 +110,17 @@ export const MOVIE = {
               st.pulse = k + 1; st.lastP = tp;
               audio.pulse(1 + k * 0.06);
               const rk = r0 * (1 + k * 0.45);
-              // 박동: 아래로 짓누르는 충격 + 바닥 꺼짐
-              D.explode({ x: c.x, y: c.y + 4, z: c.z, r: rk, power: 40 * S.v, lift: -1.2, scorch: 0.2, lod: 1 });
-              A.crater(c.x, c.z, rk * 0.8, 4 + k * 1.5);
-              for (const b of D.buildingsNear(c.x, c.z, rk * 1.5)) { const d = Math.hypot(b.cx - c.x, b.cz - c.z); if (d < rk * 1.5 && d > rk * 0.4) D.flatten(b, Math.min(1, 1.3 - d / (rk * 1.5)), (b.cx - c.x) / d, (b.cz - c.z) / d, 0.6); }
+              // 박동: 떠올랐던 건물이 한꺼번에 내리꽂힘. 땅은 살짝만 꺼짐
+              D.field({ x: c.x, y: c.y, z: c.z, r: rk * 1.3, mode: 'slam' }, 0);
+              A.crater(c.x, c.z, rk * 0.85, 0.6 + k * 0.25);
+              const dark = new THREE.Color(0x3a3530);
+              for (const e of st.lift.values()) {
+                e.sink = Math.min(3.5, e.sink + 0.35 + e.r * 0.3);
+                D.tint(e.b, dark, 0.08);
+                if (R() < 0.35) fx.dust(v3(e.from.x, grid.sample(e.from.x, e.from.z), e.from.z), 4 + Math.sqrt(e.b.area || 100) * 0.3);
+              }
               // 흩어진 파편은 떠올랐다가 다음 박동에 내리꽂힘
-              for (const ch of D.gather(c.x, c.z, rk * 1.4, 2)) if (R() < 0.35) { if (D.launch(ch, (R() - 0.5) * 3, 14 + R() * 10, (R() - 0.5) * 3)) st.slam.push([ch, t + chargeOf(k + 1) * 0.8 + AFTER * 0.5]); }
+              for (const ch of D.gather(c.x, c.z, rk, 2)) if (R() < 0.35) { if (D.launch(ch, (R() - 0.5) * 3, 14 + R() * 10, (R() - 0.5) * 3)) st.slam.push([ch, t + chargeOf(k + 1) * 0.8 + AFTER * 0.5]); }
               fx.ring(c, rk * 2.2, 1.2, 0xa8dcff, 0.6); fx.addShake(1.8);
               world.paintScorch(c.x, c.z, rk, 0.4);
             }
@@ -115,6 +147,9 @@ export const MOVIE = {
                 st.RI = r0 * (1 + (nP - 1) * 0.45) * 1.5;
                 st.sing = c.clone().add(v3(0, 25 * sc, 0));
                 st.held = [];
+                // 붙잡혀 있던 건물도 그대로 이어서 빨려 들어감
+                for (const e of st.lift.values()) { const from = e.from.clone().add(v3(0, -e.sink, 0)); st.held.push({ h: e.h, d: e.d, from, at: 0.6 + (e.d / st.RI) * 4.2 + R() * 0.6, spin: v3(R() - 0.5, R() - 0.5, R() - 0.5).normalize(), q: new THREE.Quaternion() }); }
+                st.lift.clear();
                 for (const b of D.buildingsNear(c.x, c.z, st.RI)) {
                   if (b.state !== 'intact') continue;
                   const d = Math.hypot(b.cx - c.x, b.cz - c.z); if (d > st.RI) continue;
@@ -180,7 +215,7 @@ export const MOVIE = {
           }
           return true;
         },
-        dispose() { A.remove(eng); A.remove(hero); for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true); if (st.held) for (const it of st.held) it.h.drop(); if (st.hole) disposeObj(scene, st.hole); },
+        dispose() { A.remove(eng); A.remove(hero); for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true); if (st.held) for (const it of st.held) it.h.drop(); for (const e of st.lift.values()) e.h.set(e.from.clone().add(v3(0, -e.sink, 0)), new THREE.Quaternion(), 1); if (st.hole) disposeObj(scene, st.hole); },
       });
       const g = cineGame(A); if (!g) return;
       const low = c.clone().addScaledVector(f, -700).addScaledVector(side, 250); low.y = c.y + 15;
