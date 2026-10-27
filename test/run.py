@@ -9,13 +9,15 @@ srv = socketserver.TCPServer(('127.0.0.1', 0), Handler); port = srv.server_addre
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 script = sys.argv[2] if len(sys.argv) > 2 else ''
 with sync_playwright() as p:
-    b = p.chromium.launch(args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
+    args = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
+    if os.environ.get('WEBGPU'): args += ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader', '--disable-vulkan-surface']
+    b = p.chromium.launch(args=args)
     pg = b.new_page(viewport={'width': 1280, 'height': 760})
     logs = []
     pg.on('console', lambda m: logs.append(f'[{m.type}] {m.text}'))
     pg.on('pageerror', lambda e: logs.append(f'[pageerror] {e}'))
     pg.add_init_script("localStorage.setItem('we.settings', JSON.stringify({radius:500, quality:'" + os.environ.get('QUALITY','medium') + "', time:'noon', physWorker: !!sessionStorage.getItem('W')}))")
-    pg.goto(f'http://127.0.0.1:{port}/index.html')
+    pg.goto(f'http://127.0.0.1:{port}/' + os.environ.get('PAGE', 'index.html'))
     pg.wait_for_timeout(800)
     pg.screenshot(path=f'{OUT}/menu.png')
     exec(script)

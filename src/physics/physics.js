@@ -2,6 +2,7 @@
 // 파괴 로직은 프록시의 Rapier 비슷한 API 만 사용하고, 실제 계산은 워커(또는 같은 스레드)에서 일어난다.
 import RAPIER from '@dimforge/rapier3d-simd-compat';
 import { PhysCore, STRIDE } from './core.js';
+import { GPUCore } from './gpucore.js';
 
 /* global __PHYS_WORKER_SRC__ */
 const WORKER_SRC = typeof __PHYS_WORKER_SRC__ !== 'undefined' ? __PHYS_WORKER_SRC__ : null;
@@ -71,7 +72,7 @@ class LightBody {
 }
 
 export class Physics {
-  constructor(worker) {
+  constructor(worker, gpu = null) {
     this._id = 1;
     this._cmds = []; this._xfer = [];
     this.bodies = new Map();
@@ -84,7 +85,11 @@ export class Physics {
     this.timeScale = 1;
     this._inflight = false; this._dtAcc = 0;
     this.worker = worker || null;
-    if (this.worker) {
+    if (gpu) {
+      // GPU 물리: 같은 스레드에서 명령을 모아 GPU 로 보내고, 결과는 비동기로 받음
+      this.mode = 'gpu'; this.gpu = gpu;
+      gpu.onState = (n, f) => this._applyGPU(n, f);
+    } else if (this.worker) {
       this.mode = 'worker';
       this.worker.onmessage = (e) => this._onMsg(e.data);
       this.worker.onerror = (e) => console.warn('physics worker error', e.message);
@@ -94,8 +99,11 @@ export class Physics {
     }
   }
 
-  // 워커가 준비되면 워커, 아니면 같은 스레드에서 계산
-  static async create({ useWorker = true } = {}) {
+  // GPU 물리를 고르면 WebGPU 로, 안 되면 워커, 그것도 안 되면 같은 스레드에서 계산
+  static async create({ useWorker = true, gpu = false, capacity = 32768 } = {}) {
+    if (gpu) {
+      try { const core = await GPUCore.create(capacity); if (core) return new Physics(null, core); } catch (e) { console.warn('GPU 물리를 못 써서 Rapier 로 바꿈:', e); }
+    }
     await RAPIER.init();
     if (useWorker && WORKER_SRC && typeof Worker !== 'undefined') {
       try {
@@ -122,9 +130,9 @@ export class Physics {
     this._cmd(['hf', id, n, heightsColMajor, span], [heightsColMajor.buffer]);
     return id;
   }
-  trimesh(verts, idx) {
+  trimesh(verts, idx, meta) {
     const id = this._id++;
-    this._cmd(['tri', id, verts, idx], [verts.buffer, idx.buffer]);
+    this._cmd(this.mode === 'gpu' ? ['tri', id, null, null, meta] : ['tri', id, verts, idx], this.mode === 'gpu' ? null : [verts.buffer, idx.buffer]);
     return id;
   }
   // shape: {box:[hu,hy,hv,ox,oz,qy,qw]} 또는 {hull: Float32Array}
@@ -145,7 +153,16 @@ export class Physics {
     return b;
   }
   // 가벼운 파편 만들기 (처음엔 고정)
-  light(x, y, z, q, mass, r) { return new LightBody(this, x, y, z, q || { x: 0, y: 0, z: 0, w: 1 }, mass, r); }
+  light(x, y, z, q, mass, r) {
+    if (this.mode === 'gpu') {
+      // GPU 에서는 가벼운 파편도 다른 조각과 똑같이 서로 부딪힘
+      const id = this._id++;
+      this._cmd(['lball', id, x, y, z, 0, 0, 0, r, mass]);
+      const b = new Body(this, id, x, y, z, mass, false); if (q) b.q = { x: q.x, y: q.y, z: q.z, w: q.w };
+      this.bodies.set(id, b); return b;
+    }
+    return new LightBody(this, x, y, z, q || { x: 0, y: 0, z: 0, w: 1 }, mass, r);
+  }
   get dynCount() { return this._dyn.size; }
   get lightCount() { return this._light.size; }
 
@@ -194,6 +211,15 @@ export class Physics {
     const tl = performance.now();
     this._stepLight(d);
     this.lightMs = this.lightMs * 0.9 + (performance.now() - tl) * 0.1;
+    if (this.mode === 'gpu') {
+      for (const c of this._cmds) this.gpu.exec(c);
+      this._cmds = []; this._xfer = [];
+      const maxSteps = Math.max(1, Math.ceil(this.timeScale)) * (this.gpu.stepMs > 12 ? 1 : 2);
+      const st = this.gpu.step(d, maxSteps);
+      this.stepMs = this.gpu.stepMs;
+      this.simDt += st.steps / 60;
+      return;
+    }
     if (this.mode === 'inline') {
       for (const c of this._cmds) this.core.exec(c);
       this._cmds = []; this._xfer = [];
@@ -234,12 +260,27 @@ export class Physics {
     }
   }
 
+  // GPU 결과: body 마다 [x y z 칸, 회전 4, 속도 3, 잠] (칸 → id)
+  _applyGPU(n, f) {
+    const ids = this.gpu.ids;
+    for (let k = 0; k < n; k++) {
+      const o = k * 12;
+      const id = ids[f[o + 3] | 0]; if (id < 0) continue;
+      const b = this.bodies.get(id);
+      if (!b || !b.dyn) continue;
+      b.p = { x: f[o], y: f[o + 1], z: f[o + 2] };
+      b.q = { x: f[o + 4], y: f[o + 5], z: f[o + 6], w: f[o + 7] };
+      b.v = { x: f[o + 8], y: f[o + 9], z: f[o + 10] };
+      b.sl = f[o + 11] > 0.5;
+    }
+  }
   // 마지막 호출 이후 진행된 시뮬레이션 시간
   takeSimDt() { const s = this.simDt; this.simDt = 0; return s; }
 
   dispose() {
     if (this.worker) { try { this.worker.postMessage({ type: 'dispose' }); } catch (e) { /* 무시 */ } setTimeout(() => { try { this.worker.terminate(); } catch (e) { /* 무시 */ } }, 500); }
     if (this.core) this.core.free();
+    if (this.gpu) this.gpu.free();
     this.bodies.clear(); this._dyn.clear(); this._light.clear();
   }
 }

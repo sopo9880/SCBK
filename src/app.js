@@ -251,8 +251,8 @@ async function loadAndRun(place, reuse) {
   let i = 0;
   try {
     setStep(i, 'run');
-    const phys = await Physics.create({ useWorker: settings.cfg.physWorker !== false && settings.physWorker !== false });
-    setStep(i++, 'done', phys.mode === 'worker' ? '별도 스레드' : '같은 스레드');
+    const phys = await Physics.create({ useWorker: settings.cfg.physWorker !== false && settings.physWorker !== false, gpu: settings.cfg.physEngine === 'gpu', capacity: +settings.cfg.gpuBodies || 32768 });
+    setStep(i++, 'done', phys.mode === 'gpu' ? 'GPU' : phys.mode === 'worker' ? '별도 스레드' : '같은 스레드');
 
     let data, grid, proj;
     if (reuse && cachedData) {
@@ -420,7 +420,7 @@ const hud = {
     if (!po.hidden) {
       const a = PROF.avg, pk = PROF.peak, f = (k) => `${(a[k] || 0).toFixed(1).padStart(5)}  (최대 ${(pk[k] || 0).toFixed(0)})`;
       const info = game ? game.renderer.info.render : { calls: 0, triangles: 0 };
-      po.textContent = `FPS        ${fps.toFixed(0)}\n렌더       ${f('render')} ms\n물리 전체  ${f('physics')} ms\n 스텝      ${f('step')} ms\n 조각화    ${f('fracture')} ms\n 폭발      ${f('explode')} ms\n무기       ${f('weapons')} ms\n연출       ${f('fx')} ms\n움직이는 조각 ${s.dynamic} / 상한 ${s.budget}\n흩어진 조각   ${s.loose}\n드로우콜     ${info.calls}`;
+      po.textContent = `FPS        ${fps.toFixed(0)}\n렌더       ${f('render')} ms\n물리 전체  ${f('physics')} ms\n 스텝      ${f('step')} ms\n 조각화    ${f('fracture')} ms\n 폭발      ${f('explode')} ms\n무기       ${f('weapons')} ms\n연출       ${f('fx')} ms\n움직이는 조각 ${s.dynamic} / 상한 ${s.budget}\n흩어진 조각   ${s.loose}\n드로우콜     ${info.calls}` + (game && game.phys.mode === 'gpu' ? `\n물리 엔진    GPU (WebGPU)\n GPU 시간    ${(game.phys.gpu.gpuMs || 0).toFixed(1)} ms\n 조각 칸     ${game.phys.gpu.top - game.phys.gpu.free.length} / ${game.phys.gpu.N}` : `\n물리 엔진    CPU (Rapier)`);
     }
   },
   hover(b, x, y) {

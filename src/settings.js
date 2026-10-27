@@ -51,6 +51,8 @@ export const SCHEMA = [
   { tab: 'post', key: 'vignette', label: '비네트', type: 'range', min: 0, max: 1, step: 0.05, def: 0, fmt: pct, desc: '화면 가장자리를 어둡게' },
   { tab: 'post', key: 'dof', label: '연출 중 초점 흐림', type: 'toggle', def: true, desc: '카메라 연출 때 배경을 영화처럼 흐리게' },
   // ---- 물리 ----
+  { tab: 'phys', key: 'physEngine', label: '물리 엔진', type: 'select', def: 'gpu', restart: 'city', options: [['gpu', 'GPU (WebGPU) — 조각을 훨씬 많이'], ['rapier', 'CPU (Rapier) — 예전 방식']], desc: 'GPU 를 못 쓰는 PC 에서는 자동으로 CPU 로 바뀌어요.' },
+  { tab: 'phys', key: 'gpuBodies', label: 'GPU 물리 최대 조각 수', type: 'select', def: 32768, restart: 'city', options: [[16384, '1만 6천'], [32768, '3만 2천'], [65536, '6만 5천'], [131072, '13만']] },
   { tab: 'phys', key: 'physWorker', label: '물리 별도 스레드', type: 'toggle', def: true, restart: 'city', desc: '물리 계산을 화면 그리기와 다른 스레드에서 해요. 끄면 큰 폭발 뒤 화면이 멈칫해요.' },
   { tab: 'phys', key: 'maxDynamic', label: '정식 물리 조각 수', type: 'range', min: 500, max: 10000, step: 100, def: -1, fmt: (v) => v < 0 ? '품질 설정 따름' : v.toLocaleString() + '개', desc: '서로 부딪히고 쌓이는 큰 조각의 최대 개수. CPU 성능에 맞춰 자동으로 줄어들 수 있어요.' },
   { tab: 'phys', key: 'maxLight', label: '가벼운 파편 수', type: 'range', min: 2000, max: 80000, step: 1000, def: -1, fmt: (v) => v < 0 ? '품질 설정 따름' : v.toLocaleString() + '개', desc: '땅과 건물에만 부딪히는 작은 파편의 최대 개수' },

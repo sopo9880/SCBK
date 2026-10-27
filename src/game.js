@@ -240,10 +240,10 @@ export class Game {
       case 'rotSens': this.controls.rotateSpeed = c.rotSens; this.controls.panSpeed = c.rotSens; break;
       case 'zoomSens': this.controls.zoomSpeed = 1.2 * c.zoomSens; break;
       case 'cinematic': case 'autoPull': case 'soundDelay': case 'planet': if (this.arsenal) this.arsenal.opts[key] = c[key]; break;
-      case 'maxDynamic': this.Q.maxDynamic = c.maxDynamic < 0 ? Q0.maxDynamic : c.maxDynamic; this.D.dynBudget = this.Q.maxDynamic; break;
+      case 'maxDynamic': this.Q.maxDynamic = this.phys.mode === 'gpu' ? this._gpuDyn() : c.maxDynamic < 0 ? Q0.maxDynamic : c.maxDynamic; this.D.dynBudget = this.Q.maxDynamic; break;
       case 'maxLight': this.Q.maxLight = c.maxLight < 0 ? Q0.maxLight : c.maxLight; break;
       case 'maxLoose': this.Q.maxLoose = c.maxLoose < 0 ? Q0.maxLoose : c.maxLoose; break;
-      case 'lightVol': this.Q.lightVol = c.lightVol; this.D.useLight = c.lightVol > 0; break;
+      case 'lightVol': this.Q.lightVol = c.lightVol; this.D.useLight = c.lightVol > 0 && this.phys.mode !== 'gpu'; break;
       case 'chunkDetail': this.Q.chunkFull = Math.round(Q0.chunkFull * c.chunkDetail); break;
       case 'solverIter': this.phys.setSolverIterations && this.phys.setSolverIterations(c.solverIter); break;
       case 'fxMul': this.Q.fxScale = Q0.fxScale * c.fxMul; break;
@@ -416,6 +416,8 @@ export class Game {
       onImpact: (p, sp) => { this.audio.thud(); this.fx.dust(p, 6); },
     };
     this.world = new World({ scene: this.scene, grid: this.grid, data: this.data, radius: this.radius, quality: this.Q });
+    // GPU 물리: 움직이는 조각 상한을 크게
+    if (this.phys.mode === 'gpu') { this.Q.maxDynamic = this._gpuDyn(); this.Q.maxLoose = Math.max(this.Q.maxLoose, Math.round(this.phys.gpu.N * 0.9)); }
     this.D = new Destruction({ scene: this.scene, phys: this.phys, grid: this.grid, buildings: this.data.buildings, quality: this.Q, hooks });
     this.fx = new FX(this.scene, this.camera, this.Q);
     this.arsenal = new Arsenal({
@@ -504,6 +506,7 @@ export class Game {
   }
 
   setSlowMo(on) { this.D.timeScale = on ? 0.22 : 1; }
+  _gpuDyn() { return Math.round(this.phys.gpu.N * 0.6); }
   // 빨리 감기 (1, 2, 4배)
   setTimeRate(r) { this.D.timeScale = r; }
 

@@ -101,7 +101,7 @@ export class Destruction {
     this.eaten = [];   // 블랙홀이 삼킨 조각 (화이트홀이 토해냄)
     this._anim = [];
     this._wakeQ = [];
-    this.useLight = quality.lightDebris !== false;
+    this.useLight = quality.lightDebris !== false && phys.mode !== 'gpu';   // GPU 물리면 모든 조각이 서로 부딪힘
     phys.lightEnv = { collide: (b, h) => this._lightCollide(b, h) };  // 받침이 사라진 자리: 그 위에 멈춰 있던 파편을 다시 움직이게
     if (!grid.h0) grid.h0 = grid.h.slice(); // 시간 역행용 원래 지형
   }
@@ -163,7 +163,7 @@ export class Destruction {
       this.intact.setColorAt(b.inst, b.col);
       // 충돌체: 삼각형 메시 (지면 위 부분)
       const pos = geos[k].getAttribute('aOrig').array, idx = geos[k].index.array;
-      b.bodyId = this.phys.trimesh(new Float32Array(pos), new Uint32Array(idx));
+      b.bodyId = this.phys.trimesh(new Float32Array(pos), new Uint32Array(idx), { pts: b.pts, baseY: b.baseY, top: b.baseY + b.height });
       geos[k].dispose();
     });
     this.group.add(this.intact);
@@ -1049,7 +1049,7 @@ export class Destruction {
   _intactCollider(b) {
     const geo = buildingShell(b, b.baseY);
     const pos = geo.getAttribute('aOrig').array, idx = geo.index.array;
-    b.bodyId = this.phys.trimesh(new Float32Array(pos), new Uint32Array(idx));
+    b.bodyId = this.phys.trimesh(new Float32Array(pos), new Uint32Array(idx), { pts: b.pts, baseY: b.baseY, top: b.baseY + (b.state === 'flat' ? b.flatH : b.height) });
     geo.dispose();
   }
   // 시간 역행: 모든 건물 복원 (조각 건물은 조각을 원래 자리로 되돌림)
