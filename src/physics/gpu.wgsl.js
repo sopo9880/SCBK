@@ -105,7 +105,7 @@ fn terrain(x: f32, z: f32) -> f32 {
   if (b.lrot.w > 0.5) {
     if (woke == 0u) {
       // 막 잠든 조각은 한 번만 알려 줌
-      if (P.misc.x > 0.5 && b.lrot.w < 1.5) {
+      if (P.misc.x > 0.5 && (b.lrot.w < 1.5 || P.misc.x > 1.5)) {   // 2 면 놓친 알림을 다시 맞추려고 잠든 조각도 모두
         B[s].lrot.w = 2.0;
         let i = atomicAdd(&AT[0], 1u); let o = i * 3u;
         outBuf[o] = vec4f(b.pos.xyz, f32(s)); outBuf[o + 1u] = b.quat; outBuf[o + 2u] = vec4f(0.0, 0.0, 0.0, 1.0);

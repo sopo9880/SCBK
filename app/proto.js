@@ -104,7 +104,7 @@ fn terrain(x: f32, z: f32) -> f32 {
   if (b.lrot.w > 0.5) {
     if (woke == 0u) {
       // \uB9C9 \uC7A0\uB4E0 \uC870\uAC01\uC740 \uD55C \uBC88\uB9CC \uC54C\uB824 \uC90C
-      if (P.misc.x > 0.5 && b.lrot.w < 1.5) {
+      if (P.misc.x > 0.5 && (b.lrot.w < 1.5 || P.misc.x > 1.5)) {   // 2 \uBA74 \uB193\uCE5C \uC54C\uB9BC\uC744 \uB2E4\uC2DC \uB9DE\uCD94\uB824\uACE0 \uC7A0\uB4E0 \uC870\uAC01\uB3C4 \uBAA8\uB450
         B[s].lrot.w = 2.0;
         let i = atomicAdd(&AT[0], 1u); let o = i * 3u;
         outBuf[o] = vec4f(b.pos.xyz, f32(s)); outBuf[o + 1u] = b.quat; outBuf[o + 2u] = vec4f(0.0, 0.0, 0.0, 1.0);
@@ -736,7 +736,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       f[17] = 0.6;
       f[18] = 0.45;
       f[19] = this._ncmd || 0;
-      f[20] = last ? 1 : 0;
+      f[20] = last ? this._resync ? 2 : 1 : 0;
       f[21] = 0.05;
       f[22] = 0.3;
       f[23] = 300;
@@ -828,6 +828,10 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       const NB = this.top, NP = NB * MAXP;
       if (nsub > 0 && NB > 0) {
         d.queue.writeBuffer(this.at, 0, new Uint32Array(4));
+        if (this._missed && this.staging.some((x) => !x.busy && !x.old)) {
+          this._missed = false;
+          this._resync = true;
+        }
         for (let i = 0; i < nsub; i++) {
           const last = i === nsub - 1;
           this._writeParams(subDt, last);
@@ -846,6 +850,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
           d.queue.submit([e2.finish()]);
         }
         this._readback();
+        this._resync = false;
         if (!this._timing) {
           this._timing = true;
           const t1 = performance.now();
@@ -862,7 +867,10 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
     _readback() {
       let st = this.staging.find((s) => !s.busy && !s.old);
       if (!st) {
-        if (this.staging.length >= 12) return;
+        if (this.staging.length >= 12) {
+          this._missed = true;
+          return;
+        }
         st = { b: this.device.createBuffer({ size: this.N * 3 * 16 + 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }), busy: false };
         this.staging.push(st);
       }

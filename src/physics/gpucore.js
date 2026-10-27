@@ -259,7 +259,7 @@ export class GPUCore {
     f[8] = this.terrain.x0; f[9] = this.terrain.z0; f[10] = this.terrain.cell; f[11] = this.terrain.n;
     f[12] = this.bgrid.x0; f[13] = this.bgrid.z0; f[14] = this.bgrid.cell; f[15] = this.bgrid.w;
     f[16] = 1.0; f[17] = 0.6; f[18] = 0.45; f[19] = this._ncmd || 0;
-    f[20] = last ? 1 : 0; f[21] = 0.05; f[22] = 0.3; f[23] = 300;
+    f[20] = last ? (this._resync ? 2 : 1) : 0; f[21] = 0.05; f[22] = 0.3; f[23] = 300;
     const so = this.so; u[24] = so[0]; u[25] = so[1]; u[26] = so[2]; u[27] = so[3]; u[28] = so[4]; u[29] = so[5]; u[30] = this.N; u[31] = 0;
     this.device.queue.writeBuffer(this.uni, 0, this.params);
   }
@@ -304,6 +304,8 @@ export class GPUCore {
     const NB = this.top, NP = NB * MAXP;
     if (nsub > 0 && NB > 0) {
       d.queue.writeBuffer(this.at, 0, new Uint32Array(4));
+      // 지난번에 결과를 못 읽었으면 이번엔 잠든 조각까지 모두 다시 알려 받음
+      if (this._missed && this.staging.some(x => !x.busy && !x.old)) { this._missed = false; this._resync = true; }
       for (let i = 0; i < nsub; i++) {
         const last = i === nsub - 1;
         this._writeParams(subDt, last);
@@ -316,6 +318,7 @@ export class GPUCore {
         d.queue.submit([e2.finish()]);
       }
       this._readback();
+      this._resync = false;
       // GPU 가 이번 일을 끝내는 데 걸린 시간 (대략)
       if (!this._timing) { this._timing = true; const t1 = performance.now(); d.queue.onSubmittedWorkDone().then(() => { this.gpuMs = (this.gpuMs || 0) * 0.8 + (performance.now() - t1) * 0.2; this._timing = false; }); }
     }
@@ -328,7 +331,7 @@ export class GPUCore {
     // 잠든 순간 같은 한 번뿐인 알림을 놓치지 않게, 비어 있는 읽기 버퍼가 없으면 새로 만듦
     let st = this.staging.find(s => !s.busy && !s.old);
     if (!st) {
-      if (this.staging.length >= 12) return;
+      if (this.staging.length >= 12) { this._missed = true; return; }
       st = { b: this.device.createBuffer({ size: this.N * 3 * 16 + 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST }), busy: false };
       this.staging.push(st);
     }
