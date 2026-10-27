@@ -160,7 +160,7 @@ export function detonate(A, q, { scale = 1, light = false, kt = null, kind = 'nu
     game.ensureView(Rv * 8, Rv * 3.2);
     // 지평선 너머 마을까지 쓸어버리는 충격파 + 큰 폭발은 핵겨울과 행성 시점 마무리
     const lv = Math.max(0, Math.min(1, Math.log10(Y / 2000) / 1.3));
-    worldEnd(A, q, kind, { level: lv, delay: 0.3, doom: Y >= 4000, waveMax: Math.min(N.r5, 40000), waveSpeed: Math.max(500, N.r5 / 9), finale: lv >= 1, finaleDelay: 16, crust: Y >= 20000 });
+    worldEnd(A, q, kind, { level: lv, delay: 0.3, doom: Y >= 4000, waveMax: Math.min(N.r5, 40000), waveSpeed: Math.max(500, N.r5 / 9), finale: lv >= 1, finaleDelay: 10, crust: Y >= 20000 });
   }
   // 충격파 고리 (지도 너머 지평선까지)
   fx.ring(q, Math.min(N.r1, 90000), dur * 1.6, kind === 'anti' ? 0xd8c8ff : 0xffe2b0, 0.55);

@@ -65,7 +65,10 @@ export const SCHEMA = [
   { tab: 'cam', key: 'moveSpeed', label: '키보드 이동 속도', type: 'range', min: 0.2, max: 3, step: 0.05, def: 1, fmt: mul },
   { tab: 'cam', key: 'cinematic', label: '카메라 연출', type: 'toggle', def: true, desc: '큰 무기의 발사·착탄 장면 연출' },
   { tab: 'cam', key: 'autoPull', label: '거대 폭발 때 자동으로 물러나기', type: 'toggle', def: true },
-  { tab: 'cam', key: 'planet', label: '행성 시점 마무리', type: 'toggle', def: true, desc: '세계 멸망급(×75 이상) 끝에 카메라가 우주까지 빠져 행성을 보여줘요.' },
+  { tab: 'cam', key: 'worldEnd', label: '세계 멸망 결말', type: 'toggle', def: true, desc: '끄면 ×100 이어도 무기 자체의 연출과 파괴만 나와요.' },
+  { tab: 'cam', key: 'endTrigger', label: '세계 멸망 시작 조건', type: 'select', def: 'power', options: [['power', '위력 ×75 이상으로 쏠 때'], ['destroy', '파괴율이 기준을 넘을 때'], ['both', '둘 중 먼저 되는 쪽']] },
+  { tab: 'cam', key: 'endPct', label: '세계 멸망 파괴율 기준', type: 'range', min: 30, max: 100, step: 5, def: 90, fmt: (v) => v + '%', desc: '시작 조건이 파괴율일 때만 쓰여요.' },
+  { tab: 'cam', key: 'planet', label: '행성 시점 마무리', type: 'toggle', def: true, desc: '세계 멸망 결말 끝에 카메라가 우주까지 빠져 행성을 보여줘요.' },
   // ---- 소리 ----
   { tab: 'audio', key: 'volume', label: '전체 볼륨', type: 'range', min: 0, max: 1, step: 0.01, def: 0.7, fmt: pct, root: true },
   { tab: 'audio', key: 'soundDelay', label: '거리만큼 늦게 오는 소리', type: 'toggle', def: true, desc: '멀리서 터지면 음속(343m/s)만큼 늦게 들려요.' },

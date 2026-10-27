@@ -45,6 +45,7 @@ export class Arsenal {
 
   fire(hit, cameraPos) {
     this.ctx.audio.resume();
+    this._newShot(hit && hit.point);
     const h = HANDLERS[this.current];
     if (h && h.fire) h.fire(this, hit, cameraPos.clone());
     if (hit) runEnding(this, this.current, hit.point);
@@ -55,6 +56,7 @@ export class Arsenal {
     if (h && h.fire) h.fire(this, hit, this.ctx.camera.position.clone());
   }
   holdStart(hit) {
+    this._newShot(hit && hit.point);
     const h = HANDLERS[this.current];
     this.ctx.audio.resume();
     if (h && h.holdStart) this._hold = { id: this.current, state: h.holdStart(this, hit) || {} };
@@ -65,6 +67,38 @@ export class Arsenal {
     if (h && h.holdEnd) h.holdEnd(this, this._hold.state);
     if (this._holdAim) runEnding(this, this._hold.id, this._holdAim);
     this._hold = null; this._holdAim = null;
+  }
+
+  // 새 발사: 기다리던 세계 멸망 카운트다운·행성 장면은 취소
+  _newShot(p) {
+    this._endToken = (this._endToken || 0) + 1;
+    this._endPending = 0;
+    this._lastId = this.current;
+    if (p) this._lastPoint = { x: p.x, y: p.y, z: p.z };
+  }
+  // Esc: 카운트다운 중이면 취소 (true 반환)
+  cancelEnding() {
+    const el = document.getElementById('endCount');
+    if (!el || el.hidden) return false;
+    this._endToken = (this._endToken || 0) + 1; this._endPending = 0;
+    el.hidden = true;
+    if (this.ctx.hud && this.ctx.hud.toast) this.ctx.hud.toast('세계 멸망 취소', 'info');
+    return true;
+  }
+  // 파괴율 기준 세계 멸망 (설정)
+  _checkDestroyEnd(dt) {
+    const o = this.opts;
+    if (o.worldEnd === false || (o.endTrigger !== 'destroy' && o.endTrigger !== 'both')) return;
+    this._pctT = (this._pctT || 0) + dt;
+    if (this._pctT < 1) return;
+    this._pctT = 0;
+    const pct = this.ctx.D.stats().pct * 100, lim = o.endPct || 90;
+    if (this._pctEnded) { if (pct < lim * 0.5) this._pctEnded = false; return; }
+    if (pct >= lim && this._lastPoint && !this._endPending) {
+      this._pctEnded = true;
+      if (this.ctx.hud && this.ctx.hud.toast) this.ctx.hud.toast(`파괴율 ${Math.round(pct)}% — 세계 멸망`, 'info');
+      runEnding(this, this._lastId || 'bomb', this._lastPoint, true);
+    }
   }
 
   spawn(obj, scale = 1) { obj.scale.setScalar(scale); this.ctx.scene.add(obj); return obj; }
@@ -95,6 +129,7 @@ export class Arsenal {
 
   update(dt, aim) {
     const { D, fx, grid } = this.ctx;
+    this._checkDestroyEnd(dt);
     // 투사체
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const pr = this.projectiles[i];

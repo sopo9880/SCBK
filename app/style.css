@@ -240,3 +240,9 @@ body.rewind canvas { filter: sepia(0.55) hue-rotate(170deg) saturate(1.4) contra
 .set-auto { font-size: 12px; }
 @media (max-width: 700px) { .set-body { grid-template-columns: 1fr; } .set-tabs { flex-direction: row; border-right: 0; border-bottom: 1px solid #ffffff10; } .set-row { grid-template-columns: 1fr; } }
 body.timestop canvas { filter: grayscale(0.85) contrast(1.15) brightness(1.05); }
+
+/* 세계 멸망 카운트다운 */
+#endCount { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); z-index: 60; pointer-events: none; text-align: center; color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,.7); font-family: inherit; }
+#endCount b { display: block; font-size: 22px; letter-spacing: .3em; color: #ffb38a; font-weight: 700; }
+#endCount span { display: block; font-size: 96px; font-weight: 800; line-height: 1.1; }
+#endCount small { display: block; font-size: 13px; opacity: .75; margin-top: 4px; }

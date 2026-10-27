@@ -104,7 +104,7 @@ const settings = Object.assign({ radius: 600, quality: 'high', time: 'noon', vol
 settings.wopts = Object.assign({}, DEFAULT_OPTS, settings.wopts);
 settings.cfg = Object.assign(defaultCfg(), settings.cfg || {});
 if (settings.physWorker === false) settings.cfg.physWorker = false;
-const CFG_OPTS = ['cinematic', 'autoPull', 'soundDelay', 'planet', 'strobe'];
+const CFG_OPTS = ['cinematic', 'autoPull', 'soundDelay', 'planet', 'strobe', 'worldEnd', 'endTrigger', 'endPct'];
 const audio = new Audio(); audio.setVolume(settings.volume);
 let game = null, current = null, cachedData = null;
 
@@ -507,6 +507,7 @@ function initHud() {
     { const st = document.getElementById('settings'); if (st && !st.hidden) { if (e.code === 'Escape') document.getElementById('setClose')?.click(); return; } }
     if (!game || $('#hud').hidden) return;
     if (game.planetFX) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.endPlanet(); } return; }
+    if (e.code === 'Escape' && game.arsenal.cancelEnding()) { e.preventDefault(); return; }
     if (game.cine && game.cine.active) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); game.cine.skip(); } return; }
     if (/^Digit[0-9]$/.test(e.code)) {
       // 1~9, 0 = 10번째, Shift+1~9 = 11번째부터
