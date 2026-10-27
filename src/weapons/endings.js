@@ -1,7 +1,8 @@
 // ×100(위력 75 이상) 세계 멸망 결말: 무기마다 그 무기다운 방식으로 지도와 지평선, 행성까지 끝장냄
 import * as THREE from 'three';
 import { makeMeteor, makeRod, makeBomb, makeBomber } from './models.js';
-import { worldEnd, wipeMap, crustCollapse, isWorldEnd } from './apocalypse.js';
+import { worldEnd, wipeMap, crustCollapse, isWorldEnd, showCountdown, hideCountdown } from './apocalypse.js';
+import { orbit } from './cam.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
@@ -156,12 +157,57 @@ export const ENDINGS = {
   // 핵 계열(nuke, bomber, icbm, tsar, antimatter)과 소행성은 폭발 자체가 위력에 맞춰 세계를 끝냄
 };
 
-// 무기를 쏜 직후 불림
-export function runEnding(A, id, point) {
-  if (A._noEnding || !isWorldEnd(A) || !ENDINGS[id] || !point) return;
+// 결말 전용 연출: 지도 전체를 높이서 돌아보다 더 높이 빠짐 → 끝나면 바로 행성 장면
+function endingShots(A, c, token) {
+  const { game, grid } = A.ctx;
+  if (!game || !A.opts.cinematic) { A._finaleNow = token; return; }
+  const span = grid.span;
+  const a0 = Math.atan2(game.camera.position.z - c.z, game.camera.position.x - c.x);
+  game.ensureView(span * 4, span * 2);
+  game.cine.play([
+    orbit(c, { dist: span * 0.45, h: span * 0.22, a0, a1: a0 + 0.7, dur: 6, fov: 60, caption: '세계 멸망', look: 20 }),
+    orbit(c, { dist: span * 0.8, h: span * 0.55, a0: a0 + 0.7, a1: a0 + 1.1, dur: 5, fov: 62, cut: false }),
+  ], { onEnd: () => { A._finaleNow = token; } });
+}
+
+// 결말이 없는 무기(핵 등)를 파괴율 기준으로 끝낼 때
+function genericEnding(A, c) { wipeMap(A, c, 'nuke', { dur: 8 }); worldEnd(A, c, 'nuke', { delay: 1 }); }
+
+/**
+ * 무기를 쏜 직후 불림 (force = 파괴율 기준으로 시작)
+ * 흐름: 무기 연출이 끝나면 → "세계 멸망 3·2·1" → 결말 + 결말 연출 → 곧바로 행성 장면
+ * 그 사이에 다른 무기를 쏘거나 Esc 를 누르면 취소되어 컷신이 뜬금없이 끼어들지 않음
+ */
+export function runEnding(A, id, point, force = false) {
+  if (A._noEnding || !point || A.opts.worldEnd === false) return;
+  if (!force && (!isWorldEnd(A) || !ENDINGS[id])) return;
+  const fn = ENDINGS[id] || genericEnding;
+  const { game } = A.ctx;
+  const token = A._endToken || 0;
   const c = v3(point.x, A.ctx.grid.sample(point.x, point.z), point.z);
-  // 무기 자체의 연출이 먼저 보이도록 살짝 늦게
-  const delay = { kaiju: 10, bowling: 3, train: 3, mothership: 8, volcano: 5, tsunami: 4, domino: 3, cruise: 3, naval: 4 }[id] ?? 1.2;
-  A.addActive({ t: 0, update(dt) { this.t += dt; if (this.t >= delay) { ENDINGS[id](A, c); return false; } return true; } });
-  if (A.ctx.hud && A.ctx.hud.toast) A.ctx.hud.toast('세계 멸망', 'info');
+  const minDelay = { kaiju: 10, bowling: 3, train: 3, mothership: 8, volcano: 5, tsunami: 4, domino: 3, cruise: 3, naval: 4 }[id] ?? 1.2;
+  A._endPending = token;
+  A.addActive({
+    t: 0, phase: 0, n: 0,
+    update(dt) {
+      if ((A._endToken || 0) !== token || A._endPending !== token) { hideCountdown(); return false; }
+      this.t += dt;
+      if (this.phase === 0) {
+        // 무기 자체 연출이 끝날 때까지 (너무 길면 12초에서 끊음)
+        if (game && game.pilot) return true;       // 직접 조종 중에는 끝날 때까지 기다림
+        if (this.t >= minDelay && (!game || !game.cine.active || this.t > minDelay + 12)) { this.phase = 1; this.n = 0; }
+        return true;
+      }
+      this.n += dt;
+      const left = 3 - this.n;
+      if (left > 0) { showCountdown('세계 멸망', Math.ceil(left)); return true; }
+      hideCountdown();
+      A._endPending = 0;
+      A._forceEnd = force;
+      try { fn(A, c); } finally { A._forceEnd = false; }
+      endingShots(A, c, token);
+      return false;
+    },
+    dispose() { hideCountdown(); },
+  });
 }

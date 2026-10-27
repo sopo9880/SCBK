@@ -7,7 +7,22 @@ const R = Math.random;
 
 // 위력에 따른 멸망 단계: 0 = 없음, 0~1 사이 = 부분, 1 = 세계 멸망
 export function doomLevel(P) { return Math.max(0, Math.min(1, (P - 30) / 45)); }
-export const isWorldEnd = (A) => A.S.P >= 75;
+// 위력 기준 세계 멸망: 설정에서 끌 수 있고, 시작 조건이 '파괴율'이면 위력으로는 시작하지 않음
+export const isWorldEnd = (A) => A.opts.worldEnd !== false && A.opts.endTrigger !== 'destroy' && A.S.P >= 75;
+
+// 화면 가운데 큰 카운트다운 ("세계 멸망 3 · 2 · 1")
+export function countdownEl() {
+  let el = document.getElementById('endCount');
+  if (!el) { el = document.createElement('div'); el.id = 'endCount'; el.hidden = true; el.innerHTML = '<b></b><span></span><small>Esc 로 취소</small>'; document.body.appendChild(el); }
+  return el;
+}
+export function showCountdown(title, n) {
+  const el = countdownEl();
+  el.hidden = false;
+  el.querySelector('b').textContent = title;
+  el.querySelector('span').textContent = String(n);
+}
+export function hideCountdown() { const el = document.getElementById('endCount'); if (el) el.hidden = true; }
 
 /**
  * 세계 멸망 연출 묶음
@@ -16,8 +31,13 @@ export const isWorldEnd = (A) => A.S.P >= 75;
  */
 export function worldEnd(A, center, kind = 'nuke', opts = {}) {
   const { game, grid } = A.ctx;
-  const lvl = opts.level ?? doomLevel(A.S.P);
+  if (A.opts.worldEnd === false) return;
+  const lvl = opts.level ?? (A._forceEnd ? 1 : doomLevel(A.S.P));
   if (lvl <= 0) return;
+  // 이 결말이 속한 발사 (그 뒤에 다른 무기를 쏘면 행성 장면은 취소)
+  const token = A._endToken || 0;
+  // 위력만으로 시작한 핵 등은 시작 조건이 '파괴율'이면 행성 장면을 띄우지 않음
+  if (!A._forceEnd && A.opts.endTrigger === 'destroy') opts = Object.assign({}, opts, { finale: false });
   const c = v3(center.x, grid.sample(center.x, center.z), center.z);
   const o = Object.assign({ delay: 0, wave: true, crust: false, finale: true, wipe: false, finaleDelay: 14, waveSpeed: 1600 }, opts);
   const weather = { crack: 'ash', shatter: 'fire' }[kind] || kind;
@@ -50,12 +70,22 @@ export function worldEnd(A, center, kind = 'nuke', opts = {}) {
           }
         }
       }
-      // 행성 시점 마무리 (연출이 끝난 뒤)
-      if (o.finale && !this.finaled && lvl >= 1 && te > o.finaleDelay && game && !game.cine.active && A.opts.planet !== false) {
-        this.finaled = true;
-        game.playPlanet(o.planetKind || planetMap[kind] || kind);
+      // 행성 시점 마무리: 결말 연출이 끝나면 바로, 아니면 연출이 없을 때 카운트다운 뒤
+      const wantFinale = o.finale && !this.finaled && lvl >= 1 && game && A.opts.planet !== false;
+      if (wantFinale && (A._endToken || 0) !== token) { this.finaled = true; if (this.counting) hideCountdown(); }
+      else if (wantFinale && !game.cine.active && !game.planetFX) {
+        if (A._finaleNow === token) { this.finaled = true; hideCountdown(); game.playPlanet(o.planetKind || planetMap[kind] || kind); }
+        else if (te > o.finaleDelay) {
+          if (!this.counting) { this.counting = 0; }
+          this.counting += dt;
+          const left = 3 - this.counting;
+          if (left > 0) showCountdown('행성 시점', Math.ceil(left));
+          else { this.finaled = true; hideCountdown(); game.playPlanet(o.planetKind || planetMap[kind] || kind); }
+        }
       }
-      return te < Math.max(o.finaleDelay + 2, 30) || (!this.finaled && te < 90 && o.finale && lvl >= 1 && A.opts.planet !== false);
+      // 너무 오래 기다리게 되면 행성 장면은 포기 (뜬금없이 끼어들지 않게)
+      if (wantFinale && !this.finaled && te > o.finaleDelay + 20) { this.finaled = true; hideCountdown(); }
+      return te < Math.max(o.finaleDelay + 2, 30) || (wantFinale && !this.finaled);
     },
   });
 }

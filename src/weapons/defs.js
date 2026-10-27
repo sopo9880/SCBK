@@ -120,6 +120,7 @@ const I = {
   psychic: '<circle cx="12" cy="10" r="6" fill="currentColor"/><circle cx="12" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1" opacity="0.6"/><path d="M4 22h16" stroke="currentColor" stroke-width="1.6"/><rect x="5" y="17" width="3" height="3" fill="currentColor" opacity="0.6"/><rect x="16" y="15" width="3" height="3" fill="currentColor" opacity="0.6"/>',
   dinos: '<path d="M3 14c2-5 6-6 9-5l3-4h4l1 2-3 1-1 4 2 6h-2l-2-4h-4l-1 4H7l1-4c-2 0-4 1-5 0z" fill="currentColor"/>',
   datacrash: '<path d="M5 3v4M5 10v3M9 2v6M9 11v2M13 4v3M13 10v6M17 2v5M17 10v3M17 16v2M5 16v4M9 16v6" stroke="currentColor" stroke-width="2"/>',
+  guided: '<path d="M3 21l6-6" stroke="currentColor" stroke-width="2" stroke-dasharray="2 1.6"/><path d="M9 15l8-8 3-3 1 1-3 3-8 8z" fill="currentColor"/><circle cx="18" cy="18" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M18 13v2M18 21v2M13 18h2M21 18h2" stroke="currentColor" stroke-width="1.4"/>',
 };
 
 export const CATEGORIES = [
@@ -167,6 +168,7 @@ export const WEAPONS = [
   { id: 'hypersonic', cat: 'air', name: '극초음속 활공체', desc: '성층권에서 S자로 꺾여 마하 20으로 내리꽂힘', opts: [CINE] },
   { id: 'airship', cat: 'air', name: '비행선 추락', desc: '불붙은 거대 비행선이 도시 위로 천천히 떨어짐', opts: [CINE] },
   { id: 'strafe', cat: 'air', name: '전투기 기총소사', desc: '저공으로 지나가며 기관포로 거리를 쓸고 폭탄 투하', opts: [CINE] },
+  { id: 'guided', cat: 'air', name: '유도 미사일 (직접 조종)', desc: '발사하면 미사일 시점으로 바뀌어 마우스·방향키로 조종, Shift 가속, 클릭 기폭' },
   { id: 'laser', cat: 'sky', name: '궤도 레이저', desc: '누르고 끌어서 건물을 잘라내기', hold: true },
   { id: 'meteor', cat: 'sky', name: '운석우', desc: '거대 운석과 파편이 쏟아짐' },
   { id: 'rod', cat: 'sky', name: '신의 지팡이', desc: '궤도에서 텅스텐 막대 낙하, 거대 크레이터' },
