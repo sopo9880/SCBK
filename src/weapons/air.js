@@ -125,7 +125,7 @@ export const AIR = {
       g.cine.play([
         chase(() => st.pos, () => st.vel, { back: 22, up: 6, ahead: 60, dur: Math.max(1.5, T - 2.4), caption: '순항미사일', fov: 62 }),
         watch(ground, () => (st.hit ? tgt : st.pos), { dur: 1.6, fov: 48, ts: 0.45, smooth: 0.05 }),
-        watch(() => tgt.clone().addScaledVector(side, 280).addScaledVector(f, -80).add(v3(0, 130, 0)), () => tgt, { dur: 3.2, fov: 46, ts: (u) => 0.5 + 0.5 * u }),
+        watch(clearSpot(A, tgt.clone().add(v3(0, 6, 0)), { dist: 300, h: 140, a0: Math.atan2(-f.z, -f.x) - 0.4 }), () => tgt, { dur: 3.2, fov: 46, ts: (u) => 0.5 + 0.5 * u }),
       ]);
     },
   },

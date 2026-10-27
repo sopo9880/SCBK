@@ -150,7 +150,7 @@ export const MOVIE2 = {
       const low = c.clone().addScaledVector(f, -rw * 10 - 120).add(v3(0, 40, 0));
       g.cine.play([
         watch(low, () => st.trail, { dur: T1, fov: 58, caption: '거대 모래벌레', smooth: 0.3 }),
-        watch(clearSpot(A, c.clone().add(v3(0, 10, 0)), { dist: rw * 10 + 160, h: 75, a0: Math.atan2(-f.z, -f.x) }), c.clone().addScaledVector(dir, rw * 3.5).add(v3(0, H * 0.45, 0)), { dur: 7.5, fov: 62, ts: (u) => (u < 0.3 ? 0.55 : 1), smooth: 0.3 }),
+        watch(clearSpot(A, c.clone().lerp(e, 0.5).add(v3(0, 10, 0)), { dist: rw * 10 + 180, h: 90, a0: Math.atan2(-f.z, -f.x) }), c.clone().addScaledVector(dir, rw * 3.5).add(v3(0, H * 0.45, 0)), { dur: 7.5, fov: 62, ts: (u) => (u < 0.3 ? 0.55 : 1), smooth: 0.3 }),
       ]);
     },
   },

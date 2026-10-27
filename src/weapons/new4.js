@@ -537,7 +537,7 @@ export const NEW4 = {
       const r0 = runs[0], sd = sideOf(r0.dir);
       g.cine.play([
         chase(() => r0.pos, () => r0.dir, { back: 45, up: 8, side: 12, ahead: 120, dur: (half - 250) / sp, fov: 58, caption: '전투기 기총소사' }),
-        watch(clearSpot(A, c.clone().add(v3(0, 4, 0)), { dist: 170, h: 45, a0: Math.atan2(sd.z, sd.x) }), () => (r0.m.visible === false ? c : r0.pos.clone().lerp(c, 0.5)), { dur: 4.5, fov: 60, ts: 0.5, smooth: 0.15 }),
+        watch(clearSpot(A, c.clone().add(v3(0, 4, 0)), { dist: 190, h: 60, a0: Math.atan2(-r0.dir.z, -r0.dir.x) + 0.6 }), () => (r0.m.visible === false ? c : r0.pos.clone().lerp(c, 0.5)), { dur: 4.5, fov: 60, ts: 0.5, smooth: 0.15 }),
       ]);
     },
   },
