@@ -76,6 +76,10 @@ export class Game {
     this._initContent();
     this._initControls();
     this.cine = new Cinematic(this);
+    // 폭발을 연출 카메라에 알려 가리면 시야를 확보하게
+    { const fx = this.fx, D = this.D, cine = this.cine;
+      const oe = fx.explosion.bind(fx); fx.explosion = (p, r, o) => { cine.noteEvent(p); return oe(p, r, o); };
+      const ox = D.explode.bind(D); D.explode = (o) => { if (o && o.r > 8) cine.noteEvent(o); return ox(o); }; }
     this.storm = 0;
     this._bind();
     this._fpsT = 0; this._fpsN = 0; this.fps = 60;

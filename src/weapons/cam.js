@@ -23,7 +23,7 @@ export function orbit(center, { dist = 300, h = 80, a0 = 0, a1 = 0.6, dur = 4, f
 // 움직이는 대상을 뒤에서 따라가기 (dir: 진행 방향)
 export function chase(getPos, getDir, { back = 40, up = 12, side = 0, ahead = 40, dur = 3, fov = 58, caption = '', ts = 1, smooth = 0.08, cut = true } = {}) {
   const s = v3(), d = v3();
-  return { dur, caption, cut, update: (t, u, out) => {
+  return { dur, caption, cut, chase: true, update: (t, u, out) => {
     const p = getPos(); d.copy(getDir()); if (d.lengthSq() < 1e-6) d.set(0, 0, 1); d.normalize();
     s.set(-d.z, 0, d.x); if (s.lengthSq() < 1e-6) s.set(1, 0, 0); s.normalize();
     out.pos.copy(p).addScaledVector(d, -back).addScaledVector(s, side); out.pos.y += up;

@@ -291,3 +291,25 @@ export function glyphTexture() {
 }
 
 export { glow, std, mesh };
+
+// 전함 (앞 = +Z, 길이 약 2). userData.guns: 포신 끝 위치(로컬) 목록
+export function makeWarship() {
+  const g = new THREE.Group();
+  const hullM = std(0x5a6068, { metalness: 0.5, roughness: 0.5 }), deck = std(0x6e6a60, { roughness: 0.8, metalness: 0.1 }), dark = std(0x2e3238, { metalness: 0.6 });
+  const shp = new THREE.Shape(); shp.moveTo(0, 1); shp.lineTo(0.13, 0.55); shp.lineTo(0.14, -0.9); shp.lineTo(-0.14, -0.9); shp.lineTo(-0.13, 0.55); shp.lineTo(0, 1);
+  const hull = new THREE.Mesh(new THREE.ExtrudeGeometry(shp, { depth: 0.12, bevelEnabled: false }), hullM); hull.rotation.x = Math.PI / 2; hull.position.y = 0.06; g.add(hull);
+  const d = new THREE.Mesh(new THREE.ExtrudeGeometry(shp, { depth: 0.01, bevelEnabled: false }), deck); d.rotation.x = Math.PI / 2; d.position.y = 0.075; d.scale.set(0.95, 0.97, 1); g.add(d);
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.22), hullM); bridge.position.set(0, 0.15, -0.1); g.add(bridge);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.22, 6), dark); mast.position.set(0, 0.32, -0.12); g.add(mast);
+  const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.1, 10), dark); funnel.position.set(0, 0.17, -0.32); g.add(funnel);
+  const guns = [];
+  for (const z of [0.55, 0.3, -0.6]) {
+    const t = new THREE.Group(); t.position.set(0, 0.1, z); if (z < 0) t.rotation.y = Math.PI;
+    t.add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.05, 12), hullM));
+    for (const x of [-0.02, 0.02]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.2, 6), dark); b.rotation.x = Math.PI / 2 - 0.25; b.position.set(x, 0.03, 0.11); t.add(b); }
+    g.add(t); guns.push(t);
+  }
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  g.userData.guns = guns;
+  return g;
+}

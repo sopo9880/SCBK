@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import { makeBomb } from './models.js';
 import { makeDrone, makeCruise, makeShell } from './models2.js';
-import { cineGame, chase, watch, orbit, camDir } from './cam.js';
+import { cineGame, chase, watch, orbit, camDir, clearSpot } from './cam.js';
+import { makeWarship } from './models4.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
@@ -183,59 +184,70 @@ export const AIR = {
   // ---- 함포 사격: 먼바다 전함의 일제 사격, 포탄이 줄지어 떨어짐 ----
   naval: {
     fire(A, hit) {
-      const S = A.S, p = hit.point, { D, grid, audio, camera, fx } = A.ctx;
+      const S = A.S, p = hit.point, { D, grid, audio, camera, fx, scene, game } = A.ctx;
       const tgt = v3(p.x, p.y, p.z);
       const f = camDir(camera, tgt);
-      // 함대는 표적 너머 수평선 쪽 (카메라 반대편이 아니라 옆쪽에서 날아오게)
+      // 함대는 표적 옆쪽 수평선 너머 바다 위
       const side = v3(-f.z, 0, f.x);
       const fromDir = side.clone().multiplyScalar(R() < 0.5 ? 1 : -1).addScaledVector(f, 0.6).normalize();
-      const ship = tgt.clone().addScaledVector(fromDir, 2600); ship.y = tgt.y + 25;
+      const ship = tgt.clone().addScaledVector(fromDir, 2600);
+      const gnd = (x, z) => (game && game.groundAt ? game.groundAt(x, z) : grid.sample(x, z));
+      let seaY = -1e9; for (let i = 0; i < 12; i++) { const a = i / 12 * 6.28; seaY = Math.max(seaY, gnd(ship.x + Math.cos(a) * 400, ship.z + Math.sin(a) * 400)); }
+      seaY += 2; ship.y = seaY + 6;
+      if (game) game.ensureView(6000, 3000);
+      // 바다 + 전함 3척
+      const sea = new THREE.Mesh(new THREE.CircleGeometry(700, 48), new THREE.MeshStandardMaterial({ color: 0x24506a, roughness: 0.15, metalness: 0.3 }));
+      sea.rotation.x = -Math.PI / 2; sea.position.set(ship.x, seaY, ship.z); scene.add(sea);
+      const across = v3(-fromDir.z, 0, fromDir.x);
+      const ships = [-1, 0, 1].map(k => { const m = makeWarship(); m.scale.setScalar(140); m.position.copy(ship).addScaledVector(across, k * 170).addScaledVector(fromDir, Math.abs(k) * 60); m.position.y = seaY; m.lookAt(m.position.clone().add(across)); scene.add(m); for (const t of m.userData.guns) t.rotation.y = (t.rotation.y > 1 ? Math.PI : 0) + Math.atan2(-fromDir.x, -fromDir.z) - Math.atan2(across.x, across.z); return m; });
       const salvos = 3, per = Math.min(16, Math.round(6 + 3 * S.n ** 0.6));
       const spread = 40 * S.r;
       const T = 5.5, g = 30;
-      let fired = 0;
-      const shellsAir = [];
+      const st = { first: null, hits: 0 };
       A.addActive({
         t: 0, k: 0,
         update(dt) {
           this.t += dt;
           while (this.k < salvos && this.t > this.k * 1.8) {
             const k = this.k++;
-            // 포구 섬광(멀리서 번쩍)과 지연된 포성
-            for (let j = 0; j < 3; j++) fx.light(ship.x + (j - 1) * 60, ship.y + 15, ship.z, 2e4, 900, 0.25, 0xffd090);
+            // 포구 섬광과 연기 (함대 쪽)
+            for (const m of ships) for (const t of m.userData.guns) { const q = t.getWorldPosition(v3()).addScaledVector(fromDir.clone().negate(), 25).add(v3(0, 6, 0)); fx.explosion(q, 9, { smokeColumn: false }); fx.light(q.x, q.y, q.z, 2e4, 600, 0.25, 0xffd090); }
             A.addActive({ t: 0, update(d) { this.t += d; if (this.t > 2.4) { audio.boom(2.2, 1600); return false; } return true; } });
             for (let i = 0; i < per; i++) {
               const a = R() * 6.28, rr = Math.sqrt(R()) * spread;
               const q = v3(tgt.x + Math.cos(a) * rr + fromDir.x * (R() - 0.5) * spread, 0, tgt.z + Math.sin(a) * rr + fromDir.z * (R() - 0.5) * spread);
               q.y = grid.sample(q.x, q.z);
               const tt = T + (R() - 0.5) * 0.6 + k * 0.05;
-              const from = ship.clone().add(v3((R() - 0.5) * 120, 0, (R() - 0.5) * 120));
+              const sh0 = ships[i % 3];
+              const from = sh0.position.clone().add(v3((R() - 0.5) * 60, 30, (R() - 0.5) * 60));
               const vel = v3((q.x - from.x) / tt, (q.y - from.y + 0.5 * g * tt * tt) / tt, (q.z - from.z) / tt);
               const sh = { pos: from.clone(), vel };
-              shellsAir.push(sh);
+              if (!st.first) st.first = sh;
               A.addProjectile({
                 mesh: A.spawn(makeShell(), 2), pos: sh.pos, vel: sh.vel, g, align: 'down', trail: { size: 0.9, fire: true, every: 0.02 },
                 ignoreHits: true,
                 onUpdate: (pr) => {
-                  // 수평선 너머에서 쏘므로 표적 근처에서 내려올 때부터 충돌 판정
                   if (pr.ignoreHits && pr.vel.y < 0 && Math.hypot(pr.pos.x - q.x, pr.pos.z - q.z) < 500) pr.ignoreHits = false;
                   if (!sh.wh && pr.vel.y < 0 && pr.pos.y - q.y < 260) { sh.wh = true; if (R() < 0.35) audio.whoosh(1.1); }
                   return true;
                 },
-                onHit: (qq) => { sh.done = true; A.blast(qq, 15 * S.r, 34 * S.v, { vap: 2 * S.r, crater: [4.5 * S.r, 1.8 * S.r], silent: R() > 0.35 }); fx.addShake(0.5); },
+                onHit: (qq) => { sh.done = true; st.hits++; A.blast(qq, 15 * S.r, 34 * S.v, { vap: 2 * S.r, crater: [4.5 * S.r, 1.8 * S.r], silent: R() > 0.35 }); fx.addShake(0.5); },
               });
-              fired++;
             }
           }
-          return this.k < salvos;
+          return this.t < salvos * 1.8 + T + 6;
         },
+        dispose() { scene.remove(sea); sea.geometry.dispose(); sea.material.dispose(); for (const m of ships) { scene.remove(m); m.traverse(o => { if (o.geometry) o.geometry.dispose(); }); } },
       });
       const gm = cineGame(A); if (!gm) return;
-      const cam1 = tgt.clone().addScaledVector(fromDir, -240).addScaledVector(v3(-fromDir.z, 0, fromDir.x), 90); cam1.y = skyline(D, grid, cam1.x, cam1.z, 30) + 14;
+      const a0 = Math.atan2(-fromDir.z, -fromDir.x);
+      const fleetCam = ship.clone().addScaledVector(across, 520).addScaledVector(fromDir, 260).add(v3(0, 70, 0));
+      const impact = clearSpot(A, tgt.clone().add(v3(0, 8, 0)), { dist: 330, h: 140, a0: a0 + 0.5 });
       gm.cine.play([
-        watch(cam1, () => tgt.clone().addScaledVector(fromDir, 900).add(v3(0, 500, 0)), { dur: 4.2, fov: 40, caption: '함포 사격 — 탄착까지 5초', smooth: 0.3 }),
-        watch(cam1, () => tgt.clone().add(v3(0, 10, 0)), { dur: 1.2, fov: 46, smooth: 0.25 }),
-        orbit(tgt, { dist: 320, h: 90, a0: Math.atan2(-fromDir.z, -fromDir.x) - 0.6, a1: Math.atan2(-fromDir.z, -fromDir.x) + 0.2, dur: 6, look: 15, ts: 0.8 }),
+        watch(fleetCam, ship.clone().add(v3(0, 40, 0)).addScaledVector(fromDir, -300), { dur: 2.4, fov: 48, caption: '함포 사격', smooth: 0.2 }),
+        chase(() => (st.first ? st.first.pos : ship), () => (st.first ? st.first.vel : fromDir.clone().negate()), { back: 45, up: 10, side: 8, ahead: 120, dur: 2.6, fov: 58 }),
+        watch(impact, tgt.clone().add(v3(0, 10, 0)), { dur: 3.6, fov: 50, ts: (u) => (u < 0.35 ? 1 : 0.5) }),
+        orbit(tgt, { dist: 380, h: 170, a0: a0 - 0.3, a1: a0 + 0.4, dur: 5, look: 15, ts: 0.85 }),
       ]);
     },
   },

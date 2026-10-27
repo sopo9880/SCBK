@@ -222,6 +222,7 @@ export const NEW4 = {
       const plane = () => (st.planes && st.planes[0] && st.planes[0].pos) || c.clone().add(v3(0, 400, 0));
       g.cine.play([
         watch(low, c.clone().add(v3(0, 380, 0)), { dur: 3.4, fov: 64, caption: 'EMP', smooth: 0.25 }),
+        watch(c.clone().addScaledVector(f, -R0 * 1.1 - 120).addScaledVector(sd, R0 * 0.4).add(v3(0, R0 * 0.45 + 90, 0)), c.clone().add(v3(0, 30, 0)), { dur: 3, fov: 58, caption: '전력망 붕괴', smooth: 0.3 }),
         chase(plane, () => (st.planes && st.planes[0] ? st.planes[0].vel : v3(1, -0.3, 0)), { back: 70, up: 20, ahead: 60, dur: 4.5, fov: 60 }),
         orbit(c, { dist: R0 * 1.2 + 150, h: 140, a0: Math.atan2(-f.z, -f.x), a1: Math.atan2(-f.z, -f.x) + 0.5, dur: 4, fov: 55 }),
       ]);
