@@ -502,14 +502,21 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
         nx = ny = nz = 1;
         rad = sphere;
       } else {
-        nx = Math.min(4, Math.max(2, Math.round(2 * hu / mn)));
-        ny = Math.min(4, Math.max(2, Math.round(2 * hy / mn)));
-        nz = Math.min(4, Math.max(2, Math.round(2 * hv / mn)));
-        while (nx * ny * nz > MAXP) {
-          if (nx >= ny && nx >= nz) nx--;
-          else if (ny >= nz) ny--;
-          else nz--;
+        let best = null;
+        for (const nm of [2, 1]) {
+          const r0 = mn / nm;
+          const n = [hu, hy, hv].map((h) => Math.min(15, Math.max(1, Math.ceil(h / r0 - 1e-6))));
+          if (n[0] * n[1] * n[2] <= MAXP) {
+            best = n;
+            break;
+          }
+          best = n;
         }
+        while (best[0] * best[1] * best[2] > MAXP) {
+          const k = best.indexOf(Math.max(...best));
+          best[k]--;
+        }
+        [nx, ny, nz] = best;
         rad = Math.min(hu / nx, hy / ny, hv / nz);
       }
       this.maxRad = Math.max(this.maxRad || 0, rad);
