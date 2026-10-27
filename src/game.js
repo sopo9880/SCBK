@@ -461,6 +461,7 @@ export class Game {
       this._moved = true;
     };
     this._onDown = (e) => {
+      if (e.button === 0) this._lmb = true; else if (e.button === 2) this._rmb = true;
       if (e.button !== 0) return;
       this._onMove(e);
       if (this.planetFX) { this.endPlanet(); return; }
@@ -475,14 +476,14 @@ export class Game {
       else this.arsenal.fire(hit, this.camera.position);
       this.hud.fired(w);
     };
-    this._onUp = (e) => { if (e.button === 0 && this._holding) { this._holding = false; this.arsenal.holdEnd(); } };
+    this._onUp = (e) => { if (e.button === 0) this._lmb = false; else if (e.button === 2) this._rmb = false; if (e.button === 0 && this._holding) { this._holding = false; this.arsenal.holdEnd(); } };
     this.canvas.addEventListener('pointermove', this._onMove);
     this.canvas.addEventListener('pointerdown', this._onDown);
     window.addEventListener('pointerup', this._onUp);
     this.canvas.addEventListener('contextmenu', e => e.preventDefault());
     this._onKey = (e) => { if (e.type === 'keydown') this._keys.add(e.code); else this._keys.delete(e.code); };
     window.addEventListener('keydown', this._onKey); window.addEventListener('keyup', this._onKey);
-    this._onBlur = () => { this._keys.clear(); if (this._holding) { this._holding = false; this.arsenal.holdEnd(); } };
+    this._onBlur = () => { this._keys.clear(); this._lmb = this._rmb = false; if (this._holding) { this._holding = false; this.arsenal.holdEnd(); } };
     window.addEventListener('blur', this._onBlur);
   }
 
@@ -571,10 +572,18 @@ export class Game {
       left: k.has(K.k_left) || k.has('ArrowLeft'), right: k.has(K.k_right) || k.has('ArrowRight'),
       up: k.has(K.k_back) || k.has('ArrowDown'), down: k.has(K.k_fwd) || k.has('ArrowUp'),
       boost: k.has('ShiftLeft') || k.has('ShiftRight'), space: k.has('Space'),
+      w: k.has(K.k_fwd) || k.has('ArrowUp'), s: k.has(K.k_back) || k.has('ArrowDown'), a: k.has(K.k_left) || k.has('ArrowLeft'), d: k.has(K.k_right) || k.has('ArrowRight'),
+      q: k.has(K.k_rotL), e: k.has(K.k_rotR), lmb: !!this._lmb, rmb: !!this._rmb, has: (c) => k.has(c),
     };
     const alive = this.pilot.update(dt * this.D.timeScale, input, dt);
     const c = this._pilotCam;
     this.pilot.camera(c);
+    // 탈것과 카메라 사이를 건물이 가리면 그 앞으로 당김
+    if (c.anchor) {
+      const o = this._pa || (this._pa = new THREE.Vector3()); o.copy(c.anchor); o.y += 2;
+      const d = new THREE.Vector3().subVectors(c.pos, o); const len = d.length();
+      if (len > 1) { d.divideScalar(len); const h = this.D.raycast(o, d, len); if (h && h.info && (h.info.b || h.info.terrain || (h.info.chunk && h.info.chunk.state === 0))) c.pos.copy(o).addScaledVector(d, Math.max(1.5, h.dist - 1.5)); }
+    }
     const cam = this.camera;
     const kk = this._pilotSnap ? 1 : 1 - Math.exp(-dt * 10);
     this._pilotSnap = false;
