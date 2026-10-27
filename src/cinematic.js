@@ -67,20 +67,32 @@ export class Cinematic {
   }
 
   // 시선이 막히지 않는지 (보는 대상 바로 옆의 충돌은 대상 자체로 보고 무시)
+  // 움직이는 파편은 금방 지나가므로 무시하고, 건물·남은 조각·지형(지도 밖 포함)만 봄
   _clear(look, pos) {
     const D = this.game.D;
     const dir = new THREE.Vector3().subVectors(pos, look);
     const len = dir.length();
     if (len < 8) return true;
     dir.divideScalar(len);
+    const near = Math.min(len * 0.12, 60);
     const h = D.raycast(look, dir, len);
-    if (!h) return true;
-    return !(h.dist > Math.min(len * 0.12, 60) && h.dist < len - 2);
+    if (h && h.dist > near && h.dist < len - 2) {
+      const inf = h.info || {};
+      if (inf.terrain || inf.b || (inf.chunk && inf.chunk.state === 0)) return false;
+    }
+    // 지도 밖 산: 선분을 따라 지면 높이 확인
+    const g = this.game;
+    if (g.groundAt) for (let i = 1; i < 12; i++) {
+      const t = near + (len - near) * (i / 12);
+      const x = look.x + dir.x * t, y = look.y + dir.y * t, z = look.z + dir.z * t;
+      if (y < g.groundAt(x, z) - 1) return false;
+    }
+    return true;
   }
   // 샷을 시작할 때: 처음·중간·끝 시점의 카메라 위치가 건물·언덕에 가리면
-  // 대상을 중심으로 옆으로 돌리거나 위로 올려 가리지 않는 자리를 찾아 샷 전체에 적용
+  // 대상을 중심으로 돌리거나, 대상 쪽으로 당기거나, 위로 올려 가리지 않는 자리를 찾아 샷 전체에 적용
   _solveOcclusion(s) {
-    this._rot = 0; this._lift = 0;
+    this._rot = 0; this._lift = 0; this._pull = 0;
     if (!this.game.D || !this.game.D.raycast || s.noAvoid) return;
     const smp = [];
     for (const u of [0.02, 0.5, 0.95]) {
@@ -88,16 +100,27 @@ export class Cinematic {
       try { s.update(u * s.dur, u, o); } catch (e) { return; }
       smp.push(o);
     }
+    if (!Cinematic._cands) {
+      const c = [];
+      const rots = [0, 0.3, -0.3, 0.6, -0.6, 1.0, -1.0, 1.5, -1.5, 2.1, -2.1, 2.7, -2.7, Math.PI];
+      for (const rot of rots) for (const pull of [0, 0.3, 0.55]) for (const lift of [0, 10, 25, 50, 90, 150, 240, 380])
+        c.push({ rot, pull, lift, cost: Math.abs(rot) * 1.2 + pull * 2.2 + lift / 110 });
+      c.sort((a, b) => a.cost - b.cost);
+      Cinematic._cands = c;
+    }
     const p = new THREE.Vector3();
-    for (const lift of [0, 10, 25, 50, 90, 150, 240]) for (const rot of [0, 0.3, -0.3, 0.6, -0.6, 1.0, -1.0]) {
+    let tries = 0;
+    for (const cd of Cinematic._cands) {
+      if (++tries > 140) break;
       let ok = true;
-      for (const o of smp) { this._apply(o.pos, o.look, rot, lift, p); if (!this._clear(o.look, p)) { ok = false; break; } }
-      if (ok) { this._rot = rot; this._lift = lift; return; }
+      for (const o of smp) { this._apply(o.pos, o.look, cd.rot, cd.lift, p, cd.pull); if (!this._clear(o.look, p)) { ok = false; break; } }
+      if (ok) { this._rot = cd.rot; this._lift = cd.lift; this._pull = cd.pull; return; }
     }
   }
-  _apply(pos, look, rot, lift, out) {
+  _apply(pos, look, rot, lift, out, pull = 0) {
     out.copy(pos);
-    if (rot) { const dx = pos.x - look.x, dz = pos.z - look.z, c = Math.cos(rot), sn = Math.sin(rot); out.x = look.x + dx * c - dz * sn; out.z = look.z + dx * sn + dz * c; }
+    if (pull) out.lerp(look, pull);
+    if (rot) { const dx = out.x - look.x, dz = out.z - look.z, c = Math.cos(rot), sn = Math.sin(rot); out.x = look.x + dx * c - dz * sn; out.z = look.z + dx * sn + dz * c; }
     out.y += lift;
     return out;
   }
@@ -133,7 +156,7 @@ export class Cinematic {
     if (!s) { this.stop(false); return; }
     const out = { pos: this._pos, look: this._look, fov: null, timeScale: 1, smooth: 0, fade: 0 };
     s.update(this.t, clamp01(this.t / s.dur), out);
-    if (this._rot || this._lift) this._apply(out.pos, out.look, this._rot, this._lift, out.pos);
+    if (this._rot || this._lift || this._pull) this._apply(out.pos, out.look, this._rot, this._lift, out.pos, this._pull);
     this.timeScale = out.timeScale; this.fade = out.fade;
     const cam = this.game.camera;
     const k = this._snap ? 1 : out.smooth > 0 ? 1 - Math.exp(-dt * (1 / out.smooth)) : 1;
@@ -147,6 +170,18 @@ export class Cinematic {
     if (this._smoothPos.y < gy + 2) this._smoothPos.y = gy + 2;
     // 건물에 가려지면 가린 건물 앞으로 당겨옴 (부드럽게)
     const fix = this._fixTarget(this._smoothPos, this._smoothLook);
+    // 언덕(지도 밖 산 포함)이 시선을 가리면 카메라를 그만큼 올림
+    if (this.game.groundAt) {
+      const L = this._smoothLook, gA = this.game;
+      let need = 0;
+      for (let i = 1; i < 10; i++) {
+        const t = i / 10;
+        const x = L.x + (fix.x - L.x) * t, z = L.z + (fix.z - L.z) * t, y = L.y + (fix.y - L.y) * t;
+        const d = gA.groundAt(x, z) + 3 - y;
+        if (d > 0 && t > 0.15) need = Math.max(need, d / t);
+      }
+      if (need > 0) fix.y += Math.min(need, 600);
+    }
     if (cut || !this._fix) this._fix = fix.clone();
     else this._fix.lerp(fix, 1 - Math.exp(-dt * 5));
     cam.position.copy(this._fix);

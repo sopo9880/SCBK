@@ -1199,6 +1199,19 @@ export class Destruction {
         if (u >= 1) { this._anim.splice(i, 1); if (a.onDone) a.onDone(); }
         continue;
       }
+      if (a.sink !== undefined) {
+        // 가라앉으며 기울어짐 (지반 액상화 등)
+        const sk = a.sink * e, tl = a.tilt * e;
+        axis.set(a.dirz, 0, -a.dirx).normalize();
+        q.setFromAxisAngle(axis, tl);
+        m.makeTranslation(b.cx, b.baseY - sk, b.cz);
+        m.multiply(M2.makeRotationFromQuaternion(q));
+        m.multiply(M2.makeTranslation(-b.cx, -b.baseY, -b.cz));
+        this.intact.setMatrixAt(b.inst, m);
+        this.intact.setColorAt(b.inst, this._c.copy(b.col).multiplyScalar(1 - Math.min(0.75, b.scorch + 0.3 * e)));
+        if (u >= 1) { b.state = 'flat'; b.flatH = Math.max(0.5, b.height - a.sink); this._anim.splice(i, 1); }
+        continue;
+      }
       if (a.lift) {
         // 통째로 하늘로 떠올라 사라짐 (반중력·중력 반전 세계 멸망)
         const k = Math.max(0, (a.t - a.wait) / a.dur);
@@ -1228,6 +1241,16 @@ export class Destruction {
         this._anim.splice(i, 1);
       }
     }
+  }
+  // 땅속으로 가라앉으며 기울어짐 (물리 없이)
+  sinkBuilding(b, depth, tilt, dirx, dirz, dur = 4) {
+    if (b.state !== 'intact') return false;
+    b.state = 'collapsing';
+    if (b.bodyId) { this.phys.remove(b.bodyId); b.bodyId = 0; }
+    this._scoreBuilding(b, 0.7);
+    this._anim.push({ b, t: 0, dur, sink: depth, tilt, dirx, dirz });
+    this._wakeArea(b);
+    return true;
   }
   // 건물 크기 바꾸기 (애니메이션). 끝나면 onDone
   scaleBuilding(b, grow, dur, onStep, onDone) {

@@ -82,6 +82,7 @@ const store = {
 
 const PRESETS = [
   { name: '부산대학교', lat: 35.2335, lon: 129.0805, sub: '부산 금정구' },
+  { name: '동아대학교 승학캠퍼스', lat: 35.1160, lon: 128.9675, sub: '부산 사하구' },
   { name: '서울대학교', lat: 37.4600, lon: 126.9520, sub: '서울 관악구' },
   { name: 'KAIST', lat: 36.3720, lon: 127.3620, sub: '대전 유성구' },
   { name: '광화문', lat: 37.5740, lon: 126.9770, sub: '서울 종로구' },

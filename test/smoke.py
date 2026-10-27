@@ -1,4 +1,5 @@
-import json, time
+import json, time, os
+WL = json.loads(os.environ.get('WLIST', '[]'))
 pg.evaluate("window.__start({demo:true, name:'데모 시티', sub:'오프라인'})")
 pg.wait_for_function("window.__game && document.querySelector('#loading').hidden", timeout=300000)
 cats = pg.evaluate("[...document.querySelectorAll('.wcat')].map(b=>b.dataset.cat)")
@@ -8,6 +9,7 @@ for c in cats:
     allw += pg.evaluate("[...document.querySelectorAll('.wbtn')].map(b=>b.dataset.id)")
 print('cats', cats, 'weapons', len(allw))
 order = [w for w in allw if w != 'rewind'] + ['rewind']
+if WL: order = [w for w in order if w in WL]
 for w in order:
     t0 = time.time()
     r = pg.evaluate("""(w)=>{

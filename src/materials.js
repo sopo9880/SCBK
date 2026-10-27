@@ -13,12 +13,13 @@ export const sharedUniforms = {
   uNight: { value: 0 },
   uTime: { value: 0 },
   uGlass: { value: 1 }, // 유리창 반사 세기 (설정)
+  uPower: { value: 1 }, // 도시 전력 (EMP 로 0)
 };
 
 export function makeBuildingMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.0 });
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uNight = sharedUniforms.uNight; sh.uniforms.uGlass = sharedUniforms.uGlass;
+    sh.uniforms.uNight = sharedUniforms.uNight; sh.uniforms.uGlass = sharedUniforms.uGlass; sh.uniforms.uPower = sharedUniforms.uPower;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute vec3 aOrig; attribute float aKind;
@@ -27,7 +28,7 @@ varying vec3 vOrig; varying vec3 vObjN; varying float vKind;`)
 vOrig = aOrig; vObjN = normal; vKind = aKind;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform float uNight; uniform float uGlass;
+uniform float uNight; uniform float uGlass; uniform float uPower;
 varying vec3 vOrig; varying vec3 vObjN; varying float vKind;
 float swWin = 0.0; float swLit = 0.0;
 ${NOISE}`)
@@ -70,7 +71,7 @@ roughnessFactor = mix(roughnessFactor, mix(0.4, 0.03, clamp(uGlass * 0.5, 0.0, 1
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
 metalnessFactor = mix(metalnessFactor, clamp(0.55 * uGlass, 0.0, 1.0), swWin);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-totalEmissiveRadiance += vec3(1.0, 0.78, 0.45) * swLit * uNight * 1.6;`);
+totalEmissiveRadiance += vec3(1.0, 0.78, 0.45) * swLit * uNight * 1.6 * uPower;`);
   };
   mat.customProgramCacheKey = () => 'sw-building-v2';
   return mat;

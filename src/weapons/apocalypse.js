@@ -21,6 +21,7 @@ export function worldEnd(A, center, kind = 'nuke', opts = {}) {
   const c = v3(center.x, grid.sample(center.x, center.z), center.z);
   const o = Object.assign({ delay: 0, wave: true, crust: false, finale: true, wipe: false, finaleDelay: 14, waveSpeed: 1600 }, opts);
   const weather = { crack: 'ash', shatter: 'fire' }[kind] || kind;
+  const planetMap = { fallout: 'ash', space: 'void', data: 'void' };
   A.addActive({
     t: 0, started: false, waveR: 0, finaled: false,
     update(dt) {
@@ -52,7 +53,7 @@ export function worldEnd(A, center, kind = 'nuke', opts = {}) {
       // 행성 시점 마무리 (연출이 끝난 뒤)
       if (o.finale && !this.finaled && lvl >= 1 && te > o.finaleDelay && game && !game.cine.active && A.opts.planet !== false) {
         this.finaled = true;
-        game.playPlanet(o.planetKind || kind);
+        game.playPlanet(o.planetKind || planetMap[kind] || kind);
       }
       return te < Math.max(o.finaleDelay + 2, 30) || (!this.finaled && te < 90 && o.finale && lvl >= 1 && A.opts.planet !== false);
     },
