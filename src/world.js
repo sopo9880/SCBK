@@ -1,7 +1,8 @@
 // 정적 월드: 지형 메시 + 토지피복 텍스처 + 물 + 나무
 import * as THREE from 'three';
 import earcut from 'earcut';
-import { makeTerrainMaterial } from './materials.js';
+import { makeTerrainMaterial, sharedUniforms } from './materials.js';
+import { NightLights } from './nightlights.js';
 import { pointInPoly } from './geo.js';
 
 function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -27,6 +28,7 @@ export class World {
     this.group = new THREE.Group();
     scene.add(this.group);
     this._buildLandcover();
+    this.night = new NightLights({ scene, grid, data, quality, ground: (x, z) => grid.sample(x, z) });
     this._buildTerrain();
     this._buildWater();
     this._buildTrees();
@@ -137,17 +139,19 @@ export class World {
     for (let k = 0; k < pos.count; k++) pos.setY(k, g.h[k]);
     geo.computeVertexNormals();
     const mat = makeTerrainMaterial(this.landTex);
-    const scorch = this.scorchTex;
+    const scorch = this.scorchTex, nightTex = this.night.tex;
     const prev = mat.onBeforeCompile;
     mat.onBeforeCompile = (sh, r) => {
       prev(sh, r);
       sh.uniforms.uScorch = { value: scorch };
+      sh.uniforms.uNightMap = { value: nightTex }; sh.uniforms.uNight = sharedUniforms.uNight; sh.uniforms.uPower = sharedUniforms.uPower;
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uScorch;')
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uScorch; uniform sampler2D uNightMap; uniform float uNight; uniform float uPower;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += texture2D(uNightMap, vMapUv).rgb * uNight * uPower * 1.5;')
         .replace('#include <map_fragment>', `#include <map_fragment>
 { vec4 s = texture2D(uScorch, vMapUv); float fr = clamp(s.r * 1.2, 0.0, 1.0); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.06,0.05,0.045), s.a * 0.92 * (1.0 - fr)); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8,0.88,0.96), s.a * 0.92 * fr); }`);
     };
-    mat.customProgramCacheKey = () => 'sw-terrain-v3';
+    mat.customProgramCacheKey = () => 'sw-terrain-v4';
     this.terrain = new THREE.Mesh(geo, mat);
     this.terrain.receiveShadow = true;
     this.group.add(this.terrain);
@@ -307,6 +311,7 @@ export class World {
   }
 
   update(dt) {
+    if (this.night) this.night.update(dt, true);
     this._scorchT -= dt;
     if (this._scorchDirty && this._scorchT <= 0) { this.scorchTex.needsUpdate = true; this._scorchDirty = false; this._scorchT = 0.25; }
   }
@@ -418,6 +423,7 @@ export class World {
 
   // 반경 내 나무: 안쪽은 소멸, 바깥은 그을림
   blastTrees(x, z, r, rInner) {
+    if (this.night && rInner > 2) this.night.blast(x, z, rInner);
     if (!this.treeMeshes) return 0;
     const { trunks, crownsA, crownsB, zero } = this.treeMeshes;
     const black = new THREE.Color(0x1a1612);
@@ -468,6 +474,7 @@ export class World {
   }
 
   dispose() {
+    if (this.night) this.night.dispose();
     this.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose?.(); });
     this.landTex.dispose(); this.scorchTex.dispose();
     this.scene.remove(this.group);
