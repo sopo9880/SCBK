@@ -3,7 +3,7 @@
 //   1) 예측: 속도·중력으로 조각을 옮겨 봄   2) 입자 위치 계산   3) 해시 격자에 넣기
 //   4) 겹친 입자를 밀어내기(여러 번, 마찰 포함) + 지형·서 있는 건물   5) 입자 모양에 강체를 다시 맞추고 속도 계산
 export const MAXP = 27;      // 조각 하나의 최대 입자 수
-export const SLOTS = 16;     // 격자 칸 하나에 넣을 수 있는 입자 수
+export const SCAN = 256;     // 격자 칸 개수를 누적합할 때 한 묶음 크기
 export const CMD_V4 = 10;    // 명령 하나 = vec4 10개
 export const BODY_V4 = 11;   // body 하나 = vec4 11개
 
@@ -35,7 +35,7 @@ struct Params {
 @group(0) @binding(1) var<storage, read_write> B: array<Body>;
 @group(0) @binding(2) var<storage, read_write> PT: array<vec4f>;      // 입자마다 vec4 4개: 현재 x+반지름, 시작 x0+body, 다음 xn, 몸 기준 위치
 @group(0) @binding(3) var<storage, read_write> AT: array<atomic<u32>>; // [0..3] 결과 개수, [4..4+N) 깨우기, 그 뒤 격자 칸 개수
-@group(0) @binding(4) var<storage, read_write> gIds: array<u32>;
+@group(0) @binding(4) var<storage, read_write> gIds: array<u32>;      // [칸 시작 위치 hashSize | 묶음 합 hashSize/256 | 칸 순서로 정렬한 입자 NP]
 @group(0) @binding(5) var<storage, read> ST: array<u32>;
 @group(0) @binding(6) var<storage, read> cmds: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> outBuf: array<vec4f>;  // body 마다 vec4 3개
@@ -153,12 +153,46 @@ fn terrain(x: f32, z: f32) -> f32 {
   atomicStore(&AT[gcI(id.x)], 0u);
 }
 
+// 3) 격자: 칸마다 입자 수 세기 → 누적합으로 시작 위치 → 칸 순서로 입자를 줄 세움 (칸에 입자가 아무리 많아도 빠짐없이)
+fn sortedI(i: u32) -> u32 { return P.hashSize + P.hashSize / ${SCAN}u + i; }
 @compute @workgroup_size(64) fn insert(@builtin(global_invocation_id) id: vec3u) {
   let pi = id.x; if (pi >= P.nBody * ${MAXP}u) { return; }
   let p = PT[pi * 4u]; if (p.w <= 0.0) { return; }
   let h = hashCell(cellOf(p.xyz));
   let slot = atomicAdd(&AT[gcI(h)], 1u);
-  if (slot < ${SLOTS}u) { gIds[h * ${SLOTS}u + slot] = pi; }
+  PT[pi * 4u + 3u].w = bitcast<f32>(slot);
+}
+var<workgroup> scanTmp: array<u32, ${SCAN}>;
+// 묶음 안 누적합 (배타적). 묶음 합은 따로 기록
+@compute @workgroup_size(${SCAN}) fn scanBlocks(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocation_id) lid: vec3u, @builtin(workgroup_id) wid: vec3u) {
+  let i = gid.x; let l = lid.x;
+  var v = 0u; if (i < P.hashSize) { v = atomicLoad(&AT[gcI(i)]); }
+  scanTmp[l] = v;
+  workgroupBarrier();
+  for (var off = 1u; off < ${SCAN}u; off = off * 2u) {
+    var add = 0u; if (l >= off) { add = scanTmp[l - off]; }
+    workgroupBarrier();
+    scanTmp[l] = scanTmp[l] + add;
+    workgroupBarrier();
+  }
+  if (i < P.hashSize) { gIds[i] = scanTmp[l] - v; }
+  if (l == ${SCAN - 1}u) { gIds[P.hashSize + wid.x] = scanTmp[l]; }
+}
+// 묶음 합의 누적합 (묶음 수가 적어서 한 묶음이 순서대로)
+@compute @workgroup_size(1) fn scanSums() {
+  let n = P.hashSize / ${SCAN}u;
+  var acc = 0u;
+  for (var k = 0u; k < n; k++) { let v = gIds[P.hashSize + k]; gIds[P.hashSize + k] = acc; acc += v; }
+}
+@compute @workgroup_size(64) fn addSums(@builtin(global_invocation_id) id: vec3u) {
+  let i = id.x; if (i >= P.hashSize) { return; }
+  gIds[i] = gIds[i] + gIds[P.hashSize + i / ${SCAN}u];
+}
+@compute @workgroup_size(64) fn fill(@builtin(global_invocation_id) id: vec3u) {
+  let pi = id.x; if (pi >= P.nBody * ${MAXP}u) { return; }
+  let p = PT[pi * 4u]; if (p.w <= 0.0) { return; }
+  let h = hashCell(cellOf(p.xyz));
+  gIds[sortedI(gIds[h] + bitcast<u32>(PT[pi * 4u + 3u].w))] = pi;
 }
 
 // 마찰: 접촉면 방향으로 미끄러진 만큼을 되돌림 (정지 마찰이면 전부, 운동 마찰이면 일부)
@@ -182,9 +216,9 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
   let c0 = cellOf(xi);
   for (var dx = -1; dx <= 1; dx++) { for (var dy = -1; dy <= 1; dy++) { for (var dz = -1; dz <= 1; dz++) {
     let h = hashCell(c0 + vec3i(dx, dy, dz));
-    let m = min(atomicLoad(&AT[gcI(h)]), ${SLOTS}u);
+    let m = atomicLoad(&AT[gcI(h)]); let st0 = gIds[h];
     for (var q = 0u; q < m; q++) {
-      let pj = gIds[h * ${SLOTS}u + q];
+      let pj = gIds[sortedI(st0 + q)];
       let sj = pj / ${MAXP}u; if (sj == s) { continue; }
       let p2 = PT[pj * 4u]; let d = xi - p2.xyz; let dist = length(d); let pen = ri + p2.w - dist;
       if (pen <= 0.0 || dist < 1e-6) { continue; }

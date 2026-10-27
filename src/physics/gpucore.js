@@ -1,6 +1,6 @@
 // GPU 물리 본체 (WebGPU 계산 셰이더). Rapier 쪽 PhysCore 와 같은 명령(cmd)을 받는다.
 // 위치·속도는 GPU 에 있고, 매 프레임 움직이는 조각만 골라 CPU 로 비동기로 읽어 온다 (한 프레임쯤 늦음).
-import { WGSL, MAXP, SLOTS, CMD_V4, BODY_V4 } from './gpu.wgsl.js';
+import { WGSL, MAXP, SCAN, CMD_V4, BODY_V4 } from './gpu.wgsl.js';
 
 const BODY_F = BODY_V4 * 4;  // Body 구조체 float 수
 const ITERS = 3;             // 하위 단계마다 겹침 풀기 반복
@@ -42,7 +42,7 @@ export class GPUCore {
     this.bodies = buf(N * BODY_F * 4, S | CD | CS);
     this.pt = buf(NP * 64, S);
     this.at = buf((4 + N + this.hashSize) * 4, S | CD | CS);
-    this.gIds = buf(this.hashSize * SLOTS * 4, S);
+    this.gIds = buf((this.hashSize + this.hashSize / SCAN + NP) * 4, S);
     this.st = buf(16, S | CD);
     this.cmdCap = 4096; this.cmds = buf(this.cmdCap * CMD_V4 * 16, S | CD);
     this.out = buf(N * 3 * 16, S | CS);
@@ -62,7 +62,7 @@ export class GPUCore {
     ] });
     const pl = d.createPipelineLayout({ bindGroupLayouts: [this.layout] });
     this.pipes = {};
-    for (const e of ['applyCmds', 'predict', 'particles', 'clearGrid', 'insert', 'contacts', 'commit', 'shapeMatch']) this.pipes[e] = d.createComputePipeline({ layout: pl, compute: { module: mod, entryPoint: e } });
+    for (const e of ['applyCmds', 'predict', 'particles', 'clearGrid', 'insert', 'scanBlocks', 'scanSums', 'addSums', 'fill', 'contacts', 'commit', 'shapeMatch']) this.pipes[e] = d.createComputePipeline({ layout: pl, compute: { module: mod, entryPoint: e } });
     this._bind();
     this.params = new ArrayBuffer(128);
     this.terrain = { x0: 0, z0: 0, cell: 1, n: 0 };
@@ -110,7 +110,7 @@ export class GPUCore {
     for (const k of ['pt', 'at', 'gIds', 'out']) this[k].destroy();
     this.pt = d.createBuffer({ size: N * MAXP * 64, usage: S });
     this.at = d.createBuffer({ size: (4 + N + this.hashSize) * 4, usage: S | CD | CS });
-    this.gIds = d.createBuffer({ size: this.hashSize * SLOTS * 4, usage: S });
+    this.gIds = d.createBuffer({ size: (this.hashSize + this.hashSize / SCAN + N * MAXP) * 4, usage: S });
     this.out = d.createBuffer({ size: N * 3 * 16, usage: S | CS });
     for (const st of this.staging) if (!st.busy) st.b.destroy();
     this.staging = this.staging.filter(st => st.busy).map(st => ({ ...st, old: true }));
@@ -288,7 +288,7 @@ export class GPUCore {
       this.pending.clear();
     }
     this._ncmd = nc;
-    this._cell = Math.max(6, 2 * (this.maxRad || 3) + 0.5);
+    this._cell = Math.max(1.5, 2 * (this.maxRad || 1.5) + 0.1);
     // 진행할 하위 단계 수
     this._acc = Math.min(this._acc + Math.min(dt, 0.1), (1 / 60) * maxSteps);
     const frameStep = 1 / 60;
@@ -312,6 +312,9 @@ export class GPUCore {
         const e2 = d.createCommandEncoder();
         const p = e2.beginComputePass();
         run(p, 'predict', NB); run(p, 'particles', NP); run(p, 'clearGrid', this.hashSize); run(p, 'insert', NP);
+        p.setPipeline(this.pipes.scanBlocks); p.setBindGroup(0, this.group); p.dispatchWorkgroups(this.hashSize / SCAN);
+        p.setPipeline(this.pipes.scanSums); p.dispatchWorkgroups(1);
+        run(p, 'addSums', this.hashSize); run(p, 'fill', NP);
         for (let it = 0; it < ITERS; it++) { run(p, 'contacts', NP); run(p, 'commit', NP); }
         run(p, 'shapeMatch', NB);
         p.end();

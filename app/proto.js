@@ -1,7 +1,7 @@
 (() => {
   // src/physics/gpu.wgsl.js
   var MAXP = 27;
-  var SLOTS = 16;
+  var SCAN = 256;
   var CMD_V4 = 10;
   var BODY_V4 = 11;
   var WGSL = (
@@ -34,7 +34,7 @@ struct Params {
 @group(0) @binding(1) var<storage, read_write> B: array<Body>;
 @group(0) @binding(2) var<storage, read_write> PT: array<vec4f>;      // \uC785\uC790\uB9C8\uB2E4 vec4 4\uAC1C: \uD604\uC7AC x+\uBC18\uC9C0\uB984, \uC2DC\uC791 x0+body, \uB2E4\uC74C xn, \uBAB8 \uAE30\uC900 \uC704\uCE58
 @group(0) @binding(3) var<storage, read_write> AT: array<atomic<u32>>; // [0..3] \uACB0\uACFC \uAC1C\uC218, [4..4+N) \uAE68\uC6B0\uAE30, \uADF8 \uB4A4 \uACA9\uC790 \uCE78 \uAC1C\uC218
-@group(0) @binding(4) var<storage, read_write> gIds: array<u32>;
+@group(0) @binding(4) var<storage, read_write> gIds: array<u32>;      // [\uCE78 \uC2DC\uC791 \uC704\uCE58 hashSize | \uBB36\uC74C \uD569 hashSize/256 | \uCE78 \uC21C\uC11C\uB85C \uC815\uB82C\uD55C \uC785\uC790 NP]
 @group(0) @binding(5) var<storage, read> ST: array<u32>;
 @group(0) @binding(6) var<storage, read> cmds: array<vec4f>;
 @group(0) @binding(7) var<storage, read_write> outBuf: array<vec4f>;  // body \uB9C8\uB2E4 vec4 3\uAC1C
@@ -152,12 +152,46 @@ fn terrain(x: f32, z: f32) -> f32 {
   atomicStore(&AT[gcI(id.x)], 0u);
 }
 
+// 3) \uACA9\uC790: \uCE78\uB9C8\uB2E4 \uC785\uC790 \uC218 \uC138\uAE30 \u2192 \uB204\uC801\uD569\uC73C\uB85C \uC2DC\uC791 \uC704\uCE58 \u2192 \uCE78 \uC21C\uC11C\uB85C \uC785\uC790\uB97C \uC904 \uC138\uC6C0 (\uCE78\uC5D0 \uC785\uC790\uAC00 \uC544\uBB34\uB9AC \uB9CE\uC544\uB3C4 \uBE60\uC9D0\uC5C6\uC774)
+fn sortedI(i: u32) -> u32 { return P.hashSize + P.hashSize / ${SCAN}u + i; }
 @compute @workgroup_size(64) fn insert(@builtin(global_invocation_id) id: vec3u) {
   let pi = id.x; if (pi >= P.nBody * ${MAXP}u) { return; }
   let p = PT[pi * 4u]; if (p.w <= 0.0) { return; }
   let h = hashCell(cellOf(p.xyz));
   let slot = atomicAdd(&AT[gcI(h)], 1u);
-  if (slot < ${SLOTS}u) { gIds[h * ${SLOTS}u + slot] = pi; }
+  PT[pi * 4u + 3u].w = bitcast<f32>(slot);
+}
+var<workgroup> scanTmp: array<u32, ${SCAN}>;
+// \uBB36\uC74C \uC548 \uB204\uC801\uD569 (\uBC30\uD0C0\uC801). \uBB36\uC74C \uD569\uC740 \uB530\uB85C \uAE30\uB85D
+@compute @workgroup_size(${SCAN}) fn scanBlocks(@builtin(global_invocation_id) gid: vec3u, @builtin(local_invocation_id) lid: vec3u, @builtin(workgroup_id) wid: vec3u) {
+  let i = gid.x; let l = lid.x;
+  var v = 0u; if (i < P.hashSize) { v = atomicLoad(&AT[gcI(i)]); }
+  scanTmp[l] = v;
+  workgroupBarrier();
+  for (var off = 1u; off < ${SCAN}u; off = off * 2u) {
+    var add = 0u; if (l >= off) { add = scanTmp[l - off]; }
+    workgroupBarrier();
+    scanTmp[l] = scanTmp[l] + add;
+    workgroupBarrier();
+  }
+  if (i < P.hashSize) { gIds[i] = scanTmp[l] - v; }
+  if (l == ${SCAN - 1}u) { gIds[P.hashSize + wid.x] = scanTmp[l]; }
+}
+// \uBB36\uC74C \uD569\uC758 \uB204\uC801\uD569 (\uBB36\uC74C \uC218\uAC00 \uC801\uC5B4\uC11C \uD55C \uBB36\uC74C\uC774 \uC21C\uC11C\uB300\uB85C)
+@compute @workgroup_size(1) fn scanSums() {
+  let n = P.hashSize / ${SCAN}u;
+  var acc = 0u;
+  for (var k = 0u; k < n; k++) { let v = gIds[P.hashSize + k]; gIds[P.hashSize + k] = acc; acc += v; }
+}
+@compute @workgroup_size(64) fn addSums(@builtin(global_invocation_id) id: vec3u) {
+  let i = id.x; if (i >= P.hashSize) { return; }
+  gIds[i] = gIds[i] + gIds[P.hashSize + i / ${SCAN}u];
+}
+@compute @workgroup_size(64) fn fill(@builtin(global_invocation_id) id: vec3u) {
+  let pi = id.x; if (pi >= P.nBody * ${MAXP}u) { return; }
+  let p = PT[pi * 4u]; if (p.w <= 0.0) { return; }
+  let h = hashCell(cellOf(p.xyz));
+  gIds[sortedI(gIds[h] + bitcast<u32>(PT[pi * 4u + 3u].w))] = pi;
 }
 
 // \uB9C8\uCC30: \uC811\uCD09\uBA74 \uBC29\uD5A5\uC73C\uB85C \uBBF8\uB044\uB7EC\uC9C4 \uB9CC\uD07C\uC744 \uB418\uB3CC\uB9BC (\uC815\uC9C0 \uB9C8\uCC30\uC774\uBA74 \uC804\uBD80, \uC6B4\uB3D9 \uB9C8\uCC30\uC774\uBA74 \uC77C\uBD80)
@@ -181,9 +215,9 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
   let c0 = cellOf(xi);
   for (var dx = -1; dx <= 1; dx++) { for (var dy = -1; dy <= 1; dy++) { for (var dz = -1; dz <= 1; dz++) {
     let h = hashCell(c0 + vec3i(dx, dy, dz));
-    let m = min(atomicLoad(&AT[gcI(h)]), ${SLOTS}u);
+    let m = atomicLoad(&AT[gcI(h)]); let st0 = gIds[h];
     for (var q = 0u; q < m; q++) {
-      let pj = gIds[h * ${SLOTS}u + q];
+      let pj = gIds[sortedI(st0 + q)];
       let sj = pj / ${MAXP}u; if (sj == s) { continue; }
       let p2 = PT[pj * 4u]; let d = xi - p2.xyz; let dist = length(d); let pen = ri + p2.w - dist;
       if (pen <= 0.0 || dist < 1e-6) { continue; }
@@ -352,7 +386,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       this.bodies = buf(N * BODY_F * 4, S | CD | CS);
       this.pt = buf(NP * 64, S);
       this.at = buf((4 + N + this.hashSize) * 4, S | CD | CS);
-      this.gIds = buf(this.hashSize * SLOTS * 4, S);
+      this.gIds = buf((this.hashSize + this.hashSize / SCAN + NP) * 4, S);
       this.st = buf(16, S | CD);
       this.cmdCap = 4096;
       this.cmds = buf(this.cmdCap * CMD_V4 * 16, S | CD);
@@ -373,7 +407,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       ] });
       const pl = d.createPipelineLayout({ bindGroupLayouts: [this.layout] });
       this.pipes = {};
-      for (const e of ["applyCmds", "predict", "particles", "clearGrid", "insert", "contacts", "commit", "shapeMatch"]) this.pipes[e] = d.createComputePipeline({ layout: pl, compute: { module: mod, entryPoint: e } });
+      for (const e of ["applyCmds", "predict", "particles", "clearGrid", "insert", "scanBlocks", "scanSums", "addSums", "fill", "contacts", "commit", "shapeMatch"]) this.pipes[e] = d.createComputePipeline({ layout: pl, compute: { module: mod, entryPoint: e } });
       this._bind();
       this.params = new ArrayBuffer(128);
       this.terrain = { x0: 0, z0: 0, cell: 1, n: 0 };
@@ -436,7 +470,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       for (const k of ["pt", "at", "gIds", "out"]) this[k].destroy();
       this.pt = d.createBuffer({ size: N * MAXP * 64, usage: S });
       this.at = d.createBuffer({ size: (4 + N + this.hashSize) * 4, usage: S | CD | CS });
-      this.gIds = d.createBuffer({ size: this.hashSize * SLOTS * 4, usage: S });
+      this.gIds = d.createBuffer({ size: (this.hashSize + this.hashSize / SCAN + N * MAXP) * 4, usage: S });
       this.out = d.createBuffer({ size: N * 3 * 16, usage: S | CS });
       for (const st of this.staging) if (!st.busy) st.b.destroy();
       this.staging = this.staging.filter((st) => st.busy).map((st) => ({ ...st, old: true }));
@@ -808,7 +842,7 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
         this.pending.clear();
       }
       this._ncmd = nc;
-      this._cell = Math.max(6, 2 * (this.maxRad || 3) + 0.5);
+      this._cell = Math.max(1.5, 2 * (this.maxRad || 1.5) + 0.1);
       this._acc = Math.min(this._acc + Math.min(dt, 0.1), 1 / 60 * maxSteps);
       const frameStep = 1 / 60;
       let frames = 0;
@@ -848,6 +882,13 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
           run(p, "particles", NP);
           run(p, "clearGrid", this.hashSize);
           run(p, "insert", NP);
+          p.setPipeline(this.pipes.scanBlocks);
+          p.setBindGroup(0, this.group);
+          p.dispatchWorkgroups(this.hashSize / SCAN);
+          p.setPipeline(this.pipes.scanSums);
+          p.dispatchWorkgroups(1);
+          run(p, "addSums", this.hashSize);
+          run(p, "fill", NP);
           for (let it = 0; it < ITERS; it++) {
             run(p, "contacts", NP);
             run(p, "commit", NP);
