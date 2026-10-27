@@ -1299,7 +1299,7 @@ export class Destruction {
     const c0 = new THREE.Vector3(b.cx, b.baseY + b.height * 0.5, b.cz), M2 = new THREE.Matrix4(), one = new THREE.Vector3(1, 1, 1);
     return {
       b, center: c0,
-      set: (pos, quat) => { a.carry.compose(pos, quat, one).multiply(M2.makeTranslation(-c0.x, -c0.y, -c0.z)); },
+      set: (pos, quat, sc = 1) => { a.carry.compose(pos, quat, one.setScalar(sc)).multiply(M2.makeTranslation(-c0.x, -c0.y, -c0.z)); },
       drop: () => { if (b.state === 'gone') return; this._scoreBuilding(b, 1); this.intact.setVisibleAt(b.inst, false); b.state = 'gone'; },
     };
   }

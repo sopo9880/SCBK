@@ -459,6 +459,7 @@ export class Game {
       this._mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       this._mx = e.clientX; this._my = e.clientY;
       this._moved = true;
+      if (this.pilot) { this._mdx = (this._mdx || 0) + (e.movementX || 0); this._mdy = (this._mdy || 0) + (e.movementY || 0); }
     };
     this._onDown = (e) => {
       if (e.button === 0) this._lmb = true; else if (e.button === 2) this._rmb = true;
@@ -503,6 +504,8 @@ export class Game {
   }
 
   setSlowMo(on) { this.D.timeScale = on ? 0.22 : 1; }
+  // 빨리 감기 (1, 2, 4배)
+  setTimeRate(r) { this.D.timeScale = r; }
 
   // ---------- 관제실: 위에서 똑바로 내려다보는 고정 시점 (높이만 줌) ----------
   startOverhead(x, z, h) {
@@ -547,12 +550,16 @@ export class Game {
     document.body.classList.add('pilot');
     this.marker.visible = false;
     this.controls.enabled = false;
+    this._mdx = this._mdy = 0;
+    // 탈것: 마우스로 둘러보기 (포인터 잠금)
+    if (p.lockMouse && this.canvas.requestPointerLock) { try { const r = this.canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* 잠금 못 해도 조작은 됨 */ } }
   }
   endPilot(aborted = false) {
     const p = this.pilot; if (!p) return;
     this.pilot = null;
     document.body.classList.remove('pilot');
     this.controls.enabled = true;
+    if (document.pointerLockElement === this.canvas) { try { document.exitPointerLock(); } catch (e) { /* 무시 */ } }
     if (p.dispose) p.dispose(aborted);
     this.camera.fov = this._fov0 || this.cfg.fov || 50; this.camera.updateProjectionMatrix();
     // 끝난 자리를 바라보며 일반 조작으로
@@ -574,8 +581,12 @@ export class Game {
       boost: k.has('ShiftLeft') || k.has('ShiftRight'), space: k.has('Space'),
       w: k.has(K.k_fwd) || k.has('ArrowUp'), s: k.has(K.k_back) || k.has('ArrowDown'), a: k.has(K.k_left) || k.has('ArrowLeft'), d: k.has(K.k_right) || k.has('ArrowRight'),
       q: k.has(K.k_rotL), e: k.has(K.k_rotR), lmb: !!this._lmb, rmb: !!this._rmb, has: (c) => k.has(c),
+      mdx: this._mdx || 0, mdy: this._mdy || 0,
     };
-    const alive = this.pilot.update(dt * this.D.timeScale, input, dt);
+    this._mdx = this._mdy = 0;
+    // 탈것은 빨리 감기와 상관없이 실제 속도로 (슬로모션은 따름)
+    const ts = this.pilot.ignoreFast ? Math.min(1, this.D.timeScale) : this.D.timeScale;
+    const alive = this.pilot.update(dt * ts, input, dt);
     const c = this._pilotCam;
     this.pilot.camera(c);
     // 탈것과 카메라 사이를 건물이 가리면 그 앞으로 당김
@@ -706,9 +717,11 @@ export class Game {
     }
 
     this.marker.visible = this.marker.visible && !cine && !this.pilot;
-    PROF.time('weapons', () => this.arsenal.update(dtSim * this.D.timeScale, this.aim));
+    // 빨리 감기일 때는 무기·연출을 잘게 나눠 진행 (빠른 발사체가 건물을 뚫고 지나가지 않게)
+    const nSub = this.D.timeScale > 1.01 ? Math.ceil(this.D.timeScale) : 1;
+    PROF.time('weapons', () => { for (let i = 0; i < nSub; i++) this.arsenal.update(dtSim * this.D.timeScale / nSub, this.aim); });
     PROF.time('physics', () => this.D.update(dtSim));
-    PROF.time('fx', () => this.fx.update(dtSim * this.D.timeScale, this.camera));
+    PROF.time('fx', () => { for (let i = 0; i < nSub; i++) this.fx.update(dtSim * this.D.timeScale / nSub, this.camera); });
     PROF.time('world', () => this.world.update(dt));
 
     // 그림자 카메라 따라가기

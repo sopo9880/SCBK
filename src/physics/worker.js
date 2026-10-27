@@ -11,7 +11,7 @@ function loop() {
   const t0 = performance.now();
   const dt = Math.min(0.1, (t0 - last) / 1000);
   last = t0;
-  const maxSteps = core.stepMs > 14 ? 1 : core.stepMs > 8 ? 2 : 3;
+  const maxSteps = (core.stepMs > 14 ? 1 : core.stepMs > 8 ? 2 : 3) * Math.max(1, Math.ceil(ts));
   let st = { steps: 0 };
   try { st = core.step(dt * ts, maxSteps); } catch (e) { err = err || 'step: ' + (e && e.message || e); }
   if (st.steps > 0 || err) {

@@ -162,7 +162,7 @@ export class Physics {
   // 가벼운 파편 진행 (메인 스레드, 프레임마다)
   _stepLight(dt) {
     if (!this._light.size || dt <= 0) return;
-    const n = dt > 0.034 ? 2 : 1, h = dt / n;
+    const n = Math.min(8, Math.max(1, Math.ceil(dt / 0.017))), h = dt / n;
     const g = this.gravity, env = this.lightEnv;
     const drag = Math.exp(-0.04 * h);
     for (const b of this._light) {
@@ -197,7 +197,7 @@ export class Physics {
     if (this.mode === 'inline') {
       for (const c of this._cmds) this.core.exec(c);
       this._cmds = []; this._xfer = [];
-      const maxSteps = this.core.stepMs > 9 ? 1 : 2;
+      const maxSteps = (this.core.stepMs > 9 ? 1 : 2) * Math.max(1, Math.ceil(this.timeScale));
       const st = this.core.step(d, maxSteps);
       this.stepMs = this.core.stepMs;
       const s = this.core.snapshot();

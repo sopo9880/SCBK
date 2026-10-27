@@ -110,6 +110,7 @@
   </div>
 
   <div class="tools">
+    <button class="icon-btn" id="tFast" title="빨리 감기 (Y)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 6l8 6-8 6zM12 6l8 6-8 6z" fill="currentColor"/></svg></button>
     <button class="icon-btn" id="tSlow" title="슬로모션 (T)"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="13" r="8" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 13V9M9 2h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
     <button class="icon-btn" id="tTime" title="시간대 바꾸기 (N)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" fill="currentColor"/></svg></button>
     <button class="icon-btn" id="tShot" title="스크린샷 (P)"><svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 8h3l2-3h6l2 3h3v11H4z" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" stroke="currentColor" stroke-width="2" fill="none"/></svg></button>
@@ -139,6 +140,7 @@
   <div id="tip" class="tip" hidden></div>
   <div id="toasts" class="toasts"></div>
   <div id="slowBadge" class="slow-badge" hidden>SLOW MOTION</div>
+  <div id="fastBadge" class="slow-badge fast-badge" hidden>▶▶ ×2</div>
   <pre id="perfOverlay" class="perf-overlay" hidden></pre>
 
   <div id="help" class="help" hidden>
@@ -152,7 +154,8 @@
         <dt>Tab / Shift+Tab</dt><dd>무기 분류 바꾸기</dd>
         <dt>1 ~ 9 · 0 · Shift+숫자</dt><dd>분류 안에서 무기 선택 (10번째는 0, 11번째부터 Shift)</dd>
         <dt>[ / ]</dt><dd>위력 조절 (×1 약함 · ×10 강함 · ×100 극강)</dd>
-        <dt>V</dt><dd>탈것 (자동차·헬기·경비행기·전투기·폭격기) · 고르는 창에서 R 비행기 출발(하늘/활주로) · C 시점 바꾸기 · G 바퀴 · Esc 내리기</dd>
+        <dt>V</dt><dd>탈것 (GTA5 배치) · W/S · A/D · 넘버패드 8/5/4/6 또는 I/K/J/L · Space 주무기 · Q 보조 무기 · E 경적 · G 바퀴 · V 시점 · C 뒤 보기 · F 내리기 · 고르는 창에서 R 로 출발 위치</dd>
+        <dt>Y</dt><dd>빨리 감기 (×2 → ×4 → ×1)</dd>
         <dt>L</dt><dd>발사 관제실 (지도에서 표적 지정 → 덮개·열쇠·발사 버튼)</dd>
         <dt>유도 미사일 조종</dt><dd>마우스 방향 또는 WASD · Shift 가속 · 클릭 기폭 · Esc 자폭</dd>
         <dt>T</dt><dd>슬로모션</dd>
