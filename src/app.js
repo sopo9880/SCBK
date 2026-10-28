@@ -235,7 +235,7 @@ function setStep(i, state, note) {
 
 async function start(place) {
   saveRecord();
-  if (game) { game.dispose(); game = null; }
+  if (game) { try { game.dispose(); } catch (e) { console.error('정리 중 오류:', e); } game = null; }
   current = place;
   cachedData = null;
   $('#menu').hidden = true; $('#hud').hidden = true; $('#loading').hidden = false;
@@ -485,12 +485,18 @@ function initHud() {
     try { const p = await api.saveScreenshot(url); hud.toast(`스크린샷 저장: ${p}`, 'info'); } catch (e) { hud.toast('스크린샷 저장 실패', 'info'); }
   };
   $('#tShot').onclick = shot;
+  let resetting = false;
   const reset = async () => {
     if (!game || !current) return;
-    saveRecord();
-    game.dispose(); game = null;
-    $('#hud').hidden = true; $('#loading').hidden = false;
-    await loadAndRun(current, true);
+    if (resetting) return; resetting = true;
+    try {
+      try { saveRecord(); } catch (e) { console.error(e); }
+      // 정리 중 오류가 나도 새 도시는 불러오게 함
+      try { game.dispose(); } catch (e) { console.error('정리 중 오류:', e); }
+      game = null;
+      $('#hud').hidden = true; $('#loading').hidden = false;
+      await loadAndRun(current, true);
+    } finally { resetting = false; }
   };
   $('#tReset').onclick = reset;
   const mute = () => { const m = audio.toggleMute(); $('#tMute').classList.toggle('on', m); $('#muteWave').style.display = m ? 'none' : ''; };
@@ -591,7 +597,7 @@ function launchFromControl(wep, tgt) {
 
 function toMenu() {
   saveRecord();
-  if (game) { game.dispose(); game = null; }
+  if (game) { try { game.dispose(); } catch (e) { console.error('정리 중 오류:', e); } game = null; }
   $('#stage').innerHTML = '';
   $('#hud').hidden = true; $('#loading').hidden = true; $('#menu').hidden = false;
   renderRecent();

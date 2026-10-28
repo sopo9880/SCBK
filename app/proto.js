@@ -343,12 +343,13 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
   var GPUCore = class _GPUCore {
     static async create(capacity = 32768) {
       if (typeof navigator === "undefined" || !navigator.gpu) return null;
-      let adapter = null;
-      try {
-        adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
-      } catch (e) {
-        return null;
+      if (!_GPUCore._adapterP) {
+        _GPUCore._adapterP = Promise.race([
+          navigator.gpu.requestAdapter({ powerPreference: "high-performance" }).catch(() => null),
+          new Promise((r) => setTimeout(() => r(null), 6e3))
+        ]);
       }
+      let adapter = await _GPUCore._adapterP;
       if (!adapter) return null;
       const soft = adapter.isFallbackAdapter || adapter.info && adapter.info.isFallbackAdapter || /swiftshader|llvmpipe|warp|microsoft basic/i.test(adapter.info && adapter.info.vendor + " " + adapter.info.architecture + " " + adapter.info.description || "");
       if (soft && !globalThis.__allowSoftGPU) {
@@ -356,7 +357,24 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
         return null;
       }
       const lim = adapter.limits;
-      const device = await adapter.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
+      let device = _GPUCore._device;
+      if (!device || _GPUCore._deviceLost) {
+        _GPUCore._deviceLost = false;
+        const req = (a) => a.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
+        try {
+          device = await req(adapter);
+        } catch (e) {
+          _GPUCore._adapterP = null;
+          adapter = await Promise.race([navigator.gpu.requestAdapter({ powerPreference: "high-performance" }).catch(() => null), new Promise((r) => setTimeout(() => r(null), 6e3))]);
+          if (!adapter) return null;
+          _GPUCore._adapterP = Promise.resolve(adapter);
+          device = await req(adapter);
+        }
+        _GPUCore._device = device;
+        device.lost.then(() => {
+          if (_GPUCore._device === device) _GPUCore._deviceLost = true;
+        });
+      }
       capacity = Math.max(1024, Math.min(capacity, Math.floor(lim.maxStorageBufferBindingSize / (MAXP * 64))));
       const core = new _GPUCore(device, capacity, adapter);
       await core._init();
@@ -400,19 +418,27 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
       this.hData = new Float32Array(0);
       this.so = [0, 0, 0, 0, 0, 0];
       d.queue.writeBuffer(this.bodies, 0, new Float32Array(N * BODY_F));
-      const mod = d.createShaderModule({ code: WGSL });
-      const info = await mod.getCompilationInfo();
-      const errs = info.messages.filter((m) => m.type === "error");
-      if (errs.length) throw new Error("WGSL: " + errs.map((m) => `${m.lineNum}:${m.message}`).join(" | "));
-      this.layout = d.createBindGroupLayout({ entries: [
-        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
-        ...[1, 2, 3, 4].map((b) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } })),
-        ...[5, 6].map((b) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } })),
-        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }
-      ] });
-      const pl = d.createPipelineLayout({ bindGroupLayouts: [this.layout] });
-      this.pipes = {};
-      for (const e of ["applyCmds", "predict", "particles", "clearGrid", "insert", "scanBlocks", "scanSums", "addSums", "fill", "contacts", "commit", "shapeMatch"]) this.pipes[e] = d.createComputePipeline({ layout: pl, compute: { module: mod, entryPoint: e } });
+      let P = _GPUCore._pipeCache;
+      if (!P || P.device !== d) {
+        const mod = d.createShaderModule({ code: WGSL });
+        const info = await mod.getCompilationInfo();
+        const errs = info.messages.filter((m) => m.type === "error");
+        if (errs.length) throw new Error("WGSL: " + errs.map((m) => `${m.lineNum}:${m.message}`).join(" | "));
+        const layout = d.createBindGroupLayout({ entries: [
+          { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+          ...[1, 2, 3, 4].map((b) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } })),
+          ...[5, 6].map((b) => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: "read-only-storage" } })),
+          { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } }
+        ] });
+        const pl = d.createPipelineLayout({ bindGroupLayouts: [layout] });
+        const pipes = {};
+        await Promise.all(["applyCmds", "predict", "particles", "clearGrid", "insert", "scanBlocks", "scanSums", "addSums", "fill", "contacts", "commit", "shapeMatch"].map(async (e) => {
+          pipes[e] = await d.createComputePipelineAsync({ layout: pl, compute: { module: mod, entryPoint: e } });
+        }));
+        P = _GPUCore._pipeCache = { device: d, layout, pipes };
+      }
+      this.layout = P.layout;
+      this.pipes = P.pipes;
       this._bind();
       this.params = new ArrayBuffer(128);
       this.terrain = { x0: 0, z0: 0, cell: 1, n: 0 };
@@ -960,10 +986,23 @@ fn friction(dxRel: vec3f, n: vec3f, pen: f32) -> vec3f {
         st.busy = false;
       });
     }
-    free() {
-      try {
-        this.device.destroy();
-      } catch (e) {
+    // 버퍼만 정리하고 장치는 다음 게임에서 다시 씀
+    // (예전엔 이 이름이 free 라서 빈 칸 목록 this.free 에 가려져 다시 불러오기가 멈췄음)
+    destroy() {
+      this.onState = null;
+      this.lost = true;
+      for (const k of ["uni", "bodies", "pt", "at", "gIds", "st", "cmds", "out"]) {
+        try {
+          this[k] && this[k].destroy();
+        } catch (e) {
+        }
+      }
+      for (const s of this.staging || []) {
+        try {
+          if (!s.busy) s.b.destroy();
+          else s.old = true;
+        } catch (e) {
+        }
       }
     }
   };

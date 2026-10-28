@@ -8,15 +8,35 @@ const ITERS = 3;             // 하위 단계마다 겹침 풀기 반복
 export class GPUCore {
   static async create(capacity = 32768) {
     if (typeof navigator === 'undefined' || !navigator.gpu) return null;
-    let adapter = null;
-    try { adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); } catch (e) { return null; }
+    // 어댑터는 한 번만 찾고 다시 씀 (다시 불러오기 때 같은 요청이 멈추는 경우가 있어서 시간 제한도 둠)
+    if (!GPUCore._adapterP) {
+      GPUCore._adapterP = Promise.race([
+        navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null),
+        new Promise((r) => setTimeout(() => r(null), 6000)),
+      ]);
+    }
+    let adapter = await GPUCore._adapterP;
     if (!adapter) return null;
     // 소프트웨어(CPU 흉내) WebGPU 는 Rapier 보다 훨씬 느려서 쓰지 않음
     const soft = adapter.isFallbackAdapter || (adapter.info && adapter.info.isFallbackAdapter) || /swiftshader|llvmpipe|warp|microsoft basic/i.test(((adapter.info && (adapter.info.vendor + ' ' + adapter.info.architecture + ' ' + adapter.info.description)) || ''));
     if (soft && !globalThis.__allowSoftGPU) { console.warn('소프트웨어 WebGPU 라 GPU 물리를 쓰지 않음'); return null; }
     const lim = adapter.limits;
     // 칸을 나중에 늘릴 수 있게 장치가 허락하는 만큼 큰 버퍼를 요청
-    const device = await adapter.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
+    // 장치도 게임마다 새로 만들지 않고 이어서 씀 (잃어버렸을 때만 새로)
+    let device = GPUCore._device;
+    if (!device || GPUCore._deviceLost) {
+      GPUCore._deviceLost = false;
+      const req = (a) => a.requestDevice({ requiredLimits: { maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize, maxBufferSize: lim.maxBufferSize } });
+      try { device = await req(adapter); } catch (e) {
+        // 한 번 장치를 만든 어댑터는 다시 못 쓰므로 새 어댑터로 한 번 더
+        GPUCore._adapterP = null; adapter = await Promise.race([navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null), new Promise((r) => setTimeout(() => r(null), 6000))]);
+        if (!adapter) return null;
+        GPUCore._adapterP = Promise.resolve(adapter);
+        device = await req(adapter);
+      }
+      GPUCore._device = device;
+      device.lost.then(() => { if (GPUCore._device === device) GPUCore._deviceLost = true; });
+    }
     capacity = Math.max(1024, Math.min(capacity, Math.floor(lim.maxStorageBufferBindingSize / (MAXP * 64))));
     const core = new GPUCore(device, capacity, adapter);
     await core._init();
@@ -53,19 +73,27 @@ export class GPUCore {
     this.hData = new Float32Array(0); this.so = [0, 0, 0, 0, 0, 0];
     // 빈 칸은 상태 0 으로 초기화
     d.queue.writeBuffer(this.bodies, 0, new Float32Array(N * BODY_F));
-    const mod = d.createShaderModule({ code: WGSL });
-    const info = await mod.getCompilationInfo();
-    const errs = info.messages.filter(m => m.type === 'error');
-    if (errs.length) throw new Error('WGSL: ' + errs.map(m => `${m.lineNum}:${m.message}`).join(' | '));
-    this.layout = d.createBindGroupLayout({ entries: [
-      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-      ...[1, 2, 3, 4].map(b => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } })),
-      ...[5, 6].map(b => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } })),
-      { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-    ] });
-    const pl = d.createPipelineLayout({ bindGroupLayouts: [this.layout] });
-    this.pipes = {};
-    for (const e of ['applyCmds', 'predict', 'particles', 'clearGrid', 'insert', 'scanBlocks', 'scanSums', 'addSums', 'fill', 'contacts', 'commit', 'shapeMatch']) this.pipes[e] = d.createComputePipeline({ layout: pl, compute: { module: mod, entryPoint: e } });
+    // 셰이더와 파이프라인은 장치마다 한 번만 만들고, 다시 불러오기 때는 그대로 씀
+    let P = GPUCore._pipeCache;
+    if (!P || P.device !== d) {
+      const mod = d.createShaderModule({ code: WGSL });
+      const info = await mod.getCompilationInfo();
+      const errs = info.messages.filter(m => m.type === 'error');
+      if (errs.length) throw new Error('WGSL: ' + errs.map(m => `${m.lineNum}:${m.message}`).join(' | '));
+      const layout = d.createBindGroupLayout({ entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+        ...[1, 2, 3, 4].map(b => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } })),
+        ...[5, 6].map(b => ({ binding: b, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } })),
+        { binding: 7, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      ] });
+      const pl = d.createPipelineLayout({ bindGroupLayouts: [layout] });
+      const pipes = {};
+      await Promise.all(['applyCmds', 'predict', 'particles', 'clearGrid', 'insert', 'scanBlocks', 'scanSums', 'addSums', 'fill', 'contacts', 'commit', 'shapeMatch'].map(async (e) => {
+        pipes[e] = await d.createComputePipelineAsync({ layout: pl, compute: { module: mod, entryPoint: e } });
+      }));
+      P = GPUCore._pipeCache = { device: d, layout, pipes };
+    }
+    this.layout = P.layout; this.pipes = P.pipes;
     this._bind();
     this.params = new ArrayBuffer(128);
     this.terrain = { x0: 0, z0: 0, cell: 1, n: 0 };
@@ -367,5 +395,11 @@ export class GPUCore {
     }).catch(() => { st.busy = false; });
   }
 
-  free() { try { this.device.destroy(); } catch (e) { /* 무시 */ } }
+  // 버퍼만 정리하고 장치는 다음 게임에서 다시 씀
+  // (예전엔 이 이름이 free 라서 빈 칸 목록 this.free 에 가려져 다시 불러오기가 멈췄음)
+  destroy() {
+    this.onState = null; this.lost = true;
+    for (const k of ['uni', 'bodies', 'pt', 'at', 'gIds', 'st', 'cmds', 'out']) { try { this[k] && this[k].destroy(); } catch (e) { /* 무시 */ } }
+    for (const s of this.staging || []) { try { if (!s.busy) s.b.destroy(); else s.old = true; } catch (e) { /* 무시 */ } }
+  }
 }

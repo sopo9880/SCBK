@@ -280,7 +280,7 @@ export class Physics {
   dispose() {
     if (this.worker) { try { this.worker.postMessage({ type: 'dispose' }); } catch (e) { /* 무시 */ } setTimeout(() => { try { this.worker.terminate(); } catch (e) { /* 무시 */ } }, 500); }
     if (this.core) this.core.free();
-    if (this.gpu) this.gpu.free();
+    if (this.gpu) this.gpu.destroy();
     this.bodies.clear(); this._dyn.clear(); this._light.clear();
   }
 }
