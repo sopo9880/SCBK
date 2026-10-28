@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { cineGame, camDir } from './cam.js';
 import { wipeMap, worldEnd } from './apocalypse.js';
+import { boltMesh } from './storms.js';
 
 const v3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const R = Math.random;
@@ -63,6 +64,55 @@ function makeColossus(r) {
   return g;
 }
 
+// 초대형 거인 (자체 디자인: 재빛 바위 몸에 갈비뼈처럼 갈라진 주황빛 틈, 어깨의 증기 구멍, 이마에서 뒤로 뻗은 바위 볏)
+// 원점 = 발바닥, 키 약 2.15, 앞 = +Z. 땅울림 거인보다 길쭉하고 팔다리가 가늚
+function makeTitan() {
+  const M = mats();
+  const ash = new THREE.MeshStandardMaterial({ color: 0x6f6862, roughness: 0.92, metalness: 0.02, flatShading: true });
+  const ashD = new THREE.MeshStandardMaterial({ color: 0x47413c, roughness: 0.95, metalness: 0.02, flatShading: true });
+  const g = new THREE.Group();
+  const lean = new THREE.Group(); g.add(lean); lean.position.y = 1.04;
+  const pelvis = box(0.4, 0.2, 0.26, ashD); lean.add(pelvis);
+  const torso = new THREE.Group(); torso.position.y = 0.1; lean.add(torso);
+  const waist = box(0.3, 0.3, 0.22, ash); waist.position.y = 0.14; torso.add(waist);
+  const chest = box(0.56, 0.48, 0.34, ash); chest.position.set(0, 0.52, 0.01); torso.add(chest);
+  // 갈비뼈 모양 틈
+  for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) {
+    const r = box(0.17, 0.018, 0.02, M.seam); r.position.set(sd * 0.13, 0.36 + i * 0.09, 0.185); r.rotation.z = sd * -0.25; r.castShadow = false; torso.add(r);
+  }
+  const spine = box(0.02, 0.4, 0.02, M.seam); spine.position.set(0, 0.5, 0.19); spine.castShadow = false; torso.add(spine);
+  // 어깨 증기 구멍 (나중에 여기서 증기를 뿜음)
+  const vents = [];
+  for (const sd of [-1, 1]) {
+    const v = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.08, 6), M.seam); v.position.set(sd * 0.22, 0.8, -0.06); v.castShadow = false; torso.add(v); vents.push(v);
+  }
+  const neck = box(0.13, 0.12, 0.13, ashD); neck.position.set(0, 0.8, 0.02); torso.add(neck);
+  const head = new THREE.Group(); head.position.set(0, 0.86, 0.04); torso.add(head);
+  const skull = box(0.2, 0.26, 0.23, ash); skull.position.y = 0.12; head.add(skull);
+  const crest = box(0.05, 0.08, 0.3, ashD); crest.position.set(0, 0.28, -0.04); crest.rotation.x = 0.25; head.add(crest);
+  const visor = box(0.16, 0.022, 0.02, M.eye); visor.position.set(0, 0.15, 0.118); visor.castShadow = false; head.add(visor);
+  const jaw = box(0.16, 0.06, 0.16, ashD); jaw.position.set(0, -0.01, 0.04); head.add(jaw);
+  const limb = (w, L, m) => { const p = new THREE.Group(); const b = box(w, L, w * 1.05, m); b.position.y = -L / 2; p.add(b); return p; };
+  const arms = [], legs = [];
+  for (const sd of [-1, 1]) {
+    const sh = new THREE.Group(); sh.position.set(sd * 0.34, 0.7, 0); torso.add(sh);
+    const up = limb(0.12, 0.48, ash); sh.add(up);
+    const el = new THREE.Group(); el.position.y = -0.48; up.add(el);
+    const fo = limb(0.1, 0.46, ashD); el.add(fo);
+    const hand = box(0.12, 0.16, 0.08, ash); hand.position.y = -0.52; fo.add(hand);
+    arms.push({ sh, el, s: sd });
+    const hip = new THREE.Group(); hip.position.set(sd * 0.13, 0, 0); lean.add(hip);
+    const th = limb(0.16, 0.52, ash); hip.add(th);
+    const kn = new THREE.Group(); kn.position.y = -0.52; th.add(kn);
+    const sn = limb(0.13, 0.48, ashD); kn.add(sn);
+    const foot = box(0.15, 0.06, 0.3, ash); foot.position.set(0, -0.5, 0.06); kn.add(foot);
+    const sm = box(0.015, 0.22, 0.02, M.seam); sm.position.set(0, -0.22, 0.07); sm.castShadow = false; kn.add(sm);
+    legs.push({ hip, kn, foot, s: sd });
+  }
+  g.userData = { lean, torso, head, arms, legs, vents, own: [ash, ashD] };
+  return g;
+}
+
 // 와이어로 날아다니는 작은 병사 (자체 디자인: 짙은 남색 몸, 등에 주황빛 추진기)
 function makeFlyer() {
   const g = new THREE.Group();
@@ -96,9 +146,9 @@ export const MOVIE4 = {
       for (let i = 0; i < N; i++) {
         const u = (i + 0.5) / N - 0.5 + (R() - 0.5) * 0.4 / N;
         const m = makeColossus(R()); m.scale.setScalar(sc * (0.85 + R() * 0.3)); scene.add(m);
-        const lane = side.clone().multiplyScalar(u * W);
-        const base = c.clone().addScaledVector(f, D0 + (R() - 0.3) * Hs * 0.8).add(lane);
-        G.push({ m, base, ph: R() * Math.PI * 2, sideFoot: 0, hitT: 0, seen: new Set(), sc: m.scale.x, lastStep: 0, steam: R() });
+        const lane = u * W, dep = D0 + (R() - 0.3) * Hs * 0.8;
+        const base = c.clone().addScaledVector(f, dep).addScaledVector(side, lane);
+        G.push({ m, base, dep, lane, laneTgt: lane, vLat: 0, ph: R() * Math.PI * 2, sideFoot: 0, hitT: 0, seen: new Set(), sc: m.scale.x, lastStep: 0, steam: R() });
       }
       const st = { t: 0, stepSnd: 0 };
       // 와이어 부대: 가운데 쪽 거인 1~2명을 쓰러뜨림
@@ -144,6 +194,14 @@ export const MOVIE4 = {
         }
       };
       const tmp = v3();
+      // 한 명이 쓰러지면 남은 거인들이 줄 간격을 다시 맞추며 빈자리를 서서히 메움
+      // (줄 양끝은 그대로 두고, 빈자리에 가까운 거인일수록 많이 옆으로 걸어감)
+      const lanesLo = Math.min(...G.map(g => g.lane)), lanesHi = Math.max(...G.map(g => g.lane));
+      const closeRanks = () => {
+        const alive = G.filter(g => !(g.victim && g.fallT !== undefined)).sort((a, b) => a.lane - b.lane);
+        const n = alive.length; if (n < 2) return;
+        alive.forEach((g, i) => { g.laneTgt = lanesLo + (lanesHi - lanesLo) * (i / (n - 1)); });
+      };
       A.addActive({
         update(dt) {
           st.t += dt; st.stepSnd -= dt;
@@ -153,11 +211,19 @@ export const MOVIE4 = {
           for (const gi of G) {
             // 몸: 줄을 지어 앞으로, 걸음에 맞춰 위아래로 흔들림
             if (gi.victim && gi.fallT !== undefined) { fallStep(gi, dt); continue; }
-            const ph = gi.ph + (dist / stride) * Math.PI;
-            const pos = gi.base.clone().addScaledVector(dir, dist);
+            // 옆으로 자리 옮기기: 걸음 속도의 절반을 넘지 않게, 천천히 붙었다가 천천히 멈춤
+            const want = gi.laneTgt - gi.lane;
+            const vMax = speed * 0.5;
+            const vWant = Math.max(-vMax, Math.min(vMax, want * 0.35));
+            gi.vLat += (vWant - gi.vLat) * (1 - Math.exp(-dt * 1.2));
+            gi.lane += gi.vLat * dt;
+            const ph = gi.ph + (Math.hypot(dist, gi.latDist || 0) / stride) * Math.PI;
+            gi.latDist = (gi.latDist || 0) + Math.abs(gi.vLat * dt);
+            const pos = c.clone().addScaledVector(f, gi.dep).addScaledVector(side, gi.lane).addScaledVector(dir, dist);
             pos.y = gnd(pos.x, pos.z) + Math.abs(Math.sin(ph)) * gi.sc * 0.05;
             gi.m.position.copy(pos);
-            gi.m.lookAt(pos.clone().add(dir));
+            // 옆으로 걸을 때는 그쪽으로 몸을 살짝 틀어서
+            gi.m.lookAt(pos.clone().addScaledVector(dir, speed).addScaledVector(side, gi.vLat * 1.3));
             const U = gi.m.userData;
             U.lean.rotation.x = 0.12 + Math.sin(ph * 2) * 0.03;
             U.lean.rotation.z = Math.sin(ph) * 0.05;
@@ -221,7 +287,9 @@ export const MOVIE4 = {
               audio.clack();
             }
           }
-          for (const v of victims) if (v.fallT === undefined && t - v.tAtk > T_CUT) { v.fallT = 0; v.fallT0 = t; audio.roar(2.5); }
+          for (const v of victims) if (v.fallT === undefined && t - v.tAtk > T_CUT) { v.fallT = 0; v.fallT0 = t; audio.roar(2.5); v.closeAt = t + 1.8; }
+          // 쓰러지는 걸 본 뒤(약 2초) 줄을 다시 맞춤
+          for (const v of victims) if (v.closeAt !== undefined && t >= v.closeAt) { v.closeAt = undefined; closeRanks(); }
           fx.addShake(Math.min(0.08, 25 / Math.max(50, near)) * dt * 30);
           if (t > T) return false;
           return true;
@@ -267,9 +335,181 @@ export const MOVIE4 = {
       ]);
     },
   },
+  // 초대형 거인: 번개처럼 번쩍이며 높은 건물 뒤에 나타나 지붕 너머로 내려다보다가, 발로 차서 무너뜨리고 증기 속으로 사라짐
+  colossal: {
+    fire(A, hit) {
+      const S = A.S, P = S.P, p = hit.point, { scene, D, fx, grid, audio, camera, game } = A.ctx;
+      const gnd = (x, z) => (game && game.groundAt ? game.groundAt(x, z) : grid.sample(x, z));
+      const half = grid.span / 2;
+      const inMap = (q, pad = 40) => Math.abs(q.x) < half + pad && Math.abs(q.z) < half + pad;
+      // 찰 건물: 겨눈 곳 근처에서 가장 높은 온전한 건물 (벽 역할)
+      const cand = D.buildingsNear(p.x, p.z, 220).filter(b => b.state === 'intact').sort((a, b) => b.height - a.height);
+      const wall = cand[0] || null;
+      const c = wall ? v3(wall.cx, wall.baseY, wall.cz) : v3(p.x, gnd(p.x, p.z), p.z);
+      const wallH = wall ? wall.height : 40;
+      const rb = wall ? 0.5 * Math.max(wall.maxx - wall.minx, wall.maxz - wall.minz) : 10;
+      const f = camDir(camera, c);                       // 카메라 → 건물 방향. 거인은 건물 너머(f 쪽)에 섬
+      const toCam = f.clone().negate(), side = v3(-f.z, 0, f.x);
+      const Hs = Math.min(360, Math.max(110, wallH * 1.45) * S.r ** 0.18);   // 건물보다 머리 하나 이상 큼
+      const sc = Hs / 2.15;
+      const stand = c.clone().addScaledVector(f, rb + sc * 0.78); stand.y = gnd(stand.x, stand.z);
+      const m = makeTitan(); scene.add(m);
+      const U = m.userData;
+      m.position.copy(stand); m.lookAt(stand.clone().add(toCam)); m.scale.setScalar(0.001);
+      const kickLeg = U.legs[1], plantLeg = U.legs[0];
+      // 발이 닿는 곳: 건물 뒷면 아래쪽
+      const impact = c.clone().addScaledVector(f, rb * 0.7); impact.y = c.y + Math.min(sc * 0.32, wallH * 0.35);
+      const st = { t: 0, appeared: false, kicked: false, steamed: false, gone: false, thrown: [] };
+      const T_APPEAR = 1.6, T_PEER = 7.0, T_WIND = 7.8, T_KICK = 8.35, T_STEAM = 11, T_END = 16;
+      const sm = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+      const steamAt = (q, n, s0, s1, up = 6) => { for (let i = 0; i < n; i++) fx.smoke.emit(q.x + (R() - 0.5) * s0, q.y + (R() - 0.5) * s0 * 0.5, q.z + (R() - 0.5) * s0, (R() - 0.5) * 6, up + R() * up, (R() - 0.5) * 6, 4 + R() * 3, s0, s1, [0.96, 0.95, 0.94, 0.6], [1, 1, 1, 0], 0.5, 1.2, 0.05); };
+      // 등장: 맑은 하늘에 번개 + 하얀 섬광 + 증기 폭발, 그 속에서 몸이 솟아오름
+      const bolts = [];
+      const strike = (to) => {
+        const b = boltMesh(to.clone().add(v3((R() - 0.5) * 80, Hs * 2.2, (R() - 0.5) * 80)), to); b.scale.set(Hs / 140, 1, Hs / 140); scene.add(b); bolts.push({ b, t: 0 });
+      };
+      strike(stand.clone().add(v3(0, Hs * 0.5, 0))); strike(stand.clone().add(v3(sc * 0.3, Hs * 0.1, 0)));
+      fx.flash = Math.max(fx.flash || 0, 1); fx.light(stand.x, stand.y + Hs * 0.6, stand.z, 60, Hs * 6, 1.2, 0xfff2d8);
+      audio.thunder(); audio.crack(); audio.boom(3, camera.position.distanceTo(stand));
+      fx.ring(v3(stand.x, stand.y + 2, stand.z), Hs * 1.6, 1.4, 0xfff0e0, 0.6);
+      // 나타나는 자리 둘레를 날려 버림 (건물 뒤쪽)
+      if (inMap(stand)) A.blast(stand, Hs * 0.3, 45 * S.v, { lift: 0.5, silent: true, lod: 1, smokeColumn: false });
+      for (const b of D.buildingsNear(stand.x, stand.z, Hs * 0.5)) if (b !== wall && b.state !== 'gone') D.blastFrom(b, stand, 40 * S.v, { lift: 0.3, lod: 1 });
+      audio.drone(T_END); audio.rumble(4);
+      if (game) game.ensureView(Hs * 6, Hs * 2);
+      const footW = v3();
+      A.addActive({
+        update(dt) {
+          st.t += dt; const t = st.t;
+          for (const B of bolts) { B.t += dt; B.b.visible = B.t < 0.35 && (B.t < 0.1 || R() < 0.6); }
+          // 몸 크기: 증기 속에서 0 → 1, 사라질 때는 증기로 꺼지며 가라앉음
+          const grow = sm(0, T_APPEAR, t);
+          const fade = sm(T_STEAM + 1, T_END - 0.5, t);
+          m.scale.setScalar(Math.max(0.001, sc * (0.2 + 0.8 * grow) * (1 - 0.35 * fade)));
+          m.position.copy(stand); m.position.y -= fade * sc * 0.9;
+          m.visible = t < T_END - 0.3;
+          if (t < T_APPEAR + 0.6) steamAt(stand.clone().add(v3(0, Hs * (0.2 + R() * 0.7), 0)), 6, sc * 0.5, sc * 1.6, 10);
+          // 자세
+          const peer = sm(T_APPEAR, T_PEER - 1.5, t);              // 지붕 너머로 천천히 숙여 내려다봄
+          const wind = sm(T_PEER, T_WIND, t) * (1 - sm(T_WIND, T_KICK, t));
+          const kick = sm(T_WIND, T_KICK, t) * (1 - sm(T_KICK + 0.4, T_KICK + 1.6, t));
+          U.lean.rotation.x = 0.06 + 0.22 * peer - 0.28 * wind - 0.12 * kick;
+          U.head.rotation.x = 0.25 * peer * (1 - kick);
+          U.head.rotation.y = Math.sin(t * 0.4) * 0.08 * (1 - kick);
+          // 한 손은 건물 지붕을 짚음 (등장 직후부터 차기 전까지)
+          const grip = sm(T_APPEAR, T_APPEAR + 2, t) * (1 - sm(T_WIND - 0.4, T_WIND, t));
+          U.arms[0].sh.rotation.x = -1.25 * grip - 0.2 * kick; U.arms[0].el.rotation.x = -0.5 * grip;
+          U.arms[1].sh.rotation.x = 0.35 * wind - 0.5 * kick; U.arms[1].el.rotation.x = -0.3;
+          U.arms[1].sh.rotation.z = 0.25 * kick;
+          kickLeg.hip.rotation.x = 0.55 * wind - 1.25 * kick;
+          kickLeg.kn.rotation.x = 1.25 * wind + 0.15 * kick;
+          plantLeg.hip.rotation.x = 0.12 * kick; plantLeg.kn.rotation.x = 0.25 * wind;
+          // 숨: 몇 초마다 어깨에서 증기를 내뿜음
+          if (t > T_APPEAR && t < T_STEAM && R() < dt * 4) for (const v of U.vents) { v.getWorldPosition(footW); steamAt(footW, 1, sc * 0.12, sc * 0.6, 4); }
+          // 차기: 발이 건물 뒷면 아래를 강타 → 건물이 카메라 쪽으로 날아감
+          if (!st.kicked && t >= T_KICK) {
+            st.kicked = true;
+            kickLeg.foot.getWorldPosition(footW);
+            const hitP = impact.clone();
+            fx.addShake(3.2); fx.flash = Math.max(fx.flash || 0, 0.25);
+            audio.boom(3, camera.position.distanceTo(hitP)); audio.crumble(4);
+            const push = (180 + 40 * Math.log10(Math.max(1, P))) * S.v;
+            if (wall) {
+              A.blast(hitP, Math.max(rb * 0.9, sc * 0.18), 30 * S.v, { lift: 0.15, silent: true, lod: 0, noFx: true });
+              D.blastFrom(wall, hitP.clone().addScaledVector(f, sc * 0.4), push, { lift: 0.18, lod: 0, dy: -wallH * 0.2 });
+            } else A.blast(hitP, sc * 0.3, push * 0.4, { lift: 0.3 });
+            fx.dust(hitP, sc * 0.4); fx.ring(v3(hitP.x, c.y + 2, hitP.z), Hs * 0.9, 0.9, 0xc8b8a0, 0.5);
+            // 날아간 파편이 앞쪽 건물들을 차례로 때림 (거리에 따라 늦게, 약하게)
+            const reach = Hs * (2.2 + 0.4 * Math.log10(Math.max(1, P)));
+            for (const b of D.buildingsNear(c.x + toCam.x * reach * 0.5, c.z + toCam.z * reach * 0.5, reach * 0.55)) {
+              if (b === wall || b.state === 'gone') continue;
+              const dx = b.cx - c.x, dz = b.cz - c.z, d = Math.hypot(dx, dz);
+              if (d < 1 || d > reach) continue;
+              const cos = (dx * toCam.x + dz * toCam.z) / d;
+              if (cos < 0.55) continue;                       // 앞쪽 부채꼴만
+              st.thrown.push({ b, at: T_KICK + 0.25 + d / 110, pw: push * 0.35 * (1 - d / reach) * cos });
+            }
+          }
+          for (let i = st.thrown.length - 1; i >= 0; i--) {
+            const T = st.thrown[i];
+            if (t < T.at) continue;
+            st.thrown.splice(i, 1);
+            if (T.b.state !== 'gone') { D.blastFrom(T.b, c, T.pw, { lift: 0.15, lod: 1 }); if (R() < 0.4) fx.dust(v3(T.b.cx, T.b.baseY, T.b.cz), 10); }
+          }
+          // 증기 방출과 함께 사라짐: 뜨거운 바람이 둘레를 밀어냄
+          if (!st.steamed && t >= T_STEAM) {
+            st.steamed = true; audio.wind(4); audio.roar(2);
+            fx.ring(v3(stand.x, stand.y + 3, stand.z), Hs * 1.4, 2.4, 0xf4f0ea, 0.45);
+            D.ringPush(stand, 0, Hs * 1.2, 18 * S.v, 0.4);
+            if (P >= 10) for (const b of D.buildingsNear(stand.x, stand.z, Hs * 0.7)) if (b.state !== 'gone' && b !== wall) D.blastFrom(b, stand, 22 * S.v, { lift: 0.4, lod: 1 });
+          }
+          if (t > T_STEAM && t < T_END) steamAt(stand.clone().add(v3(0, sc * (0.4 + R() * 1.6), 0)), 3, sc * 0.4, sc * 1.5, 8);
+          return t < T_END + 2;
+        },
+        dispose() { disposeObj(scene, m); for (const o of U.own) o.dispose(); for (const B of bolts) disposeObj(scene, B.b); },
+      });
+      const g = cineGame(A); if (!g) return;
+      const headW = () => { const q = v3(); U.head.getWorldPosition(q); return q; };
+      const roofY = c.y + wallH;
+      // 카메라를 둘 빈 길바닥 찾기 (groundAt 은 건물 지붕 높이도 돌려주므로, 지붕이 없는 곳까지 조금씩 물러남)
+      const openSpot = (d0, sideK) => {
+        for (let k = 0; k < 24; k++) {
+          const q = c.clone().addScaledVector(toCam, d0 + k * 12).addScaledVector(side, sideK);
+          const g0 = grid.sample(q.x, q.z);
+          if (gnd(q.x, q.z) - g0 < 1.5 && !D.buildingsNear(q.x, q.z, 14).some(b => b.state === 'intact' && q.x > b.minx - 8 && q.x < b.maxx + 8 && q.z > b.minz - 8 && q.z < b.maxz + 8)) { q.y = g0; return q; }
+        }
+        const q = c.clone().addScaledVector(toCam, d0).addScaledVector(side, sideK); q.y = gnd(q.x, q.z); return q;
+      };
+      // 지붕 너머 얼굴이 보이는 자리: 얼굴에서 카메라까지 막는 게 없거나 '찰 건물' 하나뿐인 곳
+      const headAt = stand.clone().addScaledVector(toCam, sc * 0.3).setY(stand.y + Hs * 0.9);
+      const seesHead = (q) => {
+        if (!D.raycast) return true;
+        const d = v3().subVectors(q, headAt), L = d.length(); d.divideScalar(L);
+        const h = D.raycast(headAt, d, L);
+        return !h || h.dist > L - 6 || (h.info && h.info.b === wall && h.dist < L * 0.5);
+      };
+      const viewSpot = (dist, hK, sideK) => {
+        for (const rot of [0, 0.25, -0.25, 0.5, -0.5, 0.8, -0.8]) for (const dd of [0, 0.25, 0.5]) for (const hh of [0, 0.08, 0.16]) {
+          const a = Math.atan2(toCam.z, toCam.x) + rot, D2 = rb + Hs * (dist + dd);
+          const q = c.clone().add(v3(Math.cos(a) * D2, 0, Math.sin(a) * D2)).addScaledVector(side, sideK);
+          q.y = Math.max(gnd(q.x, q.z), grid.sample(q.x, q.z)) + 4 + Hs * (hK + hh);
+          if (seesHead(q)) return q;
+        }
+        const q = c.clone().addScaledVector(toCam, rb + Hs * dist); q.y = gnd(q.x, q.z) + Hs * (hK + 0.3); return q;
+      };
+      const spot1 = viewSpot(0.9, 0.02, Hs * 0.08);
+      const spot2a = viewSpot(1.2, 0.1, -Hs * 0.1);
+      const spot2b = spot2a.clone().lerp(headAt, 0.18);
+      g.cine.play([
+        // 1) 건물 앞 길바닥에서 올려다봄: 번쩍이며 건물 뒤에 무언가가 나타남
+        { dur: 2.4, caption: '초대형 거인', noAvoid: true, keepPos: true, update: (t, u, out) => {
+          out.pos.copy(spot1);
+          out.look.copy(c).setY(roofY).lerp(headAt, 0.45); out.fov = 58; out.smooth = 0.2;
+        } },
+        // 2) 천천히 다가가며 지붕 너머로 내려다보는 얼굴
+        { dur: T_WIND - 2.4 - 0.2, caption: '', noAvoid: true, keepPos: true, update: (t, u, out) => {
+          out.pos.copy(spot2a).lerp(spot2b, u * u * (3 - 2 * u));
+          out.look.copy(headW()).lerp(v3(c.x, roofY, c.z), 0.35 - u * 0.15); out.fov = 40 - u * 12; out.smooth = 0.12;
+        } },
+        // 3) 옆에서: 발로 차는 순간을 느리게
+        { dur: 4.2, caption: '', noAvoid: true, update: (t, u, out) => {
+          out.pos.copy(c).addScaledVector(side, Hs * 1.7).addScaledVector(toCam, Hs * 0.5); out.pos.y = grid.sample(out.pos.x, out.pos.z) + Hs * 0.45;
+          out.look.copy(c).addScaledVector(f, sc * 0.3).setY(c.y + Hs * 0.38); out.fov = 55;
+          const k = st.t - T_KICK; out.timeScale = k > -0.4 && k < 1.2 ? 0.45 : 1; out.smooth = 0.12;
+        } },
+        // 4) 높은 곳에서: 날아간 건물과 증기 속으로 사라지는 거인
+        { dur: T_END - T_WIND - 4 + 1.5, caption: '', update: (t, u, out) => {
+          out.pos.copy(c).addScaledVector(toCam, Hs * 2.2).addScaledVector(side, Hs * 0.9).add(v3(0, Hs * 1.1, 0));
+          out.look.copy(c).addScaledVector(toCam, Hs * 0.5).setY(c.y + Hs * 0.2); out.fov = 52; out.smooth = 0.1;
+        } },
+      ]);
+    },
+  },
 };
 
 export const MOVIE4_ENDINGS = {
   // ×100: 거인의 행진이 지평선 너머까지 모든 것을 밟고 지나감
   rumbling: (A, c) => { wipeMap(A, c, 'impact', { dur: 10 }); worldEnd(A, c, 'impact', { delay: 4 }); },
+  // ×100: 사라지며 내뿜은 증기 폭풍이 도시 전체를 날려 버림
+  colossal: (A, c) => { wipeMap(A, c, 'impact', { dur: 8 }); worldEnd(A, c, 'impact', { delay: 3 }); },
 };

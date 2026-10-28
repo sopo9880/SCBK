@@ -193,9 +193,10 @@ export class Cinematic {
     const gy = this.game.groundAt ? this.game.groundAt(this._smoothPos.x, this._smoothPos.z) : this.game.grid.sample(this._smoothPos.x, this._smoothPos.z);
     if (this._smoothPos.y < gy + 2) this._smoothPos.y = gy + 2;
     // 건물에 가려지면 가린 건물 앞으로 당겨옴 (부드럽게)
-    const fix = this._fixTarget(this._smoothPos, this._smoothLook);
+    // keepPos 샷은 일부러 건물 너머를 보는 구도라 가린 건물 앞으로 당기거나 올리지 않음
+    const fix = s.keepPos ? (this._tmpFix || (this._tmpFix = new THREE.Vector3())).copy(this._smoothPos) : this._fixTarget(this._smoothPos, this._smoothLook);
     // 언덕(지도 밖 산 포함)이 시선을 가리면 카메라를 그만큼 올림
-    if (this.game.groundAt) {
+    if (this.game.groundAt && !s.keepPos) {
       const L = this._smoothLook, gA = this.game;
       let need = 0;
       for (let i = 1; i < 10; i++) {
