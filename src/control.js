@@ -1,5 +1,6 @@
 // 발사 관제실: 전술 지도에서 표적을 찍고, 무기를 고르고, 덮개·열쇠·발사 버튼으로 쏘는 화면
 // (게임용 연출. 버튼과 화면은 모두 자체 디자인)
+import * as THREE from 'three';
 import { WEAPONS, weaponIcon } from './weapons/defs.js';
 
 const LAUNCHABLE = ['missile', 'guided', 'cruise', 'hypersonic', 'mlrs', 'pgm', 'naval', 'rod', 'bomber', 'icbm', 'nuke', 'tsar', 'antimatter', 'asteroid'];
@@ -10,7 +11,7 @@ function build() {
   el.id = 'control'; el.hidden = true;
   el.innerHTML = `
     <div class="cr-map"><div class="cr-head"><b>전술 지도</b><span id="crCoord">표적 없음</span></div><canvas id="crCanvas" width="720" height="720"></canvas><div class="cr-hint">지도를 눌러 표적 지정</div></div>
-    <div class="cr-live"><div class="cr-head"><b>실시간 화면 · 위에서</b><span class="cr-rec">● LIVE</span></div><div class="cr-zoom">휠 · ↑↓ 줌</div></div>
+    <div class="cr-live"><div class="cr-head"><b>실시간 화면 · 위에서</b><span class="cr-rec">● LIVE</span></div><div class="cr-zoom">클릭 · 표적 지정  ·  휠 · ↑↓ 줌</div></div>
     <div class="cr-panel">
       <div class="cr-head"><b>발사 관제실</b><button class="cr-x" id="crClose" title="닫기 (Esc)">✕</button></div>
       <div class="cr-sec"><span>무기</span><div class="cr-weps" id="crWeps"></div></div>
@@ -107,17 +108,35 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
     b.onclick = () => { st.wep = id; for (const x of wb.children) x.classList.toggle('on', x === b); st.key = false; game.audio.click(); status(); };
     wb.appendChild(b);
   }
-  cv.onpointerdown = (e) => {
-    const r = cv.getBoundingClientRect();
-    const [x, z] = toW((e.clientX - r.left) / r.width * N, (e.clientY - r.top) / r.height * N);
+  // 실시간 화면에 표적 고리 (바닥에 눕힌 빨간 고리, 위에서 보이도록 항상 맨 위에 그림)
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xff4a2a, transparent: true, opacity: 0.9, depthTest: false, side: THREE.DoubleSide, toneMapped: false });
+  const ringMesh = new THREE.Group();
+  const ring1 = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 64), ringMat); ring1.rotation.x = -Math.PI / 2; ringMesh.add(ring1);
+  for (let i = 0; i < 4; i++) { const tk = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.5), ringMat); tk.rotation.x = -Math.PI / 2; tk.rotation.z = i * Math.PI / 2; tk.position.set(Math.sin(i * Math.PI / 2) * 1.2, 0, Math.cos(i * Math.PI / 2) * 1.2); ringMesh.add(tk); }
+  ringMesh.renderOrder = 999; ringMesh.traverse(o => { o.renderOrder = 999; o.frustumCulled = false; }); ringMesh.visible = false;
+  game.scene.add(ringMesh);
+  const setTarget = (x, z, recenter) => {
     const h = span / 2 * 0.95;
     st.tgt = { x: Math.max(-h, Math.min(h, x)), z: Math.max(-h, Math.min(h, z)) };
     const col = String.fromCharCode(65 + Math.min(9, Math.floor((st.tgt.x / span + 0.5) * 10))), row = Math.min(10, Math.floor((st.tgt.z / span + 0.5) * 10) + 1);
     $(el, '#crCoord').textContent = `표적 ${col}-${row}  (${Math.round(st.tgt.x)}, ${Math.round(st.tgt.z)})`;
-    // 실시간 화면도 표적 위로
-    game.setOverhead(st.tgt.x, st.tgt.z);
+    // 전술 지도에서 찍으면 실시간 화면도 표적 위로 (실시간 화면에서 찍었으면 그대로)
+    if (recenter) game.setOverhead(st.tgt.x, st.tgt.z);
+    ringMesh.position.set(st.tgt.x, grid.sample(st.tgt.x, st.tgt.z) + 1, st.tgt.z); ringMesh.visible = true;
     status();
     game.audio.resume(); game.audio.beep(1200, 0.06);
+  };
+  cv.onpointerdown = (e) => {
+    const r = cv.getBoundingClientRect();
+    const [x, z] = toW((e.clientX - r.left) / r.width * N, (e.clientY - r.top) / r.height * N);
+    setTarget(x, z, true);
+  };
+  // 실시간 화면(위에서 본 실제 도시)을 눌러도 그 자리가 표적
+  const live = $(el, '.cr-live');
+  live.onpointerdown = (e) => {
+    if (e.button !== 0) return;
+    const hit = game.pickAt(e.clientX, e.clientY);
+    if (hit) setTarget(hit.point.x, hit.point.z, false);
   };
   $(el, '#crCover').onclick = () => { st.cover = !st.cover; if (!st.cover) st.key = false; game.audio.clack(); status(); };
   $(el, '#crKey').onclick = () => { if (!st.cover || !st.tgt) return; st.key = !st.key; game.audio.click(); if (st.key) setTimeout(() => game.audio.beep(1500, 0.05), 90); status(); };
@@ -132,14 +151,16 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
     el.hidden = true; document.body.classList.remove('control');
     window.removeEventListener('keydown', onKey, true);
     el.removeEventListener('wheel', onWheel);
+    game.scene.remove(ringMesh); ringMesh.traverse(o => { if (o.geometry) o.geometry.dispose(); }); ringMat.dispose();
+    live.onpointerdown = null;
     game.endOverhead();
     if (!launched) game.audio.beep(440, 0.1);
     if (!launched && onClose) onClose();
   };
   const onKey = (e) => {
     if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); return; }
-    if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); e.stopPropagation(); game.zoomOverhead(1 / 1.2); }
-    else if (e.code === 'ArrowDown' || e.code === 'KeyS') { e.preventDefault(); e.stopPropagation(); game.zoomOverhead(1.2); }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') { e.preventDefault(); e.stopPropagation(); game.zoomOverhead(1 / 1.2); game.audio.zoomTick(true); }
+    else if (e.code === 'ArrowDown' || e.code === 'KeyS') { e.preventDefault(); e.stopPropagation(); game.zoomOverhead(1.2); game.audio.zoomTick(false); }
   };
   window.addEventListener('keydown', onKey, true);
   $(el, '#crClose').onclick = () => close(false);
@@ -152,11 +173,13 @@ export function openControl(game, { power = 3, onLaunch, onClose } = {}) {
     ring.style.strokeDashoffset = `${C * (1 - st.hold)}`;
     if (st.hold >= 1) { close(true); if (onLaunch) onLaunch(st.wep, st.tgt); return; }
     draw();
+    // 표적 고리: 위력 범위와 화면 높이에 맞춘 크기, 살짝 깜빡임
+    if (ringMesh.visible) { const oh = game.overhead ? game.overhead.h : 400; ringMesh.scale.setScalar(Math.max(radius(), oh * 0.035)); ringMat.opacity = 0.6 + 0.35 * Math.sin(st.t * 6); }
     st.raf = requestAnimationFrame(tick);
   };
   // 실시간 화면: 위에서 내려다보기 고정 (휠·위아래 방향키로 줌)
   { const t0 = game.controls.target; game.startOverhead(t0.x, t0.z, Math.min(span * 0.9, 600)); }
-  const onWheel = (e) => { e.preventDefault(); game.zoomOverhead(e.deltaY > 0 ? 1.15 : 1 / 1.15); };
+  const onWheel = (e) => { e.preventDefault(); game.zoomOverhead(e.deltaY > 0 ? 1.15 : 1 / 1.15); game.audio.zoomTick(e.deltaY < 0); };
   el.addEventListener('wheel', onWheel, { passive: false });
   el.hidden = false; document.body.classList.add('control');
   game.audio.resume(); game.audio.beep(660, 0.08); setTimeout(() => game.audio.beep(990, 0.1), 110);

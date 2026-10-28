@@ -279,7 +279,7 @@ body.control #hud > #toasts { opacity: 1 !important; }
 #control .cr-map { align-self: center; }
 #control canvas { width: 100%; aspect-ratio: 1; cursor: crosshair; display: block; }
 #control .cr-hint { font-size: 11px; opacity: .6; padding: 6px 10px; }
-#control .cr-live { border: 1px solid rgba(120,255,180,.35); border-radius: 6px; pointer-events: none; align-self: stretch; }
+#control .cr-live { border: 1px solid rgba(120,255,180,.35); border-radius: 6px; pointer-events: auto; cursor: crosshair; align-self: stretch; }
 #control .cr-live .cr-head { background: rgba(4,18,12,.8); }
 #control .cr-rec { color: #ff6a50; animation: crBlink 1.2s steps(2) infinite; }
 @keyframes crBlink { 50% { opacity: .2; } }

@@ -490,6 +490,15 @@ export class Game {
     window.addEventListener('blur', this._onBlur);
   }
 
+  // 화면 좌표(clientX, clientY)가 가리키는 곳 (건물·조각·지형)
+  pickAt(cx, cy) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const m = this._mouse.clone().set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    this.camera.updateMatrixWorld();
+    this._ray.setFromCamera(m, this.camera);
+    const o = this._ray.ray.origin, d = this._ray.ray.direction;
+    return this.D.raycast({ x: o.x, y: o.y, z: o.z }, { x: d.x, y: d.y, z: d.z }, 20000);
+  }
   pick() {
     this.camera.updateMatrixWorld();
     this._ray.setFromCamera(this._mouse, this.camera);
