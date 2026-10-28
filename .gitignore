@@ -4,3 +4,4 @@ app/bundle.js
 test/.out*.mjs
 *.log
 .DS_Store
+node_modules
