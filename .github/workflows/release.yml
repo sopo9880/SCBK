@@ -54,3 +54,51 @@ jobs:
           esac
           gh release create "$VER" dist/*.exe dist/*.zip dist/SHA256SUMS.txt \
             --target "$GITHUB_SHA" --title "WreckEarth $VER" --notes-file RELEASE_NOTES.md $FLAG
+
+  # 맥 버전: 윈도우 쪽이 릴리스를 만든 뒤, 같은 릴리스에 맥 파일(dmg, zip)을 덧붙임
+  # 애플 개발자 서명 없이 임시(ad-hoc) 서명만 하므로 처음 열 때 경고가 뜸 → 릴리스 설명 참고
+  # 아직 시험 단계라 버전에 '-' 가 있는 시험판에만 만듦
+  mac:
+    needs: release
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prerelease only
+        id: gate
+        shell: bash
+        run: |
+          VER="v$(node -p "require('./package.json').version")"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          case "$VER" in *-*) echo "go=1" >> "$GITHUB_OUTPUT" ;; *) echo "정식 버전이라 맥 빌드는 건너뜀"; echo "go=0" >> "$GITHUB_OUTPUT" ;; esac
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.go == '1'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.gate.outputs.go == '1'
+      - name: Bundle renderer
+        if: steps.gate.outputs.go == '1'
+        run: npm run bundle
+      - name: Build macOS packages (universal dmg + zip, ad-hoc signed)
+        if: steps.gate.outputs.go == '1'
+        run: npx electron-builder --mac --universal --publish never
+      - name: Check signature
+        if: steps.gate.outputs.go == '1'
+        run: |
+          APP=$(ls -d dist/mac-universal/*.app | head -1)
+          codesign -dv "$APP" 2>&1 | head -5
+          codesign --verify --deep --strict "$APP" && echo "signature ok"
+          lipo -archs "$APP/Contents/MacOS/"* 
+      - name: Upload to the release
+        if: steps.gate.outputs.go == '1'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          cd dist
+          shasum -a 256 *.dmg *-mac-*.zip > SHA256SUMS-mac.txt
+          cat SHA256SUMS-mac.txt
+          gh release upload "${{ steps.gate.outputs.ver }}" *.dmg *-mac-*.zip SHA256SUMS-mac.txt --clobber

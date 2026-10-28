@@ -1,13 +1,14 @@
 {
   "name": "wreck-earth",
-  "version": "2.0.0-beta.3",
+  "version": "2.0.0-beta.4",
   "description": "지도 위 어디든 진짜 물리로 부수는 게임",
   "main": "electron/main.cjs",
   "scripts": {
     "bundle": "node scripts/build.mjs",
     "start": "npm run bundle && electron .",
     "dist": "npm run bundle && electron-builder --win --x64",
-    "test": "esbuild test/fracture.test.mjs --bundle --platform=node --format=esm --outfile=test/.out1.mjs --log-level=warning && node test/.out1.mjs && esbuild test/real.test.mjs --bundle --platform=node --format=esm --outfile=test/.out2.mjs --log-level=warning && node test/.out2.mjs && node test/rapier.test.mjs && esbuild test/v12.test.mjs --bundle --platform=node --format=esm --outfile=test/.out3.mjs --log-level=warning && node test/.out3.mjs && esbuild test/v13.test.mjs --bundle --platform=node --format=esm --outfile=test/.out4.mjs --log-level=warning && node test/.out4.mjs"
+    "test": "esbuild test/fracture.test.mjs --bundle --platform=node --format=esm --outfile=test/.out1.mjs --log-level=warning && node test/.out1.mjs && esbuild test/real.test.mjs --bundle --platform=node --format=esm --outfile=test/.out2.mjs --log-level=warning && node test/.out2.mjs && node test/rapier.test.mjs && esbuild test/v12.test.mjs --bundle --platform=node --format=esm --outfile=test/.out3.mjs --log-level=warning && node test/.out3.mjs && esbuild test/v13.test.mjs --bundle --platform=node --format=esm --outfile=test/.out4.mjs --log-level=warning && node test/.out4.mjs",
+    "dist:mac": "npm run bundle && electron-builder --mac --universal"
   },
   "author": "WreckEarth",
   "dependencies": {
@@ -55,6 +56,30 @@
     },
     "portable": {
       "artifactName": "WreckEarth-${version}-portable.exe"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon_1024.png",
+      "category": "public.app-category.games",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "WreckEarth-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "WreckEarth-${version}-mac-${arch}.${ext}"
     }
   },
   "repository": {

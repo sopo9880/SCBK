@@ -136,7 +136,15 @@ function createWindow() {
       backgroundThrottling: false, spellcheck: false,
     },
   });
-  Menu.setApplicationMenu(null);
+  // 윈도우는 메뉴 없이. 맥은 메뉴가 없으면 Cmd+Q·복사·붙여넣기·전체 화면이 안 되므로 최소한만 둠 (새로고침은 넣지 않음)
+  if (process.platform === 'darwin') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([
+      { role: 'appMenu', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] },
+      { role: 'editMenu' },
+      { label: '보기', submenu: [{ role: 'togglefullscreen' }] },
+      { role: 'windowMenu' },
+    ]));
+  } else Menu.setApplicationMenu(null);
   win.once('ready-to-show', () => { win.maximize(); win.show(); });
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') { win.webContents.toggleDevTools(); e.preventDefault(); }
