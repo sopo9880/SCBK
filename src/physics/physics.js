@@ -161,10 +161,12 @@ export class Physics {
     this._frame++;
     this._since = (this._since || 0) + d;
     const I = Math.max(1 / 60, Math.min(4 / 60, this.gapAvg || 1 / 60));
+    // GPU 에 조각이 하나도 없으면 읽어 올 결과도 없으니 받은 시각을 맡긴 시각에 맞춰 둠
+    if (this.mode === 'gpu' && !this.gpu.staging.some(x => x.busy) && (this.gpu.top - this.gpu.free.length) <= 0) this._gotResult(this.gpu.simT || 0);
     const clock = this._clock(I);
     const behind = Math.max(0, clock - this.simT);                 // 맡겼지만 아직 못 받은 만큼
-    const extra = this.mode === 'gpu' ? behind : 0;
-    this._behindMax = Math.max(extra, (this._behindMax || 0) - real * 0.02);
+    const extra = this.mode === 'gpu' ? Math.min(0.1, behind) : 0;
+    this._behindMax = Math.max(extra, (this._behindMax || 0) - real * 0.1);
     const L = I + (this.mode === 'gpu' ? Math.max(0, this._behindMax - I) : 0) + 0.001;
     this.lag = L;
     const target = clock - L;
