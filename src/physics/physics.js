@@ -13,15 +13,50 @@ class Body {
     this.p = { x, y, z }; this.q = { x: 0, y: 0, z: 0, w: 1 }; this.v = { x: 0, y: 0, z: 0 };
     this.m = mass; this.dyn = dyn; this.sl = false; this.gs = 1; this.alive = true;
   }
-  translation() { return this.p; }
-  rotation() { return this.q; }
+  // 화면에 그릴 자세: 물리 결과 두 개 사이를 화면 시각에 맞춰 이어 줌 (물리 60Hz, 화면 144Hz 여도 부드럽게)
+  translation() { return this._interp() ? this.rp : this.p; }
+  rotation() { return this._interp() ? this.rq : this.q; }
+  _interp() {
+    const ph = this.phys;
+    if (!this.dyn || this.t0 === undefined || !ph.smooth) return false;
+    if (this._fr === ph._frame) return this._ok;
+    this._fr = ph._frame;
+    const span = this.t1 - this.t0;
+    let a = span > 1e-6 ? (ph.dispT - this.t0) / span : 1;
+    if (this.sl || a >= 1) {
+      // 최신 결과보다 앞선 시각: 잠깐(최대 1/120초)은 속도로 내다보고, 그 이상은 최신 자세에서 기다림
+      const ex = this.sl ? 0 : Math.min(ph.dispT - this.t1, 1 / 120);
+      if (ex <= 0) { this._ok = false; return false; }
+      const rp = this.rp || (this.rp = { x: 0, y: 0, z: 0 });
+      rp.x = this.p.x + this.v.x * ex; rp.y = this.p.y + this.v.y * ex; rp.z = this.p.z + this.v.z * ex;
+      this.rq = this.q; this._ok = true; return true;
+    }
+    if (a < 0) a = 0;
+    const p0 = this.p0, p1 = this.p, q0 = this.q0, q1 = this.q;
+    const rp = this.rp || (this.rp = { x: 0, y: 0, z: 0 });
+    rp.x = p0.x + (p1.x - p0.x) * a; rp.y = p0.y + (p1.y - p0.y) * a; rp.z = p0.z + (p1.z - p0.z) * a;
+    // 회전: 짧은 쪽으로 정규화 선형 보간 (1/60초 사이 회전은 작아서 충분)
+    const d = q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w, sg = d < 0 ? -1 : 1, b = 1 - a;
+    const rq = this.rqb || (this.rqb = { x: 0, y: 0, z: 0, w: 1 });
+    rq.x = q0.x * b + q1.x * a * sg; rq.y = q0.y * b + q1.y * a * sg; rq.z = q0.z * b + q1.z * a * sg; rq.w = q0.w * b + q1.w * a * sg;
+    const l = 1 / (Math.hypot(rq.x, rq.y, rq.z, rq.w) || 1); rq.x *= l; rq.y *= l; rq.z *= l; rq.w *= l;
+    this.rq = rq; this._ok = true; return true;
+  }
+  // 새 물리 결과 받기 (T = 그 결과의 시뮬레이션 시각)
+  _set(T, px, py, pz, qx, qy, qz, qw) {
+    const fresh = this.t1 === undefined || T - this.t1 > 0.1 || T <= this.t1;
+    if (fresh) { this.p0 = { x: px, y: py, z: pz }; this.q0 = { x: qx, y: qy, z: qz, w: qw }; this.t0 = T - 1 / 60; }
+    else { this.p0 = this.p; this.q0 = this.q; this.t0 = this.t1; }
+    this.p = { x: px, y: py, z: pz }; this.q = { x: qx, y: qy, z: qz, w: qw }; this.t1 = T;
+    this._fr = -1;
+  }
   linvel() { return this.v; }
   isSleeping() { return this.sl; }
   mass() { return this.m; }
   isDynamic() { return this.dyn; }
   setDynamic(on) {
     if (this.dyn === on) return;
-    this.dyn = on; this.sl = false;
+    this.dyn = on; this.sl = false; this.t0 = this.t1 = undefined;
     if (!on) { this.v = { x: 0, y: 0, z: 0 }; this.phys._dyn.delete(this); } else this.phys._dyn.add(this);
     this.phys._cmd(['dyn', this.id, on ? 1 : 0]);
   }
@@ -84,11 +119,13 @@ export class Physics {
     this.simDt = 0;          // 마지막 갱신 이후 진행된 시뮬레이션 시간 (소비형)
     this.timeScale = 1;
     this._inflight = false; this._dtAcc = 0;
+    // 화면 보간: simT = 받은 결과 중 가장 최신 시뮬레이션 시각, dispT = 지금 그릴 시각 (simT 보다 lag 만큼 뒤)
+    this.smooth = true; this.simT = 0; this.dispT = 0; this._frame = 0;
     this.worker = worker || null;
     if (gpu) {
       // GPU 물리: 같은 스레드에서 명령을 모아 GPU 로 보내고, 결과는 비동기로 받음
       this.mode = 'gpu'; this.gpu = gpu;
-      gpu.onState = (n, f) => this._applyGPU(n, f);
+      gpu.onState = (n, f, T) => this._applyGPU(n, f, T);
     } else if (this.worker) {
       this.mode = 'worker';
       this.worker.onmessage = (e) => this._onMsg(e.data);
@@ -97,6 +134,27 @@ export class Physics {
       this.mode = 'inline';
       this.core = new PhysCore(RAPIER);
     }
+    // 결과 간격 + 도착 지연을 덮을 만큼 뒤에서 그림 (밀리면 조금씩 늘리고, 여유가 있으면 줄임)
+    this.lagBase = this.mode === 'inline' ? 1 / 60 : this.mode === 'worker' ? 1.3 / 60 : 1.5 / 60;
+    this.lag = this.lagBase;
+  }
+
+  // 매 프레임 그릴 시각을 정함
+  // est: 지금의 시뮬레이션 시각 추정 (최신 결과 시각 + 그 뒤로 흐른 시간, 결과가 늦으면 조금만 앞서 나감)
+  // dispT: est 보다 lag 만큼 뒤 → 항상 받아 둔 두 결과 사이에 있어서 이어 그릴 수 있음
+  _advanceDisplay(d, real) {
+    this._frame++;
+    this.est = (this.est || 0) + d;
+    if (this.est < this.simT) this.est = this.simT;
+    const ahead = this.est - this.simT, maxAhead = 2.5 / 60;
+    if (ahead > maxAhead) this.est = this.simT + maxAhead;
+    // 그린 시각이 최신 결과를 넘어서면(결과가 늦음) 다음부터 조금 더 뒤에서 그림, 여유가 있으면 천천히 줄임
+    if (this.dispT > this.simT) this.lag = Math.min(0.075, this.lag + 0.003);
+    else this.lag = Math.max(this.lagBase, this.lag - real * 0.004);
+    const target = this.est - this.lag;
+    this.dispT += d;
+    if (Math.abs(target - this.dispT) > 0.15) this.dispT = target;   // 크게 벌어지면 바로 맞춤
+    else this.dispT += (target - this.dispT) * (1 - Math.exp(-real * 10));
   }
 
   // GPU 물리를 고르면 WebGPU 로, 안 되면 워커, 그것도 안 되면 같은 스레드에서 계산
@@ -208,6 +266,7 @@ export class Physics {
   // ---- 진행 ----
   step(dt) {
     const d = Math.min(dt, 0.1) * this.timeScale;
+    this._advanceDisplay(d, Math.min(dt, 0.1));
     const tl = performance.now();
     this._stepLight(d);
     this.lightMs = this.lightMs * 0.9 + (performance.now() - tl) * 0.1;
@@ -226,8 +285,8 @@ export class Physics {
       const maxSteps = (this.core.stepMs > 9 ? 1 : 2) * Math.max(1, Math.ceil(this.timeScale));
       const st = this.core.step(d, maxSteps);
       this.stepMs = this.core.stepMs;
-      const s = this.core.snapshot();
-      this._apply(s.ids, s.f);
+      this.simT += st.steps / 60;
+      if (st.steps > 0) { const s = this.core.snapshot(); this._apply(s.ids, s.f, this.simT); }
       this.simDt += st.steps / 60;
       return;
     }
@@ -244,32 +303,32 @@ export class Physics {
     if (m.type !== 'state') return;
     if (m.err) { this.lastErr = m.err; if (!this._errShown) { this._errShown = true; console.warn('physics worker:', m.err); } }
     this.stepMs = m.stepMs;
-    this._apply(m.ids, m.f);
+    this.simT += m.simDt;
+    this._apply(m.ids, m.f, this.simT);
     this.simDt += m.simDt;
   }
 
-  _apply(ids, f) {
+  _apply(ids, f, T) {
     for (let k = 0; k < ids.length; k++) {
       const b = this.bodies.get(ids[k]);
       if (!b || !b.dyn) continue;
       const o = k * STRIDE;
-      b.p = { x: f[o], y: f[o + 1], z: f[o + 2] };
-      b.q = { x: f[o + 3], y: f[o + 4], z: f[o + 5], w: f[o + 6] };
+      b._set(T, f[o], f[o + 1], f[o + 2], f[o + 3], f[o + 4], f[o + 5], f[o + 6]);
       b.v = { x: f[o + 7], y: f[o + 8], z: f[o + 9] };
       b.sl = f[o + 10] > 0.5;
     }
   }
 
   // GPU 결과: body 마다 [x y z 칸, 회전 4, 속도 3, 잠] (칸 → id)
-  _applyGPU(n, f) {
+  _applyGPU(n, f, T) {
     const ids = this.gpu.ids;
+    if (T > this.simT) this.simT = T;
     for (let k = 0; k < n; k++) {
       const o = k * 12;
       const id = ids[f[o + 3] | 0]; if (id < 0) continue;
       const b = this.bodies.get(id);
       if (!b || !b.dyn) continue;
-      b.p = { x: f[o], y: f[o + 1], z: f[o + 2] };
-      b.q = { x: f[o + 4], y: f[o + 5], z: f[o + 6], w: f[o + 7] };
+      b._set(T, f[o], f[o + 1], f[o + 2], f[o + 4], f[o + 5], f[o + 6], f[o + 7]);
       b.v = { x: f[o + 8], y: f[o + 9], z: f[o + 10] };
       b.sl = f[o + 11] > 0.5;
     }

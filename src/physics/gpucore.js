@@ -332,10 +332,12 @@ export class GPUCore {
     this._acc = Math.min(this._acc + Math.min(dt, 0.1), (1 / 60) * maxSteps);
     const frameStep = 1 / 60;
     let frames = 0;
-    while (this._acc >= frameStep - 1e-6 && frames < maxSteps) { this._acc -= frameStep; frames++; }
     // GPU 가 밀려 있으면(읽기 2개 이상 대기) 이번 프레임은 쉬어서 일이 끝없이 쌓이지 않게 (물리가 잠시 느려짐)
+    // 쉬는 동안 쌓인 시간은 그대로 두었다가 다음 프레임에 이어서 계산
     const inflight = this.staging.filter(x => x.busy).length;
-    if (inflight >= 2) { frames = 0; this.behind = (this.behind || 0) + 1; }
+    if (inflight >= 2) this.behind = (this.behind || 0) + 1;
+    else while (this._acc >= frameStep - 1e-6 && frames < maxSteps) { this._acc -= frameStep; frames++; }
+    this.simT = (this.simT || 0) + frames * frameStep;   // 이번에 계산한 결과가 나타내는 시뮬레이션 시각
     const nsub = frames * this.substeps;
     const wg = (n) => Math.ceil(n / 64);
     const run = (pass, name, n) => { pass.setPipeline(this.pipes[name]); pass.setBindGroup(0, this.group); pass.dispatchWorkgroups(Math.max(1, wg(n))); };
@@ -373,6 +375,7 @@ export class GPUCore {
   }
 
   _readback() {
+    const T = this.simT || 0;
     // 잠든 순간 같은 한 번뿐인 알림을 놓치지 않게, 비어 있는 읽기 버퍼가 없으면 새로 만듦
     let st = this.staging.find(s => !s.busy && !s.old);
     if (!st) {
@@ -391,7 +394,7 @@ export class GPUCore {
       const n = new Uint32Array(a, 0, 4)[0];
       const f = new Float32Array(a, 16, n * 12).slice();
       st.b.unmap(); st.busy = false; if (st.old) { st.b.destroy(); this.staging = this.staging.filter(x => x !== st); }
-      if (this.onState) this.onState(n, f);
+      if (this.onState) this.onState(n, f, T);
     }).catch(() => { st.busy = false; });
   }
 
