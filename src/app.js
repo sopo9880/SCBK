@@ -362,12 +362,15 @@ const hud = {
     WEAPONS.filter(x => x.cat === cat).forEach((wp, i) => {
       const b = document.createElement('button');
       b.className = 'wbtn ' + wp.id; b.dataset.id = wp.id; b.title = `${wp.name} — ${wp.desc}`;
-      const key = i < 9 ? String(i + 1) : i === 9 ? '0' : i === 19 ? '⇧0' : '⇧' + (i - 9);
+      // 1~0, Shift+1~0, Alt(맥은 Option)+1~0
+      const d = (i % 10 === 9) ? '0' : String(i % 10 + 1), alt = /Mac/i.test(navigator.platform) ? '⌥' : 'Alt';
+      const key = i < 10 ? d : i < 20 ? '⇧' + d : alt + d;
       b.innerHTML = `<kbd>${key}</kbd>${weaponIcon(wp.id)}<span>${wp.name}</span>`;
       b.onclick = () => this.select(wp.id);
       w.appendChild(b);
     });
     if (game) for (const b of document.querySelectorAll('.wbtn')) b.classList.toggle('on', b.dataset.id === game.arsenal.current);
+    layoutWeapons();
   },
   select(id) {
     if (!game) return;
@@ -551,6 +554,11 @@ function initHud() {
       [K.k_powDown]: () => { const p = $('#power'); p.value = Math.max(0, +p.value - 0.05); p.oninput(); }, [K.k_powUp]: () => { const p = $('#power'); p.value = Math.min(1, +p.value + 0.05); p.oninput(); } };
     delete acts[''];
     if (acts[e.code]) { e.preventDefault(); acts[e.code](); return; }
+    // 일반 화면의 Space = UI 숨기기/보이기 (키 설정에서 Space 를 다른 기능에 직접 지정했으면 쓰지 않음)
+    if (e.code === 'Space' && !e.repeat && !Object.keys(K).some(k => k.startsWith('k_') && K[k] === 'Space')) {
+      const modal = (id) => { const m = document.getElementById(id); return m && !m.hidden; };
+      if (!modal('control') && !modal('vehPick') && $('#help').hidden) { e.preventDefault(); $('#hud').classList.toggle('hide-ui'); return; }
+    }
     switch (e.code) {
       case 'F3': e.preventDefault(); $('#perfOverlay').hidden = !$('#perfOverlay').hidden; break;
       case 'Escape': if (!$('#help').hidden) help(); else toMenu(); break;
@@ -606,3 +614,24 @@ function toMenu() {
 initMenu();
 initHud();
 window.__start = start;
+
+// 무기 목록이 화면 폭을 넘으면 여러 줄로 나눔 (버튼을 좁히면 이름이 잘려서, 줄을 늘리는 쪽을 먼저)
+// 가운데 정렬된 목록이 오른쪽 도구 막대와 겹치지 않게 양쪽 여백을 똑같이 뺌
+function layoutWeapons() {
+  const w = document.getElementById('weapons'); if (!w) return;
+  const n = w.children.length; if (!n) return;
+  const GAP = 6, PAD = 14, BW = 74, MINW = 64;
+  const tools = document.querySelector('.tools');
+  const side = (tools ? tools.offsetWidth : 48) + 16 + 14;
+  const avail = Math.max(320, window.innerWidth - side * 2);
+  const fit = (cols) => Math.floor((avail - PAD - GAP * (cols - 1)) / cols);
+  let rows = 1;
+  while (rows < 4 && fit(Math.ceil(n / rows)) < BW && fit(Math.ceil(n / (rows + 1))) >= MINW) rows++;
+  const cols = Math.ceil(n / rows);
+  const bw = Math.max(MINW, Math.min(BW, fit(cols)));
+  w.style.display = 'grid';
+  w.style.gridTemplateColumns = `repeat(${cols}, ${bw}px)`;
+  w.dataset.rows = rows;
+  for (const b of w.children) b.style.width = bw + 'px';
+}
+window.addEventListener('resize', () => layoutWeapons());

@@ -134,7 +134,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px;
 .dock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .weapons { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 7px; backdrop-filter: blur(12px); }
 .wbtn { position: relative; width: 74px; height: 66px; border-radius: 11px; border: 1px solid transparent; background: rgba(255, 255, 255, 0.03); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #c9d1d9; transition: all .1s; }
-.wbtn span { font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.wbtn span { font-size: 11px; font-weight: 700; line-height: 1.15; text-align: center; word-break: keep-all; max-width: 100%; padding: 0 3px; box-sizing: border-box; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wbtn { height: 70px; gap: 3px; }
+.weapons[data-rows="2"] .wbtn, .weapons[data-rows="3"] .wbtn { height: 64px; }
 .wbtn kbd { position: absolute; top: 4px; left: 6px; font: 700 10px var(--font); color: var(--muted); }
 .wbtn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .wbtn.on { background: var(--accent); color: #fff; border-color: rgba(255, 255, 255, 0.35); box-shadow: 0 6px 22px rgba(255, 91, 31, 0.45); }

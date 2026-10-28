@@ -154,8 +154,13 @@ export const MOVIE4 = {
       // 와이어 부대: 가운데 쪽 거인 1~2명을 쓰러뜨림
       const T_ATK = 19, T_CUT = 5.5;                  // 공격 시작(4번째 장면과 맞춤), 쓰러질 때까지
       const order = G.map((gi, i) => [Math.abs(gi.base.clone().sub(c).dot(side)), i]).sort((a, b) => a[0] - b[0]);
-      const victims = [G[order[0][1]]]; if (P >= 10 && G.length > 3) victims.push(G[order[1][1]]);
+      // 쓰러뜨릴 거인: 매번 0~3명, 지도 안을 지나가서 쓰러지는 게 보이는 거인 중 무작위
+      const nVict = (() => { const r = R(); return r < 0.15 ? 0 : r < 0.55 ? 1 : r < 0.85 ? 2 : 3; })();
+      const pool = G.filter(gi => Math.abs(gi.lane) < half * 0.8);
+      const victims = [];
+      while (victims.length < Math.min(nVict, pool.length)) victims.push(pool.splice(Math.floor(R() * pool.length), 1)[0]);
       victims.forEach((v, k) => { v.victim = true; v.tAtk = T_ATK + k * 2.2; });
+      const hero = G[order[0][1]];                    // 아무도 안 쓰러질 때 가까이서 보여 줄 가운데 거인
       const squad = [];
       const wireMat = new THREE.LineBasicMaterial({ color: 0xe8e8e8, transparent: true, opacity: 0.85 });
       for (const v of victims) for (let i = 0; i < 6; i++) {
@@ -316,7 +321,14 @@ export const MOVIE4 = {
           out.pos.copy(L).addScaledVector(side, W * 0.32).addScaledVector(dir, Hs * 1.2).add(v3(0, Hs * 0.7, 0));
           out.look.copy(L).addScaledVector(side, -W * 0.1).add(v3(0, Hs * 0.5, 0)); out.fov = 55; out.smooth = 0.12;
         } },
-        { dur: T_CUT + 3.5, caption: '와이어 부대', noAvoid: true, update: (t, u, out) => {
+        // 쓰러뜨리는 거인이 없으면: 발밑에서 올려다보는 행진 장면
+        victims.length ? null : { dur: T_CUT + 3.5, caption: '', update: (t, u, out) => {
+          const gp = hero.m.position, sz = hero.sc;
+          out.pos.copy(gp).addScaledVector(dir, sz * (3.2 - u * 1.4)).addScaledVector(side, sz * 0.9);
+          out.pos.y = gnd(out.pos.x, out.pos.z) + 3;
+          out.look.copy(gp).add(v3(0, sz * 1.4, 0)); out.fov = 64; out.smooth = 0.12;
+        } },
+        !victims.length ? null : { dur: T_CUT + 3.5, caption: '와이어 부대', noAvoid: true, update: (t, u, out) => {
           const v = victims[0], gp = v.fall0 || v.m.position, sz = v.sc;
           if (v.fallT === undefined) {
             const a = 0.8 + t * 0.25;
@@ -332,7 +344,7 @@ export const MOVIE4 = {
           out.pos.copy(c).addScaledVector(f, -half * 1.1).addScaledVector(side, half * 0.5).add(v3(0, half * 0.75 + 200, 0));
           out.look.copy(lineAt()).lerp(c, 0.4); out.fov = 50; out.smooth = 0.1;
         } },
-      ]);
+      ].filter(Boolean));
     },
   },
   // 초대형 거인: 번개처럼 번쩍이며 높은 건물 뒤에 나타나 지붕 너머로 내려다보다가, 발로 차서 무너뜨리고 증기 속으로 사라짐

@@ -86,7 +86,7 @@ export const SCHEMA = [
   { tab: 'keys', key: 'k_shot', label: '스크린샷', type: 'key', def: 'KeyP' },
   { tab: 'keys', key: 'k_mute', label: '소리 끄기', type: 'key', def: 'KeyM' },
   { tab: 'keys', key: 'k_help', label: '도움말', type: 'key', def: 'KeyH' },
-  { tab: 'keys', key: 'k_ui', label: 'UI 숨기기', type: 'key', def: 'KeyU' },
+  { tab: 'keys', key: 'k_ui', label: 'UI 숨기기', type: 'key', def: 'KeyU', desc: '일반 화면에서는 Space 로도 숨길 수 있어요 (Space 를 다른 기능에 지정하면 꺼져요).' },
   { tab: 'keys', key: 'k_settings', label: '설정 열기', type: 'key', def: 'KeyO' },
   { tab: 'keys', key: 'k_control', label: '발사 관제실', type: 'key', def: 'KeyL' },
   { tab: 'keys', key: 'k_vehicle', label: '탈것 타기', type: 'key', def: 'KeyV' },
