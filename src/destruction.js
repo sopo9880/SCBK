@@ -1348,6 +1348,15 @@ export class Destruction {
       b, center: c0,
       set: (pos, quat, sc = 1) => { a.carry.compose(pos, quat, one.setScalar(sc)).multiply(M2.makeTranslation(-c0.x, -c0.y, -c0.z)); },
       drop: () => { if (b.state === 'gone') return; this._scoreBuilding(b, 1); this.intact.setVisibleAt(b.inst, false); b.state = 'gone'; },
+      // 들고 있던 건물을 제자리에 내려놓으며 산산조각 (q = 충격이 오는 곳, 위에서 내리치면 아래·바깥으로 부서짐)
+      shatter: (q, power, opts = {}) => {
+        const i = this._anim.indexOf(a); if (i >= 0) this._anim.splice(i, 1);
+        if (b.state !== 'collapsing') return false;
+        this.intact.setMatrixAt(b.inst, M2.identity());
+        b.state = 'intact';
+        this.blastFrom(b, q, power, opts);
+        return true;
+      },
     };
   }
   // 건물 통째로 하늘로 (물리 없이)

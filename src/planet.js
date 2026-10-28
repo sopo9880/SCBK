@@ -21,11 +21,12 @@ const KINDS = {
   void:    { burn: 0.3, smoke: 0.2, crack: 0.5, glow: [0.7, 0.4, 1.0], atm: [0.6, 0.35, 1.0], shatter: 0.15, ice: 0, hole: 1 },
   anti:    { burn: 1, smoke: 0.3, crack: 0.5, glow: [0.8, 0.6, 1.0], atm: [0.75, 0.55, 1.0], shatter: 0.25, ice: 0, hole: 0 },
   shatter: { burn: 1, smoke: 0.3, crack: 1, glow: [1.0, 0.5, 0.12], atm: [1.0, 0.5, 0.3], shatter: 1, ice: 0, hole: 0, crater: 1 },
+  calm:    { burn: 0, smoke: 0, crack: 0, glow: [1.0, 1.0, 1.0], atm: [0.35, 0.6, 1.0], shatter: 0, ice: 0, hole: 0 },   // 멀쩡한 지구 (도입 장면용)
 };
 
 const NAMES = {
   nuke: '전 지구 핵겨울', impact: '대멸종 충돌', fire: '불타는 행성', crack: '지각 붕괴', ice: '전 지구 동결', ash: '화산 겨울',
-  water: '전 지구 해일', void: '행성 소멸', anti: '반물질 소멸', shatter: '행성 붕괴',
+  water: '전 지구 해일', void: '행성 소멸', anti: '반물질 소멸', shatter: '행성 붕괴', calm: '',
 };
 
 function buildPlanetGeometry() {
@@ -77,6 +78,7 @@ export class PlanetFinale {
       scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xdfe6ff, size: 1.3, sizeAttenuation: false })));
     }
     const sunDir = new THREE.Vector3(-0.6, 0.35, 0.72).normalize(); // 아래에서 표적 쪽 낮으로 다시 맞춤
+    this.sunDir = sunDir;
     // 표적 지점 (위도·경도 → 방향)
     const la = THREE.MathUtils.degToRad(lat), lo = THREE.MathUtils.degToRad(lon);
     this.hit = new THREE.Vector3(Math.cos(la) * Math.cos(lo), Math.sin(la), -Math.cos(la) * Math.sin(lo)).normalize();
@@ -228,4 +230,101 @@ export class PlanetFinale {
     this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
     if (this.capEl) this.capEl.classList.remove('show');
   }
+}
+
+
+// 우주 도입 장면: 지구 저궤도에서 두 개가 붙은 물체가 둘로 갈라져 하나는 지구로 떨어지고 하나는 멀리 날아감
+// opts.make() 로 한 개짜리 모형을 만들어 씀. 지구 반지름 = 1 (모형은 영화적으로 크게)
+export class OrbitIntro extends PlanetFinale {
+  constructor(renderer, { lat = 37.5, lon = 127, dur = 7, make, caption = '', caption2 = '', audio = null, height = 0.0042 } = {}) {
+    super(renderer, 'calm', { lat, lon, dur });
+    this.audio = audio; this.cap1 = caption; this.cap2 = caption2;
+    const scene = this.scene, hit = this.hit;
+    // 금속 모형이 보이도록 햇빛과 은은한 빛
+    const sun = new THREE.DirectionalLight(0xfff4e6, 3.2); sun.position.copy(this.sunDir).multiplyScalar(10); scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0xbfd6ff, 0x2a3240, 1.4));
+    // 기준 방향: up = 지구 바깥, side = 옆, fwd = 진행 방향
+    this.up = hit.clone();
+    this.side = new THREE.Vector3().crossVectors(hit, new THREE.Vector3(0, 1, 0)).normalize();
+    this.fwd = new THREE.Vector3().crossVectors(this.side, this.up).normalize();
+    this.P0 = hit.clone().multiplyScalar(1.028);
+    // 두 개를 나란히 붙이고 가운데를 버팀대로 연결 (아래 = 지구 쪽)
+    // 우주엔 비출 주변 풍경이 없어 금속 재질이 새까매지므로, 햇빛을 받는 무광 재질로 바꿔 씀
+    const relit = (m) => { m.traverse(o => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) { const mm = o.material.clone(); mm.metalness = 0.3; mm.roughness = 0.5; mm.color.lerp(new THREE.Color(0xb8c0cc), 0.55); if (mm.emissive) mm.emissive.multiplyScalar(1); o.material = mm; } }); return m; };
+    const one = () => { const m = relit(make()); const bb = new THREE.Box3().setFromObject(m); const h = bb.max.y - bb.min.y; m.scale.setScalar(height / h); return m; };
+    this.A = one(); this.B = one();
+    const w = height * 0.95;
+    this.pair = new THREE.Group(); this.pair.position.copy(this.P0);
+    this.pair.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), this.up);
+    this.A.position.set(-w * 0.5, 0, 0); this.B.position.set(w * 0.5, 0, 0); this.B.rotation.y = Math.PI / 3;
+    const truss = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, height * 0.05, height * 0.05), new THREE.MeshStandardMaterial({ color: 0x3a3f48, metalness: 0.8, roughness: 0.4 }));
+    truss.position.y = height * 0.7; this.truss = truss;
+    this.pair.add(this.A, this.B, truss); scene.add(this.pair);
+    // 분리 순간 빛, 대기권 진입 불꽃, 멀어지는 쪽 추진 불빛
+    const add = (geo, color, op = 0) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); scene.add(m); return m; };
+    this.flash = add(new THREE.SphereGeometry(1, 16, 12), 0xdff2ff);
+    this.trail = add(new THREE.ConeGeometry(1, 1, 16, 1, true), 0xff8a3a);
+    this.trailCore = add(new THREE.SphereGeometry(1, 16, 12), 0xffd28a);
+    this.jet = add(new THREE.SphereGeometry(1, 12, 8), 0x8fd0ff);
+    this.wPos = new THREE.Vector3(); this.h = height;
+    this.sepAt = 1.7; this.split = false;
+    this.planet.rotation.y = 0;
+    this.camera.near = 0.00005; this.camera.updateProjectionMatrix();
+  }
+
+  update(dt) {
+    this.t += dt;
+    const t = this.t, U = this.uni, h = this.h;
+    U.uT.value = t; U.uP.value = 0; U.uBurn.value = 0; U.uSmoke.value = 0; U.uCrack.value = 0;
+    this.atmMat.uniforms.uA.value = 1; this.ring.material.opacity = 0;
+    const up = this.up, side = this.side, fwd = this.fwd;
+    // 붙어서 천천히 떠다니다가 분리
+    const ts = t - this.sepAt;
+    this.pair.position.copy(this.P0).addScaledVector(fwd, t * h * 0.15);
+    this.pair.rotateOnAxis(new THREE.Vector3(0, 1, 0), dt * 0.12);
+    if (ts >= 0 && !this.split) {
+      this.split = true; this.truss.visible = false;
+      if (this.audio) { this.audio.clack(); this.audio.whoosh(1.4); this.audio.boom(1.2, 200); }
+    }
+    const A = this.A, B = this.B;
+    if (ts > 0) {
+      // A: 지구 쪽으로 점점 빨라지며 떨어짐 (모형 기준 아래 = 지구)
+      A.position.y = -0.5 * 0.42 * ts * ts * h;           // 끝날 무렵 대기권(지표 위 약 0.006)까지
+      A.rotation.y += dt * 0.3;
+      // B: 옆·위로 가속하며 화면 밖으로
+      B.position.x = h * 0.475 + 0.5 * 5 * ts * ts * h; B.position.y = 0.5 * 1.2 * ts * ts * h;
+      B.rotation.z = -Math.min(0.5, ts * 0.25);
+    }
+    // 분리 빛
+    const cw = this.pair.localToWorld(new THREE.Vector3(0, h * 0.7, 0));
+    const fl = ts > 0 ? Math.max(0, 1 - ts / 0.7) : 0;
+    this.flash.position.copy(cw); this.flash.scale.setScalar(h * (0.08 + (1 - fl) * 0.35)); this.flash.material.opacity = fl * 0.85;
+    // A 위치와 진입 불꽃 (지구에 가까워질수록 앞쪽이 달아오름)
+    A.getWorldPosition(this.wPos);
+    const alt = this.wPos.length() - 1;                    // 지표 위 높이 (지구 반지름 단위)
+    const heat = ts > 0 ? Math.max(0, Math.min(1, (0.02 - alt) / 0.012)) : 0;
+    const aBottom = this.wPos.clone().addScaledVector(up, -h * 0.05);
+    this.trailCore.position.copy(aBottom); this.trailCore.scale.setScalar(h * (0.12 + heat * 0.16)); this.trailCore.material.opacity = heat * 0.9;
+    const L = h * (0.4 + heat * 5);
+    this.trail.position.copy(aBottom).addScaledVector(up, L * 0.5); this.trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);   // 뾰족한 끝이 위(지나온 쪽)로
+    this.trail.scale.set(h * (0.12 + heat * 0.14), L, h * (0.12 + heat * 0.14)); this.trail.material.opacity = heat * 0.6;
+    // B 추진 불빛
+    const bw = B.getWorldPosition(new THREE.Vector3());
+    this.jet.position.copy(bw).addScaledVector(side, -h * 0.2); this.jet.scale.setScalar(h * 0.06 * (ts > 0 ? 1 + Math.min(1.5, ts) : 0.001)); this.jet.material.opacity = ts > 0 ? 0.9 : 0;
+    // 카메라: 처음엔 둘을 옆에서 → 분리 뒤엔 떨어지는 쪽의 뒤·위에서 따라가며 아래로 지구가 가득
+    const cam = this.camera;
+    const look0 = this.pair.position.clone().addScaledVector(up, h * 0.5);
+    const u = Math.max(0, Math.min(1, ts / (this.dur - this.sepAt)));
+    const e = u * u * (3 - 2 * u);
+    const camA = look0.clone().addScaledVector(side, -h * 1.8).addScaledVector(fwd, -h * 3.2).addScaledVector(up, h * 0.9);
+    const camB = this.wPos.clone().addScaledVector(up, h * 2.6).addScaledVector(fwd, -h * 2.4).addScaledVector(side, -h * 1.1);
+    cam.position.copy(camA).lerp(camB, e);
+    cam.up.copy(up);
+    const look = look0.clone().lerp(this.wPos.clone().addScaledVector(up, -h * 0.8 * e), Math.min(1, e * 1.4));
+    cam.lookAt(look);
+    if (this.capEl) { this.capEl.textContent = ts < 0.3 ? this.cap1 : this.cap2; this.capEl.classList.add('show'); }
+    if (t >= this.dur) this.done = true;
+  }
+
+  dispose() { this.camera.up.set(0, 1, 0); super.dispose(); }
 }

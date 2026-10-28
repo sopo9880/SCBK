@@ -37,7 +37,8 @@ export const MOVIE = {
       const nP = Math.round(3 + 1.4 * S.n ** 0.6);            // 중력 박동 횟수 (×1: 4, ×10: 6, ×100: 9)
       const chargeOf = (k) => 2.3 + k * 0.18, AFTER = 1.15;
       const PT = []; { let tt = 0; for (let k = 0; k < nP; k++) { tt += chargeOf(k); PT.push(tt); tt += AFTER; } }
-      const T_LAND = 5, T_SPIN = 1.6, T_PULSES = PT[nP - 1] + AFTER + 0.6;
+      // T_SPIN: 착지 뒤 가동 준비 (다리 고정 → 불빛 → 팔 회전)
+      const T_LAND = 5, T_SPIN = 2.8, T_PULSES = PT[nP - 1] + AFTER + 0.6;
       const T_HERO = T_LAND + T_SPIN + T_PULSES;              // 수호자 도착
       const r0 = 60 * S.r ** 0.5;
       const f = camDir(camera, c), side = v3(-f.z, 0, f.x);
@@ -53,18 +54,39 @@ export const MOVIE = {
         update(dt) {
           st.t += dt;
           const t = st.t;
-          U.arms.rotation.y += dt * (t > T_LAND ? Math.min(3, (t - T_LAND) * 1.2) : 0.2);
-          // 1) 하강·착지
-          if (t < T_LAND) { eng.position.y = c.y + (startY - c.y) * (1 - ease.out(t / T_LAND)); return true; }
+          U.arms.rotation.y += dt * (t > T_LAND + 1.8 ? Math.min(3, (t - T_LAND - 1.8) * 1.5) : 0);
+          // 1) 하강·착지: 대기권을 뚫고 내려오며 아래쪽이 달아오르고 불꽃 꼬리를 남김
+          if (t < T_LAND) {
+            const u = t / T_LAND;
+            eng.position.y = c.y + (startY - c.y) * (1 - ease.out(u));
+            const heat = Math.max(0, 1 - u / 0.65);
+            if (heat > 0) {
+              const q = eng.position;
+              for (let i = 0; i < 3; i++) fx.fire.emit(q.x + (R() - 0.5) * 60 * sc, q.y + (R() - 0.2) * 40 * sc, q.z + (R() - 0.5) * 60 * sc, (R() - 0.5) * 20, 160 + R() * 120, (R() - 0.5) * 20, 1.2, 40 * sc * (0.6 + heat), 6, [1, 0.6 + 0.3 * heat, 0.25, 1], [0.6, 0.2, 0.05, 0], 0.3, 0);
+              if (R() < 0.6) fx.smoke.emit(q.x, q.y + 120 * sc, q.z, (R() - 0.5) * 10, 60, (R() - 0.5) * 10, 5, 30 * sc, 90 * sc, [0.5, 0.48, 0.46, 0.5 * heat], [0.6, 0.6, 0.6, 0], 0.2, 0);
+            }
+            // 음속 폭음: 속도가 줄어들며 한 번 '쾅'
+            if (!st.boom && u > 0.45) { st.boom = true; fx.ring(eng.position.clone(), 900 * sc, 1.6, 0xffffff, 0.35); audio.boom(2.2, camera.position.distanceTo(eng.position)); }
+            return true;
+          }
           if (!st.landed) {
             st.landed = true; eng.position.y = c.y;
             for (const fpt of U.legs) { const q = eng.position.clone().add(fpt.clone().multiplyScalar(sc)); q.y = grid.sample(q.x, q.z); A.blast(q, 30 * sc, 30, { lift: -0.5, crater: [14 * sc, 4 * sc], silent: true }); }
             fx.addShake(2.5); audio.boom(3, camera.position.distanceTo(c));
           }
-          // 2) 충전
-          const tp = t - T_LAND - T_SPIN;
-          U.eyeMat.opacity = Math.min(1, (t - T_LAND) / T_SPIN);
-          if (tp < 0) { if (R() < dt * 30) { const a = R() * 6.28, d = r0 * (1 + R()); const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.dust({ x, y: grid.sample(x, z), z }, 6); } return true; }
+          // 2) 가동 준비: 다리 고정 장치가 차례로 박히고(철컥) → 불빛이 켜지고 → 팔이 돌기 시작
+          const tp = t - T_LAND - T_SPIN, tb = t - T_LAND;
+          U.eyeMat.opacity = Math.max(0, Math.min(1, (tb - 1.1) / 0.9));
+          if (tp < 0) {
+            st.clamp = st.clamp || 0;
+            while (st.clamp < U.legs.length && tb > 0.35 + st.clamp * 0.3) {
+              const fpt = U.legs[st.clamp++]; const q = eng.position.clone().add(fpt.clone().multiplyScalar(sc)); q.y = grid.sample(q.x, q.z);
+              audio.clack(); fx.dust(q, 14 * sc); fx.sparks(q.clone().add(v3(0, 4, 0)), { x: 0, y: 1, z: 0 }, 10); A.crater(q.x, q.z, 8 * sc, 1.2 * sc);
+            }
+            if (!st.hum && tb > 1.1) { st.hum = true; audio.hum(1.6); }
+            if (tb > 1.8 && R() < dt * 30) { const a = R() * 6.28, d = r0 * (1 + R()); const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; fx.dust({ x, y: grid.sample(x, z), z }, 6); }
+            return true;
+          }
           // 3) 중력 박동: 떠올랐다가 짓눌림, 범위가 점점 커짐
           if (!st.heroHit) {
             // 지금 충전 중인 박동 k 와 진행도 ch (0~1), 박동 직후 aft (0~1)
@@ -98,6 +120,15 @@ export const MOVIE = {
                   if (sl >= 1) e.q.identity();
                 }
                 e.h.set(e.from.clone().add(v3(0, y - e.sink, 0)), e.q, 1);
+                // 내리꽂힌 순간: 통째로가 아니라 그 자리에서 산산조각 (위에서 내리치는 충격 → 아래·바깥으로)
+                if (!lifting && sl >= 1 && st.pulse > 0) {
+                  const b = e.b, top = v3(b.cx, b.baseY + b.height * 1.15, b.cz);
+                  if (e.h.shatter(top, (34 + st.pulse * 5) * S.v, { lift: -0.7, lod: 1, dy: 0 })) {
+                    fx.dust(v3(b.cx, b.baseY, b.cz), 6 + Math.sqrt(b.area || 100) * 0.45);
+                    if (R() < 0.3) audio.crumble(2);
+                  }
+                  st.lift.delete(b);
+                }
               }
             }
             // 충전: 빔이 가늘게 떨리며 점점 밝아짐 → 박동: 굵게 번쩍
@@ -119,12 +150,21 @@ export const MOVIE = {
                 D.tint(e.b, dark, 0.08);
                 if (R() < 0.35) fx.dust(v3(e.from.x, grid.sample(e.from.x, e.from.z), e.from.z), 4 + Math.sqrt(e.b.area || 100) * 0.3);
               }
-              // 흩어진 파편은 떠올랐다가 다음 박동에 내리꽂힘
-              for (const ch of D.gather(c.x, c.z, rk, 2)) if (R() < 0.35) { if (D.launch(ch, (R() - 0.5) * 3, 14 + R() * 10, (R() - 0.5) * 3)) st.slam.push([ch, t + chargeOf(k + 1) * 0.8 + AFTER * 0.5]); }
+              // 잔해 메타작: 박동마다 작은 부스러기 일부는 먼지로 갈려 사라지고,
+              // 나머지 잔해는 다시 떠올라 충전하는 동안 공중에 머물렀다가 다음 박동에 한꺼번에 내리꽂힘
+              const nextAt = k + 1 < nP ? T_LAND + T_SPIN + PT[k + 1] : t + chargeOf(k + 1) * 0.8 + AFTER * 0.5;
+              let dusted = 0;
+              for (const ch of D.gather(c.x, c.z, rk, 2)) {
+                if (ch.size < 1.3 && R() < 0.22) { if (dusted++ < 40 && R() < 0.3) fx.dust(v3(ch.x, ch.y, ch.z), 3); D.removeChunk(ch); continue; }
+                if (R() < 0.55 && D.launch(ch, (R() - 0.5) * 3, 10 + R() * 6, (R() - 0.5) * 3)) {
+                  if (ch.state === 1) { ch.body.setGravityScale(0.6, true); ch.float = true; }
+                  st.slam.push([ch, nextAt]);
+                }
+              }
               fx.ring(c, rk * 2.2, 1.2, 0xa8dcff, 0.6); fx.addShake(1.8);
               world.paintScorch(c.x, c.z, rk, 0.4);
             }
-            for (let i = st.slam.length - 1; i >= 0; i--) { const [ch, at] = st.slam[i]; if (t >= at) { st.slam.splice(i, 1); if (ch.state === 1) { ch.body.setGravityScale(4, true); ch.body.setLinvel({ x: 0, y: -40, z: 0 }, true); } } }
+            for (let i = st.slam.length - 1; i >= 0; i--) { const [ch, at] = st.slam[i]; if (t >= at) { st.slam.splice(i, 1); ch.float = false; if (ch.state === 1) { ch.body.setGravityScale(4, true); ch.body.setLinvel({ x: 0, y: -45, z: 0 }, true); } } }
             // 수호자 접근
             if (t > T_HERO - 3.2) {
               hero.visible = true;
@@ -140,7 +180,7 @@ export const MOVIE = {
                 // 수호자가 엔진 중심을 터트림 → 그 뒤로는 모든 소리가 가라앉고 중심으로 빨려 들어감
                 fx.explosion(q, 40 * sc, { smokeColumn: false }); fx.flash = Math.max(fx.flash, 0.45); fx.addShake(2); audio.pulse(1.6);
                 for (let i = 0; i < 60; i++) fx.sparks(q, { x: (R() - 0.5) * 2, y: R(), z: (R() - 0.5) * 2 }, 3);
-                for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true);
+                for (const [ch] of st.slam) { ch.float = false; if (ch.state === 1) ch.body.setGravityScale(1, true); }
                 st.slam.length = 0;
                 if (A.ctx.hud) A.ctx.hud.toast('수호자가 엔진을 터트렸습니다', 'info');
                 // 빨려 들어갈 범위: 엔진이 누르던 범위의 약 1.8배
@@ -215,20 +255,22 @@ export const MOVIE = {
           }
           return true;
         },
-        dispose() { A.remove(eng); A.remove(hero); for (const [ch] of st.slam) if (ch.state === 1) ch.body.setGravityScale(1, true); if (st.held) for (const it of st.held) it.h.drop(); for (const e of st.lift.values()) e.h.set(e.from.clone().add(v3(0, -e.sink, 0)), new THREE.Quaternion(), 1); if (st.hole) disposeObj(scene, st.hole); },
+        dispose() { A.remove(eng); A.remove(hero); for (const [ch] of st.slam) { ch.float = false; if (ch.state === 1) ch.body.setGravityScale(1, true); } if (st.held) for (const it of st.held) it.h.drop(); for (const e of st.lift.values()) e.h.set(e.from.clone().add(v3(0, -e.sink, 0)), new THREE.Quaternion(), 1); if (st.hole) disposeObj(scene, st.hole); },
       });
       const g = cineGame(A); if (!g) return;
       const low = c.clone().addScaledVector(f, -700).addScaledVector(side, 250); low.y = c.y + 15;
       const a0 = Math.atan2(-f.z, -f.x);
       g.cine.play([
-        watch(low, () => eng.position.clone().add(v3(0, U.H * sc * 0.6, 0)), { dur: T_LAND, fov: 50, caption: '테라포밍 엔진', smooth: 0.25 }),
-        watch(low.clone().add(v3(0, 40, 0)), () => coreAt(), { dur: T_SPIN, fov: 42, caption: '중력 빔 가동', smooth: 0.3 }),
+        watch(low, () => eng.position.clone().add(v3(0, U.H * sc * 0.6, 0)), { dur: T_LAND, fov: 50, caption: '대기권 돌입', smooth: 0.25 }),
+        watch(low.clone().add(v3(0, 40, 0)), () => coreAt(), { dur: T_SPIN, fov: 42, caption: '가동 시작', smooth: 0.3 }),
         orbit(c, { dist: 900 * sc, h: 260 * sc, a0, a1: a0 + 0.9, dur: T_PULSES - 3.2, look: 80 * sc, fov: 55 }),
         chase(() => hero.position, () => coreAt().sub(hero.position), { back: 60 * sc, up: 10 * sc, ahead: 200, dur: 2.6, fov: 60, caption: '하늘에서 무언가 날아온다' }),
         watch(() => coreAt().addScaledVector(side, -500 * sc).add(v3(0, 60, 0)), () => coreAt(), { dur: 1.2, fov: 45, ts: 0.25, smooth: 0.1 }),
         watch(() => c.clone().addScaledVector(f, -1100 * sc).addScaledVector(side, 500 * sc).setY(c.y + 160 * sc), () => c.clone().add(v3(0, 60 * sc, 0)), { dur: 4, fov: 50, ts: (u) => (u < 0.25 ? 0.4 : 1), caption: '' }),
         watch(() => c.clone().addScaledVector(f, -(st.RI || 400) * 2.2).addScaledVector(side, (st.RI || 400) * 0.8).setY(c.y + (st.RI || 400) * 0.9), () => c.clone().add(v3(0, 20, 0)), { dur: 6.5, fov: 52, caption: '빨려 들어가 사라지는 도시' }),
       ]);
+      // 우주에서 시작: 둘이 붙은 엔진이 갈라져 하나는 여기로, 하나는 지구 반대편으로 (그동안 도시는 멈춤)
+      if (game && game.playOrbitIntro) game.playOrbitIntro({ make: makeEngine, caption: '테라포밍 엔진', caption2: '분리', dur: 7 });
     },
   },
 

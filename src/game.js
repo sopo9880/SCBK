@@ -16,7 +16,7 @@ import { HueSaturationShader } from 'three/examples/jsm/shaders/HueSaturationSha
 import { BrightnessContrastShader } from 'three/examples/jsm/shaders/BrightnessContrastShader.js';
 import { VignetteShader } from 'three/examples/jsm/shaders/VignetteShader.js';
 import { defaultCfg } from './settings.js';
-import { PlanetFinale } from './planet.js';
+import { PlanetFinale, OrbitIntro } from './planet.js';
 import { World } from './world.js';
 import { Destruction } from './destruction.js';
 import { FX } from './fx.js';
@@ -669,11 +669,22 @@ export class Game {
     this.fx.flash = 0; if (this.fx.flashEl) this.fx.flashEl.style.opacity = '0';
     return true;
   }
+  // 우주 도입 장면 (무기 연출 앞부분). 그동안 도시는 멈춰 있고, 끝나면 연출이 이어짐
+  // 행성 장면을 꺼 두었으면(설정) 건너뜀
+  playOrbitIntro(opts) {
+    if (this.planetFX || this.cfg.planet === false) return false;
+    const lat = this.place && isFinite(this.place.lat) ? this.place.lat : 37.5, lon = this.place && isFinite(this.place.lon) ? this.place.lon : 127;
+    this.planetFX = new OrbitIntro(this.renderer, { lat, lon, audio: this.audio, ...opts });
+    this.planetFX.resize(window.innerWidth, window.innerHeight);
+    document.body.classList.add('cine');
+    return true;
+  }
   endPlanet() {
     if (!this.planetFX) return;
     this.planetFX.dispose(); this.planetFX = null;
     const cap = document.getElementById('cineCap'); if (cap) { cap.classList.remove('show'); cap.textContent = ''; }
-    document.body.classList.remove('cine');
+    // 우주 도입 장면처럼 뒤에 연출이 이어지면 연출 화면(UI 숨김)은 그대로
+    if (!this.cine.active) document.body.classList.remove('cine');
     this.fx.flash = Math.max(this.fx.flash, 0.5);
     this.camera.fov = this.cfg.fov || 50; this.camera.updateProjectionMatrix();
   }
