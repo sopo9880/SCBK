@@ -170,8 +170,11 @@ export class Physics {
     const L = I + (this.mode === 'gpu' ? Math.max(0, this._behindMax - I) : 0) + 0.001;
     this.lag = L;
     const target = clock - L;
-    if (Math.abs(target - this.dispT) > 0.15) { this.dispT = target; return; }   // 크게 벌어지면 바로 맞춤
-    this.dispT += d + (target - this.dispT) * (1 - Math.exp(-real * 6));
+    if (Math.abs(target - this.dispT) > 0.15) { this.dispT = target; this._lastClock = clock; return; }   // 크게 벌어지면 바로 맞춤
+    // 물리가 실제 시간보다 느리게 갈 때(무거운 장면)는 시계가 실제로 나아간 만큼만 진행
+    const dc = this._lastClock === undefined ? d : Math.max(0, Math.min(d * 1.5, clock - this._lastClock));
+    this._lastClock = clock;
+    this.dispT += dc + (target - this.dispT) * (1 - Math.exp(-real * 6));
     if (this.dispT > this.simT) this.dispT = this.simT;   // 아직 없는 결과는 그리지 않음 (최신에서 기다림)
   }
 
