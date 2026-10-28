@@ -139,22 +139,38 @@ export class Physics {
     this.lag = this.lagBase;
   }
 
-  // 매 프레임 그릴 시각을 정함
-  // est: 지금의 시뮬레이션 시각 추정 (최신 결과 시각 + 그 뒤로 흐른 시간, 결과가 늦으면 조금만 앞서 나감)
-  // dispT: est 보다 lag 만큼 뒤 → 항상 받아 둔 두 결과 사이에 있어서 이어 그릴 수 있음
+  // 새 결과를 받은 시각 기록: 결과 사이 간격(시뮬레이션 시간)을 평균 내 둠
+  _gotResult(T) {
+    if (T <= this.simT) return;
+    const gap = T - this.simT;
+    this.gapAvg = this.gapAvg ? this.gapAvg + (Math.min(gap, 4 / 60) - this.gapAvg) * 0.2 : gap;
+    this.simT = T; this._since = 0;
+  }
+  // 지금의 시뮬레이션 시각
+  // 같은 스레드·GPU: 계산을 맡긴 시각 + 아직 계산하지 않고 쌓인 시간 (정확히 앎)
+  // 워커: 결과를 받은 뒤 흐른 시간으로 어림 (결과 간격까지만)
+  _clock(I) {
+    if (this.mode === 'inline') return this.simT + (this.core._acc || 0);
+    if (this.mode === 'gpu') return (this.gpu.simT || 0) + (this.gpu._acc || 0);
+    return this.simT + Math.min(this._since || 0, I);
+  }
+  // 매 프레임 그릴 시각(dispT)을 정함: 지금 시각보다 L 만큼 뒤 → 받아 둔 두 결과 사이
+  // L = 결과 간격 + (GPU 는 결과가 돌아오기까지 걸리는 시간, 최근 최댓값으로 천천히 줄어듦)
+  // 실제로는 매 프레임 흐른 시간만큼 앞으로만 가고 목표 쪽으로 살살 당겨서 들쭉날쭉함을 흡수
   _advanceDisplay(d, real) {
     this._frame++;
-    this.est = (this.est || 0) + d;
-    if (this.est < this.simT) this.est = this.simT;
-    const ahead = this.est - this.simT, maxAhead = 2.5 / 60;
-    if (ahead > maxAhead) this.est = this.simT + maxAhead;
-    // 그린 시각이 최신 결과를 넘어서면(결과가 늦음) 다음부터 조금 더 뒤에서 그림, 여유가 있으면 천천히 줄임
-    if (this.dispT > this.simT) this.lag = Math.min(0.075, this.lag + 0.003);
-    else this.lag = Math.max(this.lagBase, this.lag - real * 0.004);
-    const target = this.est - this.lag;
-    this.dispT += d;
-    if (Math.abs(target - this.dispT) > 0.15) this.dispT = target;   // 크게 벌어지면 바로 맞춤
-    else this.dispT += (target - this.dispT) * (1 - Math.exp(-real * 10));
+    this._since = (this._since || 0) + d;
+    const I = Math.max(1 / 60, Math.min(4 / 60, this.gapAvg || 1 / 60));
+    const clock = this._clock(I);
+    const behind = Math.max(0, clock - this.simT);                 // 맡겼지만 아직 못 받은 만큼
+    const extra = this.mode === 'gpu' ? behind : 0;
+    this._behindMax = Math.max(extra, (this._behindMax || 0) - real * 0.02);
+    const L = I + (this.mode === 'gpu' ? Math.max(0, this._behindMax - I) : 0) + 0.001;
+    this.lag = L;
+    const target = clock - L;
+    if (Math.abs(target - this.dispT) > 0.15) { this.dispT = target; return; }   // 크게 벌어지면 바로 맞춤
+    this.dispT += d + (target - this.dispT) * (1 - Math.exp(-real * 6));
+    if (this.dispT > this.simT) this.dispT = this.simT;   // 아직 없는 결과는 그리지 않음 (최신에서 기다림)
   }
 
   // GPU 물리를 고르면 WebGPU 로, 안 되면 워커, 그것도 안 되면 같은 스레드에서 계산
@@ -264,9 +280,13 @@ export class Physics {
   }
 
   // ---- 진행 ----
+  // 물리를 진행한 뒤에 그릴 시각을 정함 (진행 전에 정하면 방금 받은 결과보다 앞선 시각이 되어 멈칫함)
   step(dt) {
+    this._stepInner(dt);
+    this._advanceDisplay(Math.min(dt, 0.1) * this.timeScale, Math.min(dt, 0.1));
+  }
+  _stepInner(dt) {
     const d = Math.min(dt, 0.1) * this.timeScale;
-    this._advanceDisplay(d, Math.min(dt, 0.1));
     const tl = performance.now();
     this._stepLight(d);
     this.lightMs = this.lightMs * 0.9 + (performance.now() - tl) * 0.1;
@@ -285,8 +305,7 @@ export class Physics {
       const maxSteps = (this.core.stepMs > 9 ? 1 : 2) * Math.max(1, Math.ceil(this.timeScale));
       const st = this.core.step(d, maxSteps);
       this.stepMs = this.core.stepMs;
-      this.simT += st.steps / 60;
-      if (st.steps > 0) { const s = this.core.snapshot(); this._apply(s.ids, s.f, this.simT); }
+      if (st.steps > 0) { this._gotResult(this.simT + st.steps / 60); const s = this.core.snapshot(); this._apply(s.ids, s.f, this.simT); }
       this.simDt += st.steps / 60;
       return;
     }
@@ -303,7 +322,7 @@ export class Physics {
     if (m.type !== 'state') return;
     if (m.err) { this.lastErr = m.err; if (!this._errShown) { this._errShown = true; console.warn('physics worker:', m.err); } }
     this.stepMs = m.stepMs;
-    this.simT += m.simDt;
+    this._gotResult(this.simT + m.simDt);
     this._apply(m.ids, m.f, this.simT);
     this.simDt += m.simDt;
   }
@@ -322,7 +341,7 @@ export class Physics {
   // GPU 결과: body 마다 [x y z 칸, 회전 4, 속도 3, 잠] (칸 → id)
   _applyGPU(n, f, T) {
     const ids = this.gpu.ids;
-    if (T > this.simT) this.simT = T;
+    this._gotResult(T);
     for (let k = 0; k < n; k++) {
       const o = k * 12;
       const id = ids[f[o + 3] | 0]; if (id < 0) continue;
