@@ -164,10 +164,10 @@ export class Physics {
     // GPU 에 조각이 하나도 없으면 읽어 올 결과도 없으니 받은 시각을 맡긴 시각에 맞춰 둠
     if (this.mode === 'gpu' && !this.gpu.staging.some(x => x.busy) && (this.gpu.top - this.gpu.free.length) <= 0) this._gotResult(this.gpu.simT || 0);
     const clock = this._clock(I);
-    const behind = Math.max(0, clock - this.simT);                 // 맡겼지만 아직 못 받은 만큼
-    const extra = this.mode === 'gpu' ? Math.min(0.1, behind) : 0;
-    this._behindMax = Math.max(extra, (this._behindMax || 0) - real * 0.1);
-    const L = I + (this.mode === 'gpu' ? Math.max(0, this._behindMax - I) : 0) + 0.001;
+    // GPU: 계산을 맡겼지만 결과를 아직 못 받은 시뮬레이션 시간 (쌓아 둔 시간은 빼고)
+    const inflight = this.mode === 'gpu' ? Math.min(0.1, Math.max(0, (this.gpu.simT || 0) - this.simT)) : 0;
+    this._behindMax = Math.max(inflight, (this._behindMax || 0) - real * 0.1);
+    const L = I + this._behindMax + 0.001;
     this.lag = L;
     const target = clock - L;
     if (Math.abs(target - this.dispT) > 0.15) { this.dispT = target; this._lastClock = clock; return; }   // 크게 벌어지면 바로 맞춤
