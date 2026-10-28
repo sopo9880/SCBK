@@ -94,7 +94,7 @@ export class Destruction {
     }
     this._dirty = new Set();
     this._crushing = new Set();
-    this._pendingQ = []; this.fracBudgetMs = 7; this._fracSpent = 0; this._settled = [];
+    this._pendingQ = []; this.fracBudgetMs = 7; this._fracSpent = 0; this._settled = []; this._elevFrozen = new Set();
     this._lgrid = new Map(); this._frame = 0; this._lgridFrame = -1; this._lgridDirty = true; this._stepMs = 0;
     this._dustBudget = 0;
     this._impactIdx = 0;
@@ -245,7 +245,10 @@ export class Destruction {
     const rapierFull = this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic);
     const toLight = this.useLight && (c.body.light || c.vol < (this.quality.lightVol || 30) || rapierFull);
     const full = toLight ? this.phys.lightCount >= (this.quality.maxLight || 20000) : rapierFull;
-    if (!force && c.state === FROZEN && full) return;
+    // GPU 물리는 넘치는 조각을 받아 줄 가벼운 파편이 없으므로, 고정된 조각은 상한을 조금 넘겨서라도 풀어 줌
+    // (넘친 만큼은 아래 '예산 초과' 정리에서 땅에 놓인 것부터 고정하거나 작은 것을 먼지로 정리)
+    const hardFull = this.phys.mode === 'gpu' ? this.phys.dynCount >= (this.dynBudget || this.quality.maxDynamic) * 1.3 : full;
+    if (!force && c.state === FROZEN && hardFull) return;
     // 움직이는 조각이 예산을 넘으면 작은 조각은 물리 대신 먼지로 사라짐
     if (c.state === FIXED && full && c.size < 3.2) {
       this.hooks.onDust && this._dustBudget > 0.5 && (this._dustBudget -= 0.5, this.hooks.onDust({ x: c.x, y: c.y, z: c.z }, c.size));
@@ -284,6 +287,47 @@ export class Destruction {
     c.body.setDynamic(false);
     c.state = FROZEN; this.dynamic.delete(c);
     if (c.size < 3) this._settled.push(c);
+    // 땅에서 떨어진 곳에 고정된 조각은 받침이 사라지는지 계속 살펴봄
+    if (c.y - this.grid.sample(c.x, c.z) > c.size * 1.2) this._elevFrozen.add(c);
+  }
+  // 이 조각 아래에 움직이지 않는 받침(땅·지붕·건물에 붙은 조각·고정된 조각)이 있는지
+  _supported(c) {
+    if (c.y - this.grid.sample(c.x, c.z) < c.size * 1.2) return true;
+    const near = (n) => {
+      if (n === c) return false;
+      const r = (c.size + n.size) * 0.55, dy = c.y - n.y;
+      return Math.abs(n.x - c.x) < r && Math.abs(n.z - c.z) < r && dy > -c.size * 0.2 && dy < (c.size + n.size) * 0.8;
+    };
+    const l = this.hash.get(Math.floor(c.x / 60) + ',' + Math.floor(c.z / 60));
+    if (l) for (const b of l) {
+      if (c.x < b.minx - c.size || c.x > b.maxx + c.size || c.z < b.minz - c.size || c.z > b.maxz + c.size) continue;
+      if (b.state === 'intact' || b.state === 'flat') {
+        const top = b.baseY + (b.state === 'flat' ? b.flatH : b.height);
+        if (c.y < top + c.size * 1.2) return true;
+      } else if (b.state === 'fractured') {
+        for (const n of b.chunks) if (n.state === FIXED && near(n)) return true;
+      }
+    }
+    if (this._lgridFrame !== this._frame || this._lgridDirty) { this._rebuildLooseGrid(); this._lgridDirty = false; }
+    const gx = Math.floor(c.x / 40), gz = Math.floor(c.z / 40);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const L = this._lgrid.get((gx + i) * 100003 + gz + j); if (!L) continue;
+      for (const n of L) if (n.state === FROZEN && near(n)) return true;
+    }
+    return false;
+  }
+  // 공중에 고정된 조각 중 받침이 사라진 것을 다시 떨어뜨림 (한 프레임에 조금씩 돌아가며)
+  _checkElevated() {
+    if (!this._elevFrozen.size) return;
+    if (!this._elevIt) this._elevIt = this._elevFrozen.values();
+    let n = 0;
+    while (n < 60) {
+      let r = this._elevIt.next();
+      if (r.done) { this._elevIt = this._elevFrozen.values(); r = this._elevIt.next(); if (r.done) break; if (n > 0) break; }
+      const c = r.value; n++;
+      if (c.state !== FROZEN) { this._elevFrozen.delete(c); continue; }
+      if (!this._supported(c)) { this._elevFrozen.delete(c); this.release(c, 0, 0, 0, 0.1, true); }
+    }
   }
   // 쌓인 잔해가 너무 많으면 오래된 작은 조각부터 정리 (물리 부하 상한)
   _trimRubble() {
@@ -919,8 +963,10 @@ export class Destruction {
 
     const m = this._m, q = this._q, v = this._v, s = this._s;
     // PC 성능에 맞춰 동시에 움직이는 조각 상한을 자동 조절 (목표: 물리 스텝 8ms 이하)
-    const target = 8;
-    const want = this._stepMs > target ? this.quality.maxDynamic * target / this._stepMs : this.quality.maxDynamic;
+    // GPU 물리는 CPU 가 명령을 준비하는 시간이 아니라 GPU 가 실제로 계산하는 시간으로 판단 (목표 12ms)
+    const gpu = this.phys.mode === 'gpu' && this.phys.gpu;
+    const target = gpu ? 12 : 8, cost = gpu ? (gpu.gpuMs || 0) : this._stepMs;
+    const want = cost > target ? this.quality.maxDynamic * target / cost : this.quality.maxDynamic;
     this.dynBudget = Math.round(Math.max(250, Math.min(this.quality.maxDynamic, (this.dynBudget || this.quality.maxDynamic) * 0.9 + want * 0.1)));
     const budget = this.dynBudget;
     this._fast = [];
@@ -945,7 +991,7 @@ export class Destruction {
       c.air = t.y - this.grid.sample(t.x, t.z) - c.size;
       if (sp2 > 140) this._fast.push(c);
       if (c.float) { /* 반중력·잡기로 떠 있는 동안은 정지시키지 않음 */ }
-      else if (c.body.isSleeping() || c.slowT > 0.6 || (c.age > 25 && c.air < c.size * 1.5)) this._freeze(c);
+      else if ((c.body.isSleeping() || c.slowT > 0.6 || (c.age > 25 && c.air < c.size * 1.5)) && (c.air < c.size * 1.2 || c.slowT > 3 || this._supported(c))) this._freeze(c);
     }
     // 예산 초과: 놓여 있거나 바닥 가까운 것부터 고정, 그래도 넘치면 공중의 작은 파편은 먼지로 (공중 고정 금지)
     if (this.phys.dynCount > budget * 1.05) {
@@ -953,7 +999,7 @@ export class Destruction {
       let over = this.phys.dynCount - budget;
       for (const c of arr) {
         if (over <= 0) break;
-        if (c.slowT > 0.1 || c.air < c.size * 1.2) { this._freeze(c); over--; }
+        if (c.air < c.size * 1.2 || (c.slowT > 0.1 && this._supported(c))) { this._freeze(c); over--; }
       }
       if (over > 0) {
         arr.sort((a, b) => a.size - b.size);
@@ -966,6 +1012,7 @@ export class Destruction {
       }
     }
     this._impacts();
+    this._checkElevated();
     this._processWake();
     PROF.add('sync', performance.now() - tSync);
     this._updateBalls(dt);
