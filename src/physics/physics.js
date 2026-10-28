@@ -7,6 +7,8 @@ import { GPUCore } from './gpucore.js';
 /* global __PHYS_WORKER_SRC__ */
 const WORKER_SRC = typeof __PHYS_WORKER_SRC__ !== 'undefined' ? __PHYS_WORKER_SRC__ : null;
 
+const HN = 4;   // 보간용으로 몸마다 보관하는 최근 결과 수
+
 class Body {
   constructor(phys, id, x, y, z, mass, dyn) {
     this.phys = phys; this.id = id; this.handle = id;
@@ -17,37 +19,36 @@ class Body {
   translation() { return this._interp() ? this.rp : this.p; }
   rotation() { return this._interp() ? this.rq : this.q; }
   _interp() {
-    const ph = this.phys;
-    if (!this.dyn || this.t0 === undefined || !ph.smooth) return false;
+    const ph = this.phys, H = this.hist;
+    if (!this.dyn || !H || this.hn < 2 || !ph.smooth) return false;
     if (this._fr === ph._frame) return this._ok;
     this._fr = ph._frame;
-    const span = this.t1 - this.t0;
-    let a = span > 1e-6 ? (ph.dispT - this.t0) / span : 1;
-    if (this.sl || a >= 1) {
-      // 최신 결과보다 앞선 시각: 잠깐(최대 1/120초)은 속도로 내다보고, 그 이상은 최신 자세에서 기다림
-      const ex = this.sl ? 0 : Math.min(ph.dispT - this.t1, 1 / 120);
-      if (ex <= 0) { this._ok = false; return false; }
-      const rp = this.rp || (this.rp = { x: 0, y: 0, z: 0 });
-      rp.x = this.p.x + this.v.x * ex; rp.y = this.p.y + this.v.y * ex; rp.z = this.p.z + this.v.z * ex;
-      this.rq = this.q; this._ok = true; return true;
-    }
-    if (a < 0) a = 0;
-    const p0 = this.p0, p1 = this.p, q0 = this.q0, q1 = this.q;
+    const T = ph.dispT, n = this.hn;
+    // 최근 결과들(시각 순) 중 그릴 시각을 감싸는 두 개를 찾음
+    const at = (i) => H[(this.hi - n + i + HN) % HN];
+    let A = at(n - 2), B = at(n - 1);
+    if (this.sl || T >= B.t) { this._ok = false; return false; }     // 최신 결과에서 기다림
+    if (T <= at(0).t) { A = B = at(0); }
+    else for (let i = n - 2; i >= 0; i--) { const a = at(i); if (a.t <= T) { A = a; B = at(i + 1); break; } }
+    const span = B.t - A.t, a = span > 1e-6 ? Math.min(1, Math.max(0, (T - A.t) / span)) : 1;
     const rp = this.rp || (this.rp = { x: 0, y: 0, z: 0 });
-    rp.x = p0.x + (p1.x - p0.x) * a; rp.y = p0.y + (p1.y - p0.y) * a; rp.z = p0.z + (p1.z - p0.z) * a;
-    // 회전: 짧은 쪽으로 정규화 선형 보간 (1/60초 사이 회전은 작아서 충분)
-    const d = q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w, sg = d < 0 ? -1 : 1, b = 1 - a;
+    rp.x = A.px + (B.px - A.px) * a; rp.y = A.py + (B.py - A.py) * a; rp.z = A.pz + (B.pz - A.pz) * a;
+    // 회전: 짧은 쪽으로 정규화 선형 보간 (결과 사이 회전은 작아서 충분)
+    const d = A.qx * B.qx + A.qy * B.qy + A.qz * B.qz + A.qw * B.qw, sg = d < 0 ? -1 : 1, k = 1 - a;
     const rq = this.rqb || (this.rqb = { x: 0, y: 0, z: 0, w: 1 });
-    rq.x = q0.x * b + q1.x * a * sg; rq.y = q0.y * b + q1.y * a * sg; rq.z = q0.z * b + q1.z * a * sg; rq.w = q0.w * b + q1.w * a * sg;
+    rq.x = A.qx * k + B.qx * a * sg; rq.y = A.qy * k + B.qy * a * sg; rq.z = A.qz * k + B.qz * a * sg; rq.w = A.qw * k + B.qw * a * sg;
     const l = 1 / (Math.hypot(rq.x, rq.y, rq.z, rq.w) || 1); rq.x *= l; rq.y *= l; rq.z *= l; rq.w *= l;
     this.rq = rq; this._ok = true; return true;
   }
-  // 새 물리 결과 받기 (T = 그 결과의 시뮬레이션 시각)
+  // 새 물리 결과 받기 (T = 그 결과의 시뮬레이션 시각). 최근 HN 개를 돌려 쓰는 칸에 보관
   _set(T, px, py, pz, qx, qy, qz, qw) {
-    const fresh = this.t1 === undefined || T - this.t1 > 0.1 || T <= this.t1;
-    if (fresh) { this.p0 = { x: px, y: py, z: pz }; this.q0 = { x: qx, y: qy, z: qz, w: qw }; this.t0 = T - 1 / 60; }
-    else { this.p0 = this.p; this.q0 = this.q; this.t0 = this.t1; }
-    this.p = { x: px, y: py, z: pz }; this.q = { x: qx, y: qy, z: qz, w: qw }; this.t1 = T;
+    this.p = { x: px, y: py, z: pz }; this.q = { x: qx, y: qy, z: qz, w: qw };
+    if (!this.hist) { this.hist = []; for (let i = 0; i < HN; i++) this.hist.push({ t: 0, px: 0, py: 0, pz: 0, qx: 0, qy: 0, qz: 0, qw: 1 }); this.hn = 0; this.hi = 0; }
+    const last = this.hn ? this.hist[(this.hi - 1 + HN) % HN] : null;
+    if (last && (T <= last.t || T - last.t > 0.1)) this.hn = 0;      // 순서가 어긋나거나 오래 비었으면 새로 시작
+    const e = this.hist[this.hi];
+    e.t = T; e.px = px; e.py = py; e.pz = pz; e.qx = qx; e.qy = qy; e.qz = qz; e.qw = qw;
+    this.hi = (this.hi + 1) % HN; this.hn = Math.min(HN, this.hn + 1);
     this._fr = -1;
   }
   linvel() { return this.v; }
@@ -56,7 +57,7 @@ class Body {
   isDynamic() { return this.dyn; }
   setDynamic(on) {
     if (this.dyn === on) return;
-    this.dyn = on; this.sl = false; this.t0 = this.t1 = undefined;
+    this.dyn = on; this.sl = false; this.hn = 0;
     if (!on) { this.v = { x: 0, y: 0, z: 0 }; this.phys._dyn.delete(this); } else this.phys._dyn.add(this);
     this.phys._cmd(['dyn', this.id, on ? 1 : 0]);
   }
@@ -167,7 +168,8 @@ export class Physics {
     // GPU: 계산을 맡겼지만 결과를 아직 못 받은 시뮬레이션 시간 (쌓아 둔 시간은 빼고)
     const inflight = this.mode === 'gpu' ? Math.min(0.1, Math.max(0, (this.gpu.simT || 0) - this.simT)) : 0;
     this._behindMax = Math.max(inflight, (this._behindMax || 0) - real * 0.1);
-    const L = I + this._behindMax + 0.001;
+    // 한 칸(I) + 기다리는 결과 + 도착이 들쭉날쭉한 만큼 여유(I 의 절반) → 보관한 4개 안에 들어옴
+    const L = Math.min(I * 2.9, I + this._behindMax + (this.mode === 'inline' ? 0.001 : I * 0.5));
     this.lag = L;
     const target = clock - L;
     if (Math.abs(target - this.dispT) > 0.15) { this.dispT = target; this._lastClock = clock; return; }   // 크게 벌어지면 바로 맞춤
